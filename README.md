@@ -28,7 +28,7 @@ The default implementation depends on jQuery, however this can easily be removed
 **To remove the jQuery dependency**:
 
 1. Replace ajax.js with the version from the "alt" sub-folder. This will re-implement the ajax functions using angular. If angular is not desired, this can easily be rewritten to use a plain XmlHttpRequest, as long as the original method signature is maintained.
-2. Replace deferred.js with the version from the "alt" sub-folder. This will re-implement promises using stand-alone method.
+2. Replace deferred.js with the version from the "alt" sub-folder. This will re-implement promises using a stand-alone method.
 3. Replace events.js with the version from the "alt" sub-folder. This will re-implement events using the [bean](https://github.com/fat/bean "bean") library. The bean library will now be required, although it is much lighter and smaller than jQuery.
 
 # Other Notes #
