@@ -27,6 +27,25 @@ The default implementation depends on jQuery, however this can easily be removed
 
 **To remove the jQuery dependency**:
 
-1. Replace ajax.js with the version from the "alt" sub-folder. This will re-implement the ajax functions using angular. If angular is not desired, this can easily be rewritten to use a plain XmlHttpRequest.
+1. Replace ajax.js with the version from the "alt" sub-folder. This will re-implement the ajax functions using angular. If angular is not desired, this can easily be rewritten to use a plain XmlHttpRequest, as long as the original method signature is maintained.
 2. Replace deferred.js with the version from the "alt" sub-folder. This will re-implement promises using stand-alone method.
-3. Replace events.js with the version from the "alt" sub-folder. This will re-implement events using the [bean](https://github.com/fat/bean "bean") library.
+3. Replace events.js with the version from the "alt" sub-folder. This will re-implement events using the [bean](https://github.com/fat/bean "bean") library. The bean library will now be required, although it is much lighter and smaller than jQuery.
+
+# Other Notes #
+
+- Re-implement logger.js in order to route library logging to another logging mechanism.
+- Re-implement network.js as needed to report whether or not a network connection is available. The default implementation uses navigator.onLine.
+- If the udp protocol is supported, then you'll need to re-implement serverdiscovery.js to support locating servers on the network. The default implementation is empty.
+- By default, the library stores data using localStorage. Re-implement store.js to store data elsewhere. The method signatures are all key-value based.
+
+# Examples #
+
+This is a port of the [Java version](https://github.com/MediaBrowser/MediaBrowser.ApiClient.Java "Java version"). Until this is fully documented it is best to refer to it for API usage as the signatures are closely aligned.
+
+# Emby Mobile App #
+
+A new mobile app for Emby is in development and is built with Appgyver:
+
+https://github.com/MediaBrowser/MediaBrowser.Mobile
+
+The app uses this library and removes the jQuery dependency. It also has a fully implemented startup wizard to guide users through the connection process. This is great sample code for new app development.
