@@ -1,4 +1,4 @@
-MediaBrowser.ApiClient.Javascript
+Emby.ApiClient.Javascript
 =================================
 
 ApiClient allows JavaScript apps to easily access the Emby API
