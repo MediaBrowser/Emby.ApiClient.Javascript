@@ -11,7 +11,7 @@ This repository exists to bring awareness to the library, which is currently emb
 
 Connectivity is established using the same guidelines as the Java version, as they are almost direct ports:
 
-https://github.com/MediaBrowser/MediaBrowser.ApiClient.Java
+https://github.com/MediaBrowser/Emby.ApiClient.Java
 
 # Usage #
 
@@ -40,7 +40,7 @@ The default implementation depends on jQuery, however this can easily be removed
 
 # Examples #
 
-This is a port of the [Java version](https://github.com/MediaBrowser/MediaBrowser.ApiClient.Java "Java version"). Until this is fully documented it is best to refer to it for API usage as the signatures are closely aligned.
+This is a port of the [Java version](https://github.com/MediaBrowser/Emby.ApiClient.Java "Java version"). Until this is fully documented it is best to refer to it for API usage as the signatures are closely aligned.
 
 # Emby Mobile App #
 
