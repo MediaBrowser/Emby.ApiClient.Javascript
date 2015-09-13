@@ -5,7 +5,7 @@ ApiClient allows JavaScript apps to easily access the Emby API
 
 The source can be found here:
 
-https://github.com/MediaBrowser/MediaBrowser/tree/dev/MediaBrowser.WebDashboard/dashboard-ui/thirdparty/apiclient
+https://github.com/MediaBrowser/Emby/tree/dev/MediaBrowser.WebDashboard/dashboard-ui/apiclient
 
 This repository exists to bring awareness to the library, which is currently embedded within Emby Server.
 
