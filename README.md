@@ -7,9 +7,8 @@ This is a port of the [Java version](https://github.com/MediaBrowser/Emby.ApiCli
 
 # Notes #
 
-- Reimplement logger.js in order to route library logging to another logging mechanism.
-- If the udp protocol is supported, then you'll need to reimplement serverdiscovery.js to support locating servers on the network. The default implementation is empty.
-- By default, the library stores data using localStorage. Reimplement store.js to store data elsewhere. The method signatures are all key-value based.
+- this library depends on the native fetch and promise api's. These will be expected to be polyfilled if used in a browser that doesn't support them.
+- events.js depends on jQuery events. It is a to-do item to remove this dependency. For now you can optionally provide your own version that matches the same signature.
 
 # Examples #
 
@@ -17,6 +16,6 @@ This is a port of the [Java version](https://github.com/MediaBrowser/Emby.ApiCli
 
 # Emby Mobile App #
 
-A new mobile app for Emby is in development and is built with Appgyver:
+A new mobile app for Emby is in development and is built with this library:
 
 https://github.com/MediaBrowser/MediaBrowser.Mobile
