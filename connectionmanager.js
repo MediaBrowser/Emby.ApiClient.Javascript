@@ -35,9 +35,9 @@
         }
     };
 
-    globalScope.MediaBrowser.ConnectionManager = function (logger, credentialProvider, appName, appVersion, deviceName, deviceId, capabilities) {
+    globalScope.MediaBrowser.ConnectionManager = function (credentialProvider, appName, appVersion, deviceName, deviceId, capabilities) {
 
-        logger.log('Begin MediaBrowser.ConnectionManager constructor');
+        console.log('Begin MediaBrowser.ConnectionManager constructor');
 
         var self = this;
         var apiClients = [];
@@ -122,7 +122,7 @@
 
         function fetchWithTimeout(url, options, timeoutMs) {
 
-            logger.log('fetchWithTimeout: timeoutMs: ' + timeoutMs + ', url: ' + url);
+            console.log('fetchWithTimeout: timeoutMs: ' + timeoutMs + ', url: ' + url);
 
             return new Promise(function (resolve, reject) {
 
@@ -131,14 +131,14 @@
                 fetch(url, options).then(function (response) {
                     clearTimeout(timeout);
 
-                    logger.log('fetchWithTimeout: succeeded connecting to url: ' + url);
+                    console.log('fetchWithTimeout: succeeded connecting to url: ' + url);
 
                     resolve(response);
                 }, function (error) {
 
                     clearTimeout(timeout);
 
-                    logger.log('fetchWithTimeout: timed out connecting to url: ' + url);
+                    console.log('fetchWithTimeout: timed out connecting to url: ' + url);
 
                     reject();
                 });
@@ -168,11 +168,11 @@
 
             request.headers = request.headers || {};
 
-            logger.log('ConnectionManager requesting url: ' + request.url);
+            console.log('ConnectionManager requesting url: ' + request.url);
 
             return getFetchPromise(request).then(function (response) {
 
-                logger.log('ConnectionManager response status: ' + response.status + ', url: ' + request.url);
+                console.log('ConnectionManager response status: ' + response.status + ', url: ' + request.url);
 
                 if (response.status < 400) {
 
@@ -187,7 +187,7 @@
 
             }, function (err) {
 
-                logger.log('ConnectionManager request failed to url: ' + request.url);
+                console.log('ConnectionManager request failed to url: ' + request.url);
                 throw err;
             });
         }
@@ -196,7 +196,7 @@
 
             url = getEmbyServerUrl(url, "system/info/public");
 
-            logger.log('tryConnect url: ' + url);
+            console.log('tryConnect url: ' + url);
 
             return ajax({
 
@@ -332,7 +332,7 @@
 
         self.clearData = function () {
 
-            logger.log('connection manager clearing data');
+            console.log('connection manager clearing data');
 
             connectUser = null;
             var credentials = credentialProvider.credentials();
@@ -356,7 +356,7 @@
 
                 var url = MediaBrowser.ServerInfo.getServerAddress(server, connectionMode);
 
-                apiClient = new MediaBrowser.ApiClient(logger, url, appName, appVersion, deviceName, deviceId);
+                apiClient = new MediaBrowser.ApiClient(url, appName, appVersion, deviceName, deviceId);
 
                 apiClients.push(apiClient);
 
@@ -369,7 +369,7 @@
                 Events.trigger(self, 'apiclientcreated', [apiClient]);
             }
 
-            logger.log('returning instance from getOrAddApiClient');
+            console.log('returning instance from getOrAddApiClient');
             return apiClient;
         }
 
@@ -445,7 +445,7 @@
 
             if (options.enableWebSocket !== false) {
                 if (!apiClient.isWebSocketOpenOrConnecting && apiClient.isWebSocketSupported()) {
-                    logger.log('calling apiClient.openWebSocket');
+                    console.log('calling apiClient.openWebSocket');
 
                     apiClient.openWebSocket();
                 }
@@ -675,7 +675,7 @@
 
         self.logout = function () {
 
-            Logger.log('begin connectionManager loguot');
+            console.log('begin connectionManager loguot');
             var promises = [];
 
             for (var i = 0, length = apiClients.length; i < length; i++) {
@@ -743,7 +743,7 @@
 
         function getConnectServers(credentials) {
 
-            logger.log('Begin getConnectServers');
+            console.log('Begin getConnectServers');
 
             return new Promise(function (resolve, reject) {
 
@@ -801,7 +801,7 @@
 
         self.getAvailableServers = function () {
 
-            logger.log('Begin getAvailableServers');
+            console.log('Begin getAvailableServers');
 
             // Clone the array
             var credentials = credentialProvider.credentials();
@@ -897,7 +897,7 @@
 
         self.connect = function () {
 
-            logger.log('Begin connect');
+            console.log('Begin connect');
 
             return new Promise(function (resolve, reject) {
 
@@ -918,7 +918,7 @@
 
         self.connectToServers = function (servers) {
 
-            logger.log('Begin connectToServers, with ' + servers.length + ' servers');
+            console.log('Begin connectToServers, with ' + servers.length + ' servers');
 
             return new Promise(function (resolve, reject) {
 
@@ -933,7 +933,7 @@
                                 MediaBrowser.ConnectionState.ServerSelection;
                         }
 
-                        logger.log('resolving connectToServers with result.State: ' + result.State);
+                        console.log('resolving connectToServers with result.State: ' + result.State);
                         resolve(result);
 
                     });
@@ -1014,7 +1014,7 @@
 
             if (index >= tests.length) {
 
-                logger.log('Tested all connection modes. Failing server connection.');
+                console.log('Tested all connection modes. Failing server connection.');
                 resolveFailure(resolve);
                 return;
             }
@@ -1044,16 +1044,16 @@
                 return;
             }
 
-            logger.log('testing connection mode ' + mode + ' with server ' + server.Name);
+            console.log('testing connection mode ' + mode + ' with server ' + server.Name);
 
             tryConnect(address, timeout).then(function (result) {
 
-                logger.log('calling onSuccessfulConnection with connection mode ' + mode + ' with server ' + server.Name);
+                console.log('calling onSuccessfulConnection with connection mode ' + mode + ' with server ' + server.Name);
                 onSuccessfulConnection(server, result, mode, options, resolve);
 
             }, function () {
 
-                logger.log('test failed for connection mode ' + mode + ' with server ' + server.Name);
+                console.log('test failed for connection mode ' + mode + ' with server ' + server.Name);
 
                 if (enableRetry) {
 
@@ -1173,13 +1173,13 @@
                 address = normalizeAddress(address);
 
                 function onFail() {
-                    logger.log('connectToAddress ' + address + ' failed');
+                    console.log('connectToAddress ' + address + ' failed');
                     resolveFailure(resolve);
                 }
 
                 tryConnect(address, defaultTimeout).then(function (publicInfo) {
 
-                    logger.log('connectToAddress ' + address + ' succeeded');
+                    console.log('connectToAddress ' + address + ' succeeded');
 
                     var server = {
                         ManualAddress: address,
@@ -1511,4 +1511,4 @@
         return self;
     };
 
-})(window, window.Logger);
+})(window);

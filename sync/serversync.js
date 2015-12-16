@@ -8,7 +8,7 @@
 
             if (!server.AccessToken && !server.ExchangeToken) {
 
-                Logger.log('Skipping sync to server ' + server.Id + ' because there is no saved authentication information.');
+                console.log('Skipping sync to server ' + server.Id + ' because there is no saved authentication information.');
                 return new Promise(function (resolve, reject) {
 
                     resolve();
@@ -26,20 +26,20 @@
                 if (result.State == MediaBrowser.ConnectionState.SignedIn) {
                     return performSync(server, options);
                 } else {
-                    Logger.log('Unable to connect to server id: ' + server.Id);
+                    console.log('Unable to connect to server id: ' + server.Id);
                     return Promise.reject();
                 }
 
             }, function (err) {
 
-                Logger.log('Unable to connect to server id: ' + server.Id);
+                console.log('Unable to connect to server id: ' + server.Id);
                 throw err;
             });
         };
 
         function performSync(server, options) {
 
-            Logger.log("Creating ContentUploader to server: " + server.Id);
+            console.log("Creating ContentUploader to server: " + server.Id);
 
             options = options || {};
 
@@ -59,13 +59,13 @@
 
                     new MediaBrowser.ContentUploader(connectionManager).uploadImages(server).then(function () {
 
-                        Logger.log("ContentUploaded succeeded to server: " + server.Id);
+                        console.log("ContentUploaded succeeded to server: " + server.Id);
 
                         syncOfflineUsers(server, options).then(resolve, reject);
 
                     }, function () {
 
-                        Logger.log("ContentUploaded failed to server: " + server.Id);
+                        console.log("ContentUploaded failed to server: " + server.Id);
 
                         syncOfflineUsers(server, options).then(resolve, reject);
                     });
@@ -87,13 +87,13 @@
 
                     new MediaBrowser.OfflineUserSync().sync(apiClient, server).then(function () {
 
-                        Logger.log("OfflineUserSync succeeded to server: " + server.Id);
+                        console.log("OfflineUserSync succeeded to server: " + server.Id);
 
                         syncMedia(server, options).then(resolve, reject);
 
                     }, function () {
 
-                        Logger.log("OfflineUserSync failed to server: " + server.Id);
+                        console.log("OfflineUserSync failed to server: " + server.Id);
 
                         reject();
                     });
@@ -111,13 +111,13 @@
 
                     new MediaBrowser.MediaSync().sync(apiClient, server, options).then(function () {
 
-                        Logger.log("MediaSync succeeded to server: " + server.Id);
+                        console.log("MediaSync succeeded to server: " + server.Id);
 
                         resolve();
 
                     }, function () {
 
-                        Logger.log("MediaSync failed to server: " + server.Id);
+                        console.log("MediaSync failed to server: " + server.Id);
 
                         reject();
                     });

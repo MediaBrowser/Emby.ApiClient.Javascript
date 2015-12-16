@@ -12,7 +12,7 @@
 
                 var json = appStorage.getItem(key) || '{}';
 
-                Logger.log('credentials initialized with: ' + json);
+                console.log('credentials initialized with: ' + json);
                 credentials = JSON.parse(json);
                 credentials.Servers = credentials.Servers || [];
             }

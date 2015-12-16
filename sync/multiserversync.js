@@ -26,7 +26,7 @@
 
             var server = servers[index];
 
-            Logger.log("Creating ServerSync to server: " + server.Id);
+            console.log("Creating ServerSync to server: " + server.Id);
 
             require(['serversync'], function () {
 
