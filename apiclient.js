@@ -69,7 +69,7 @@
             };
 
             (callbacks[name] || []).forEach(function (c) {
-                c.call(this, eventObject, data);
+                c.call(self, eventObject);
             });
         }
 
