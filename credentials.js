@@ -1,10 +1,6 @@
-﻿(function (globalScope, JSON) {
+﻿define(['events'], function (Events) {
 
-    if (!globalScope.MediaBrowser) {
-        globalScope.MediaBrowser = {};
-    }
-
-    globalScope.MediaBrowser.CredentialProvider = function (key) {
+    return function (key) {
 
         var self = this;
         var credentials = null;
@@ -127,5 +123,4 @@
             }
         };
     };
-
-})(window, window.JSON);
+});
