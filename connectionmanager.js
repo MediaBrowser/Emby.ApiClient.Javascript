@@ -209,34 +209,6 @@
             });
         }
 
-        var callbacks = {};
-        self.on = function (name, fn) {
-            callbacks[name] = (callbacks[name] || []);
-
-            if (callbacks[name].indexOf(fn) == -1) {
-                callbacks[name].push(fn);
-            }
-        };
-
-        self.off = function (name, fn) {
-
-            callbacks[name] = (callbacks[name] || []).filter(function (i) {
-                return i != fn;
-            });
-        };
-
-        function trigger(name, data) {
-
-            var eventObject = {
-                type: name,
-                detail: data
-            };
-
-            (callbacks[name] || []).forEach(function (c) {
-                c.call(self, eventObject);
-            });
-        }
-
         var connectUser;
         self.connectUser = function () {
             return connectUser;
@@ -341,7 +313,7 @@
                 credentialProvider.credentials(credentials);
             }
 
-            trigger('apiclientcreated', apiClient);
+            Events.trigger(self, 'apiclientcreated', [apiClient]);
 
             if (existingServer.Id) {
                 return;
@@ -373,7 +345,7 @@
         function onConnectUserSignIn(user) {
 
             connectUser = user;
-            trigger('connectusersignedin', user);
+            Events.trigger(self, 'connectusersignedin', [user]);
         }
 
         function getOrAddApiClient(server, connectionMode) {
@@ -394,7 +366,7 @@
                     onAuthenticated(instance, result, {}, true);
                 };
 
-                trigger('apiclientcreated', apiClient);
+                Events.trigger(self, 'apiclientcreated', [apiClient]);
             }
 
             logger.log('returning instance from getOrAddApiClient');
@@ -482,7 +454,7 @@
 
         function onLocalUserSignIn(user) {
 
-            trigger('localusersignedin', user);
+            Events.trigger(self, 'localusersignedin', [user]);
         }
 
         function ensureConnectUser(credentials) {
@@ -747,7 +719,7 @@
 
                 if (connectUser) {
                     connectUser = null;
-                    trigger('connectusersignedout');
+                    Events.trigger(self, 'connectusersignedout');
                 }
             });
         };
@@ -762,10 +734,10 @@
 
             return apiClient.logout().then(function () {
 
-                trigger('localusersignedout', logoutInfo);
+                Events.trigger(self, 'localusersignedout', [logoutInfo]);
             }, function () {
 
-                trigger('localusersignedout', logoutInfo);
+                Events.trigger(self, 'localusersignedout', [logoutInfo]);
             });
         }
 
@@ -1170,7 +1142,7 @@
 
             resolve(result);
 
-            trigger('connected', result);
+            Events.trigger(self, 'connected', [result]);
         }
 
         function normalizeAddress(address) {
