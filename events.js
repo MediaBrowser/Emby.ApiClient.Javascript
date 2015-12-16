@@ -38,15 +38,20 @@
             });
         },
 
-        trigger: function (obj, eventName, data) {
+        trigger: function (obj, eventName) {
 
             var eventObject = {
-                type: name,
-                detail: data
+                type: eventName
             };
 
+            var eventArgs = [];
+            eventArgs.push(eventObject);
+            for (var i = 2, length = arguments.length; i < length; i++) {
+                eventArgs.push(arguments[i]);
+            }
+
             getCallbacks(obj, eventName).forEach(function (c) {
-                c.call(obj, eventObject);
+                c.apply(obj, eventArgs);
             });
         }
     };
