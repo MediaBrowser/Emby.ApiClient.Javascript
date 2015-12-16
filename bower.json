@@ -1,0 +1,8 @@
+{
+  "name": "emby-apiclient",
+  "main": "apiclient.js",
+  "devDependencies": {
+    
+  },
+  "ignore": []
+}
