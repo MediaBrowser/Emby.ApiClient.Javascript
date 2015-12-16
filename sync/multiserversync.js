@@ -6,22 +6,21 @@
 
         self.sync = function (options) {
 
-            var deferred = DeferredBuilder.Deferred();
+            return new Promise(function (resolve, reject) {
 
-            var servers = connectionManager.getSavedServers();
+                var servers = connectionManager.getSavedServers();
 
-            syncNext(servers, 0, options, deferred);
-
-            return deferred.promise();
+                syncNext(servers, 0, options, resolve, reject);
+            });
         };
 
-        function syncNext(servers, index, options, deferred) {
+        function syncNext(servers, index, options, resolve, reject) {
 
             var length = servers.length;
 
             if (index >= length) {
 
-                deferred.resolve();
+                resolve();
                 return;
             }
 
@@ -33,11 +32,11 @@
 
                 new MediaBrowser.ServerSync(connectionManager).sync(server, options).then(function () {
 
-                    syncNext(servers, index + 1, options, deferred);
+                    syncNext(servers, index + 1, options, resolve, reject);
 
                 }, function () {
 
-                    syncNext(servers, index + 1, options, deferred);
+                    syncNext(servers, index + 1, options, resolve, reject);
                 });
             });
         }
