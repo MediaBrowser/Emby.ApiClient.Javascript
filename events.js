@@ -47,8 +47,10 @@
 
             var eventArgs = [];
             eventArgs.push(eventObject);
-            for (var i = 2, length = arguments.length; i < length; i++) {
-                eventArgs.push(arguments[i]);
+
+            var additionalArgs = arguments[2] || [];
+            for (var i = 0, length = additionalArgs.length; i < length; i++) {
+                eventArgs.push(additionalArgs[i]);
             }
 
             getCallbacks(obj, eventName).forEach(function (c) {
