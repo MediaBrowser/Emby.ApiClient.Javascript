@@ -39,17 +39,39 @@
                     throw new Error('Invalid url: ' + val);
                 }
 
-                var changed = val != serverAddress;
-
                 serverAddress = val;
-
-                if (changed) {
-                    Events.trigger(this, 'serveraddresschanged');
-                }
             }
 
             return serverAddress;
         };
+
+        var callbacks = {};
+        self.on = function (name, fn) {
+            callbacks[name] = (callbacks[name] || []);
+
+            if (callbacks[name].indexOf(fn) == -1) {
+                callbacks[name].push(fn);
+            }
+        };
+
+        self.off = function (name, fn) {
+
+            callbacks[name] = (callbacks[name] || []).filter(function (i) {
+                return i != fn;
+            });
+        };
+
+        function trigger(name, data) {
+
+            var eventObject = {
+                type: name,
+                detail: data
+            };
+
+            (callbacks[name] || []).forEach(function (c) {
+                c.call(this, eventObject, data);
+            });
+        }
 
         self.serverInfo = function (info) {
 
@@ -137,12 +159,11 @@
 
         function onFetchFail(url, response) {
 
-            Events.trigger(self, 'requestfail', [
-            {
+            trigger('requestfail', {
                 url: url,
                 status: response.status,
                 errorCode: response.headers ? response.headers["X-Application-Error-Code"] : null
-            }]);
+            });
         }
 
         self.setRequestHeaders = function (headers) {
@@ -538,17 +559,17 @@
 
                 logger.log('web socket connection opened');
                 setTimeout(function () {
-                    Events.trigger(self, 'websocketopen');
+                    trigger('websocketopen');
                 }, 0);
             };
             webSocket.onerror = function () {
                 setTimeout(function () {
-                    Events.trigger(self, 'websocketerror');
+                    trigger('websocketerror');
                 }, 0);
             };
             webSocket.onclose = function () {
                 setTimeout(function () {
-                    Events.trigger(self, 'websocketclose');
+                    trigger('websocketclose');
                 }, 0);
             };
         };
@@ -573,7 +594,7 @@
                 }
             }
 
-            Events.trigger(self, 'websocketmessage', [msg]);
+            trigger('websocketmessage', msg);
         }
 
         self.sendWebSocketMessage = function (name, data) {
