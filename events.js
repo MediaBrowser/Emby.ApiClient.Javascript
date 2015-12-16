@@ -33,7 +33,8 @@
 
         off: function (obj, eventName, fn) {
 
-            obj._callbacks[name] = getCallbacks(obj, eventName).filter(function (i) {
+            var list = getCallbacks(obj, eventName);
+            obj._callbacks[name] = list.filter(function (i) {
                 return i != fn;
             });
         },
