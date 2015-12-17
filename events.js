@@ -24,9 +24,7 @@
 
             var list = getCallbacks(obj, eventName);
 
-            if (list.indexOf(fn) == -1) {
-                list.push(fn);
-            }
+            list.push(fn);
         },
 
         off: function (obj, eventName, fn) {
@@ -53,7 +51,9 @@
                 eventArgs.push(additionalArgs[i]);
             }
 
-            getCallbacks(obj, eventName).forEach(function (c) {
+            var callbacks = getCallbacks(obj, eventName).slice(0);
+
+            callbacks.forEach(function (c) {
                 c.apply(obj, eventArgs);
             });
         }
