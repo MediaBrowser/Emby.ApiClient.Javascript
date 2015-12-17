@@ -2,22 +2,20 @@
 
     function getCallbacks(obj, name) {
 
-        ensureCallbacks(obj, name);
-
-        return obj._callbacks[name];
-    }
-
-    function ensureCallbacks(obj, name) {
-
         if (!obj) {
             throw new Error("obj cannot be null!");
         }
 
         obj._callbacks = obj._callbacks || {};
 
-        if (!obj._callbacks[name]) {
+        var list = obj._callbacks[name];
+
+        if (!list) {
             obj._callbacks[name] = [];
+            list = obj._callbacks[name];
         }
+
+        return list;
     }
 
     return {
@@ -34,9 +32,11 @@
         off: function (obj, eventName, fn) {
 
             var list = getCallbacks(obj, eventName);
-            obj._callbacks[name] = list.filter(function (i) {
-                return i != fn;
-            });
+
+            var i = list.indexOf(fn);
+            if (i != -1) {
+                list.splice(i, 1);
+            }
         },
 
         trigger: function (obj, eventName) {
