@@ -187,7 +187,8 @@
 
             var fetchRequest = {
                 headers: headers,
-                method: request.type
+                method: request.type,
+                credentials: 'include'
             };
 
             var contentType = request.contentType;
@@ -220,6 +221,9 @@
             return new Promise(function (resolve, reject) {
 
                 var timeout = setTimeout(reject, timeoutMs);
+
+                options = options || {};
+                options.credentials = 'include';
 
                 fetch(url, options).then(function (response) {
                     clearTimeout(timeout);
