@@ -89,7 +89,7 @@
             var fetchRequest = {
                 headers: headers,
                 method: request.type,
-                credentials: 'include'
+                credentials: 'same-origin'
             };
 
             var contentType = request.contentType;
@@ -126,7 +126,7 @@
                 var timeout = setTimeout(reject, timeoutMs);
 
                 options = options || {};
-                options.credentials = 'include';
+                options.credentials = 'same-origin';
 
                 fetch(url, options).then(function (response) {
                     clearTimeout(timeout);
