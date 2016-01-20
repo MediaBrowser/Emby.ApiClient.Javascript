@@ -1550,7 +1550,7 @@
 
             addAppInfoToConnectRequest(request);
 
-            return getFetchPromise(request);
+            return ajax(request);
         };
 
         self.getPinStatus = function (pinInfo) {
@@ -1567,7 +1567,7 @@
 
             addAppInfoToConnectRequest(request);
 
-            return getFetchPromise(request);
+            return ajax(request);
 
         };
 
@@ -1584,7 +1584,7 @@
 
             addAppInfoToConnectRequest(request);
 
-            return getFetchPromise(request);
+            return ajax(request);
         }
 
         self.exchangePin = function (pinInfo) {
