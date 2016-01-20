@@ -1545,7 +1545,8 @@
                 url: getConnectUrl('pin'),
                 data: {
                     deviceId: deviceId
-                }
+                },
+                dataType: 'json'
             };
 
             addAppInfoToConnectRequest(request);
@@ -1562,7 +1563,8 @@
 
             var request = {
                 type: 'GET',
-                url: getConnectUrl('pin') + '?' + paramsToString(queryString)
+                url: getConnectUrl('pin') + '?' + paramsToString(queryString),
+                dataType: 'json'
             };
 
             addAppInfoToConnectRequest(request);
@@ -1579,7 +1581,8 @@
                 data: {
                     deviceId: pinInfo.DeviceId,
                     pin: pinInfo.Pin
-                }
+                },
+                dataType: 'json'
             };
 
             addAppInfoToConnectRequest(request);
