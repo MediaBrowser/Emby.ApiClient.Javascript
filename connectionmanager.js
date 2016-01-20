@@ -488,6 +488,10 @@
             });
         }
 
+        function getConnectUrl(handler) {
+            return 'https://connect.emby.media/service/' + handler;
+        }
+
         function getConnectUser(userId, accessToken) {
 
             if (!userId) {
@@ -1528,6 +1532,73 @@
                 credentialProvider.credentials(credentials);
             }
         }
+
+        function addAppInfoToConnectRequest(request) {
+            request.headers = request.headers || {};
+            request.headers['X-Application'] = appName + '/' + appVersion;
+        }
+
+        self.createPin = function () {
+
+            var request = {
+                type: 'POST',
+                url: getConnectUrl('pin'),
+                data: {
+                    deviceId: deviceId
+                }
+            };
+
+            addAppInfoToConnectRequest(request);
+
+            return getFetchPromise(request);
+        };
+
+        self.getPinStatus = function (pinInfo) {
+
+            var queryString = {
+                deviceId: pinInfo.DeviceId,
+                pin: pinInfo.Pin
+            };
+
+            var request = {
+                type: 'GET',
+                url: getConnectUrl('pin') + '?' + paramsToString(queryString)
+            };
+
+            addAppInfoToConnectRequest(request);
+
+            return getFetchPromise(request);
+
+        };
+
+        function exchangePin(pinInfo) {
+
+            var request = {
+                type: 'POST',
+                url: getConnectUrl('pin/authenticate'),
+                data: {
+                    deviceId: pinInfo.DeviceId,
+                    pin: pinInfo.Pin
+                }
+            };
+
+            addAppInfoToConnectRequest(request);
+
+            return getFetchPromise(request);
+        }
+
+        self.exchangePin = function (pinInfo) {
+
+            return exchangePin(pinInfo).then(function (result) {
+
+                var credentials = credentialProvider.credentials();
+                credentials.ConnectAccessToken = result.AccessToken;
+                credentials.ConnectUserId = result.UserId;
+                credentialProvider.credentials(credentials);
+
+                return ensureConnectUser(credentials);
+            });
+        };
 
         return self;
     };
