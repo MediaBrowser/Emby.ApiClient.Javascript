@@ -3451,7 +3451,8 @@
                 type: "POST",
                 url: self.getUrl('Auth/Pin'),
                 data: {
-                    deviceId: self.deviceId()
+                    deviceId: self.deviceId(),
+                    appName: self.appName()
                 },
                 dataType: "json"
             });
