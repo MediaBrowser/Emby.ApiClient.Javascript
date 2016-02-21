@@ -3444,5 +3444,31 @@
                 contentType: "application/json"
             });
         };
+
+        self.createPin = function () {
+
+            return self.ajax({
+                type: "POST",
+                url: self.getUrl('Auth/Pin'),
+                data: {
+                    deviceId: self.deviceId()
+                },
+                dataType: "json"
+            });
+        };
+
+        self.getPinStatus = function (pinInfo) {
+
+            var queryString = {
+                deviceId: pinInfo.DeviceId,
+                pin: pinInfo.Pin
+            };
+
+            return self.ajax({
+                type: 'GET',
+                url: self.getUrl('Auth/Pin', queryString),
+                dataType: 'json'
+            });
+        };
     };
 });
