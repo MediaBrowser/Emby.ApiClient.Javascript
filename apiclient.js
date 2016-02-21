@@ -3470,5 +3470,30 @@
                 dataType: 'json'
             });
         };
+
+        function exchangePin(pinInfo) {
+
+            return self.ajax({
+                type: 'POST',
+                url: self.getUrl('Auth/Pin/Exchange'),
+                data: {
+                    deviceId: pinInfo.DeviceId,
+                    pin: pinInfo.Pin
+                },
+                dataType: 'json'
+            });
+        }
+
+        self.exchangePin = function (pinInfo) {
+
+            return exchangePin(pinInfo).then(function (result) {
+
+                if (self.onAuthenticated) {
+                    self.onAuthenticated(self, result);
+                }
+
+                return result;
+            });
+        };
     };
 });
