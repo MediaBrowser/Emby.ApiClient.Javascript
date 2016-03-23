@@ -1509,8 +1509,10 @@
             var cacheKey = 'regInfo-' + params.serverId;
             var regInfo = JSON.parse(appStorage.getItem(cacheKey) || '{}');
 
+            var updateDevicePromise;
+
             // Cache for 3 days
-            if ((new Date().getTime() - (regInfo.lastValidDate || 0)) < 259200000) {
+            if (params.deviceId && (new Date().getTime() - (regInfo.lastValidDate || 0)) < 259200000) {
 
                 console.log('getRegistrationInfo has cached info');
 
@@ -1518,41 +1520,56 @@
                     console.log('getRegistrationInfo returning cached info');
                     return Promise.resolve();
                 }
+
+                updateDevicePromise = ajax({
+                    url: 'https://mb3admin.com/admin/service/registration/updateDevice?' + paramsToString({
+                        serverId: params.serverId,
+                        oldDeviceId: regInfo.deviceId,
+                        newDeviceId: params.deviceId
+                    }),
+                    type: 'POST'
+                });
             }
 
-            return apiClient.getCurrentUser().then(function (user) {
+            if (!updateDevicePromise) {
+                updateDevicePromise = Promise.resolve();
+            }
 
-                params.embyUserName = user.Name;
+            return updateDevicePromise.then(function () {
+                return apiClient.getCurrentUser().then(function (user) {
 
-                return ajax({
-                    url: 'https://mb3admin.com/admin/service/registration/validateDevice?' + paramsToString(params),
-                    type: 'POST'
+                    params.embyUserName = user.Name;
 
-                }).then(function (response) {
+                    return ajax({
+                        url: 'https://mb3admin.com/admin/service/registration/validateDevice?' + paramsToString(params),
+                        type: 'POST'
 
-                    var status = response.status;
-                    console.log('getRegistrationInfo response: ' + status);
+                    }).then(function (response) {
 
-                    if (status == 200) {
-                        appStorage.setItem(cacheKey, JSON.stringify({
-                            lastValidDate: new Date().getTime(),
-                            deviceId: params.deviceId
-                        }));
-                        return Promise.resolve();
-                    }
-                    if (status == 401) {
+                        var status = response.status;
+                        console.log('getRegistrationInfo response: ' + status);
+
+                        if (status == 200) {
+                            appStorage.setItem(cacheKey, JSON.stringify({
+                                lastValidDate: new Date().getTime(),
+                                deviceId: params.deviceId
+                            }));
+                            return Promise.resolve();
+                        }
+                        if (status == 401) {
+                            return Promise.reject();
+                        }
+                        if (status == 403) {
+                            return Promise.reject('overlimit');
+                        }
+
+                        // general error
                         return Promise.reject();
-                    }
-                    if (status == 403) {
-                        return Promise.reject('overlimit');
-                    }
 
-                    // general error
-                    return Promise.reject();
-
-                }, function (err) {
-                    console.log('getRegistrationInfo failed');
-                    throw err;
+                    }, function (err) {
+                        console.log('getRegistrationInfo failed');
+                        throw err;
+                    });
                 });
             });
         };
