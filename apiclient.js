@@ -52,6 +52,10 @@
             return serverInfo;
         };
 
+        self.serverId = function () {
+            return self.serverInfo().Id;
+        };
+
         var currentUser;
         /**
          * Gets or sets the current user id.
@@ -74,7 +78,7 @@
             });
         };
 
-        self.isLoggedIn = function() {
+        self.isLoggedIn = function () {
 
             var info = self.serverInfo();
             if (info) {
@@ -526,7 +530,7 @@
             }
         };
 
-        self.ensureWebSocket = function() {
+        self.ensureWebSocket = function () {
             if (self.isWebSocketOpenOrConnecting() || !self.isWebSocketSupported()) {
                 return;
             }
@@ -2842,6 +2846,16 @@
             }
 
             return self.getJSON(url);
+        };
+
+        self.getMovieRecommendations = function (options) {
+
+            return self.getJSON(self.getUrl('Movies/Recommendations', options));
+        };
+
+        self.getUpcomingEpisodes = function (options) {
+
+            return self.getJSON(self.getUrl('Shows/Upcoming', options));
         };
 
         self.getChannels = function (query) {
