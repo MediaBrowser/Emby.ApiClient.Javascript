@@ -1,4 +1,4 @@
-﻿define(['events'], function (Events) {
+﻿define(['events'], function (events) {
 
     /**
      * Creates a new api client instance
@@ -38,7 +38,7 @@
                 serverAddress = val;
 
                 if (changed) {
-                    Events.trigger(this, 'serveraddresschanged');
+                    events.trigger(this, 'serveraddresschanged');
                 }
             }
 
@@ -141,7 +141,7 @@
 
         function onFetchFail(url, response) {
 
-            Events.trigger(self, 'requestfail', [
+            events.trigger(self, 'requestfail', [
             {
                 url: url,
                 status: response.status,
@@ -571,15 +571,15 @@
 
                 console.log('web socket connection opened');
                 setTimeout(function () {
-                    Events.trigger(self, 'websocketopen');
+                    events.trigger(self, 'websocketopen');
                 }, 0);
             };
             webSocket.onerror = function () {
-                Events.trigger(self, 'websocketerror');
+                events.trigger(self, 'websocketerror');
             };
             webSocket.onclose = function () {
                 setTimeout(function () {
-                    Events.trigger(self, 'websocketclose');
+                    events.trigger(self, 'websocketclose');
                 }, 0);
             };
         };
@@ -604,7 +604,7 @@
                 }
             }
 
-            Events.trigger(self, 'websocketmessage', [msg]);
+            events.trigger(self, 'websocketmessage', [msg]);
         }
 
         self.sendWebSocketMessage = function (name, data) {
