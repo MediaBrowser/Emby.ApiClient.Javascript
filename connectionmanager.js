@@ -1284,7 +1284,12 @@
             });
         };
 
-        self.signupForConnect = function (email, username, password, passwordConfirm) {
+        self.signupForConnect = function (options) {
+
+            var email = options.email;
+            var username = options.username;
+            var password = options.password;
+            var passwordConfirm = options.passwordConfirm;
 
             return new Promise(function (resolve, reject) {
 
