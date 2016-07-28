@@ -1249,9 +1249,9 @@
                     return;
                 }
 
-                require(['connectservice', 'cryptojs-md5'], function (connectservice) {
+                require(['cryptojs-md5'], function () {
 
-                    var md5 = getConnectPasswordHash(connectservice, password);
+                    var md5 = getConnectPasswordHash(password);
 
                     ajax({
                         type: "POST",
@@ -1309,9 +1309,9 @@
                     return;
                 }
 
-                require(['connectservice', 'cryptojs-md5'], function (connectservice) {
+                require(['cryptojs-md5'], function () {
 
-                    var md5 = getConnectPasswordHash(connectservice, password);
+                    var md5 = getConnectPasswordHash(password);
 
                     ajax({
                         type: "POST",
@@ -1348,9 +1348,25 @@
             });
         };
 
-        function getConnectPasswordHash(connectService, password) {
+        function cleanConnectPassword(password) {
 
-            password = connectService.cleanPassword(password);
+            password = password || '';
+
+            password = replaceAll(password, "&", "&amp;");
+            password = replaceAll(password, "/", "&#092;");
+            password = replaceAll(password, "!", "&#33;");
+            password = replaceAll(password, "$", "&#036;");
+            password = replaceAll(password, "\"", "&quot;");
+            password = replaceAll(password, "<", "&lt;");
+            password = replaceAll(password, ">", "&gt;");
+            password = replaceAll(password, "'", "&#39;");
+
+            return password;
+        }
+
+        function getConnectPasswordHash(password) {
+
+            password = cleanConnectPassword(password);
 
             return CryptoJS.MD5(password).toString();
         }
