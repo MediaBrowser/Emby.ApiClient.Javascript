@@ -215,7 +215,7 @@
             return connectUser;
         };
 
-        var minServerVersion = '3.0.5911';
+        var minServerVersion = '3.0.5930';
         self.minServerVersion = function (val) {
 
             if (val) {
@@ -1352,6 +1352,8 @@
 
                         if (result && result.Status) {
                             reject({ errorCode: result.Status });
+                        } else {
+                            reject();
                         }
 
                     }, reject);
@@ -1359,18 +1361,23 @@
             });
         };
 
+        function replaceAllWithSplit(str, find, replace) {
+
+            return str.split(find).join(replace);
+        }
+
         function cleanConnectPassword(password) {
 
             password = password || '';
 
-            password = replaceAll(password, "&", "&amp;");
-            password = replaceAll(password, "/", "&#092;");
-            password = replaceAll(password, "!", "&#33;");
-            password = replaceAll(password, "$", "&#036;");
-            password = replaceAll(password, "\"", "&quot;");
-            password = replaceAll(password, "<", "&lt;");
-            password = replaceAll(password, ">", "&gt;");
-            password = replaceAll(password, "'", "&#39;");
+            password = replaceAllWithSplit(password, "&", "&amp;");
+            password = replaceAllWithSplit(password, "/", "&#092;");
+            password = replaceAllWithSplit(password, "!", "&#33;");
+            password = replaceAllWithSplit(password, "$", "&#036;");
+            password = replaceAllWithSplit(password, "\"", "&quot;");
+            password = replaceAllWithSplit(password, "<", "&lt;");
+            password = replaceAllWithSplit(password, ">", "&gt;");
+            password = replaceAllWithSplit(password, "'", "&#39;");
 
             return password;
         }
