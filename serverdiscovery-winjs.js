@@ -6,7 +6,7 @@
         var serviceName = "7359";
         var servers = [];
         var timeout;
-        var stringToSend = "who is EmbyServer?";
+        var stringToSend = "who is EmbyServer?|emby";
 
         function closeListenerSocket() {
 
@@ -39,11 +39,11 @@
                 //    onError("Error while joining multicast group: " + exception.message);
                 //    return;
                 //}
-                sendMessage();
+                sendMessage(stringToSend);
             }, onError);
         }
 
-        function sendMessage() {
+        function sendMessage(txt) {
 
             try {
                 var remoteHostname = new Windows.Networking.HostName("255.255.255.255");
@@ -57,7 +57,7 @@
                         // <source host, source port> information obtained from the parent socket (i.e., 'listenSocket' in
                         // this case).
                         var writer = new Windows.Storage.Streams.DataWriter(outputStream);
-                        writer.writeString(stringToSend);
+                        writer.writeString(txt);
                         writer.storeAsync().done(function () {
                             timeout = setTimeout(closeListenerSocket, timeoutMs);
                         }, onError);
