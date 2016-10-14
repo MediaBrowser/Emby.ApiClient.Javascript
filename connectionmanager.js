@@ -1294,61 +1294,58 @@
             var password = options.password;
             var passwordConfirm = options.passwordConfirm;
 
-            return new Promise(function (resolve, reject) {
+            if (!email) {
+                return Promise.reject({ errorCode: 'invalidinput' });
+            }
+            if (!username) {
+                return Promise.reject({ errorCode: 'invalidinput' });
+            }
+            if (!password) {
+                return Promise.reject({ errorCode: 'invalidinput' });
+            }
+            if (!passwordConfirm) {
+                return Promise.reject({ errorCode: 'passwordmatch' });
+            }
+            if (password !== passwordConfirm) {
+                return Promise.reject({ errorCode: 'passwordmatch' });
+            }
 
-                if (!email) {
-                    return Promise.reject({ errorCode: 'invalidinput' });
+            var data = {
+                email: email,
+                userName: username,
+                password: password
+            };
+
+            if (options.grecaptcha) {
+                data.grecaptcha = options.grecaptcha;
+            }
+
+            return ajax({
+                type: "POST",
+                url: "https://connect.emby.media/service/register",
+                data: data,
+                dataType: "json",
+                contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+                headers: {
+                    "X-Application": appName + "/" + appVersion,
+                    "X-CONNECT-TOKEN": "CONNECT-REGISTER"
                 }
-                if (!username) {
-                    return Promise.reject({ errorCode: 'invalidinput' });
-                }
-                if (!password) {
-                    return Promise.reject({ errorCode: 'invalidinput' });
-                }
-                if (!passwordConfirm) {
-                    return Promise.reject({ errorCode: 'passwordmatch' });
-                }
-                if (password !== passwordConfirm) {
-                    return Promise.reject({ errorCode: 'passwordmatch' });
+
+            }).catch(function (response) {
+
+                try {
+                    return response.json();
+                } catch (err) {
+                    throw err;
                 }
 
-                var data = {
-                    email: email,
-                    userName: username,
-                    password: password
-                };
+            }).then(function (result) {
 
-                if (options.grecaptcha) {
-                    data.grecaptcha = options.grecaptcha;
+                if (result && result.Status) {
+                    return Promise.reject({ errorCode: result.Status });
+                } else {
+                    Promise.reject();
                 }
-
-                return ajax({
-                    type: "POST",
-                    url: "https://connect.emby.media/service/register",
-                    data: data,
-                    dataType: "json",
-                    contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
-                    headers: {
-                        "X-Application": appName + "/" + appVersion,
-                        "X-CONNECT-TOKEN": "CONNECT-REGISTER"
-                    }
-
-                }).catch(function (response) {
-
-                    try {
-                        return response.json();
-                    } catch (err) {
-                        throw err;
-                    }
-
-                }).then(function (result) {
-
-                    if (result && result.Status) {
-                        return Promise.reject({ errorCode: result.Status });
-                    } else {
-                        Promise.reject();
-                    }
-                });
             });
         };
 
