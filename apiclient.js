@@ -29,7 +29,7 @@
         function redetectBitrate() {
             stopBitrateDetection();
 
-            if (self.accessToken()) {
+            if (self.accessToken() && self.enableAutomaticBitrateDetection !== false) {
                 setTimeout(redetectBitrateInternal, 6000);
             }
         }
