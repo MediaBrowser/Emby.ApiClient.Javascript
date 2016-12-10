@@ -258,9 +258,7 @@
                 parts.push(albumArtist);
             }
 
-            var albumId = item.AlbumId;
-
-            if ((albumId) && (item.Album)) {
+            if ((item.AlbumId) && (item.Album)) {
                 parts.push(item.Album);
             }
 
@@ -268,9 +266,7 @@
 
             parts.push("Photos");
 
-            var albumId = item.AlbumId;
-
-            if ((albumId) && (item.Album)) {
+            if ((item.AlbumId) && (item.Album)) {
                 parts.push(item.Album);
             }
 
