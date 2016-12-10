@@ -1,35 +1,6 @@
 ﻿define(['localassetmanager'], function (localassetmanager) {
     'use strict';
 
-    return function () {
-
-        var self = this;
-
-        self.sync = function (apiClient, serverInfo, options) {
-
-            console.log("[mediasync]************************************* Start sync");
-
-            return processDownloadStatus(apiClient, serverInfo, options).then(function () {
-
-                return reportOfflineActions(apiClient, serverInfo).then(function () {
-
-                    //// Do the first data sync
-                    //return syncData(apiClient, serverInfo, false).then(function () {
-
-                        // Download new content
-                        return getNewMedia(apiClient, serverInfo, options).then(function () {
-
-                            // Do the second data sync
-                            return syncData(apiClient, serverInfo, false).then(function () {
-                                console.log("[mediasync]************************************* Exit sync");
-                            });
-                        });
-                    //});
-                });
-            });
-        }
-    }
-
     function processDownloadStatus(apiClient, serverInfo, options) {
 
         console.log('[mediasync] Begin processDownloadStatus');
@@ -55,7 +26,7 @@
             return p.then(function () {
                 console.log('[mediasync] Exit processDownloadStatus. Items reported: ' + cnt.toString());
                 return Promise.resolve();
-            })
+            });
         });
     }
 
@@ -120,7 +91,7 @@
                 return localassetmanager.deleteUserActions(actions).then(function () {
                     console.log('[mediasync] Exit reportOfflineActions (actions reported and deleted.)');
                     return Promise.resolve();
-                })
+                });
 
             }, function (err) {
 
@@ -141,7 +112,7 @@
 
             var completedItems = items.filter(function (item) {
                 return (item) && ((item.SyncStatus === 'synced') || (item.SyncStatus === 'error'));
-            })
+            });
 
             var request = {
                 TargetId: apiClient.deviceId(),
@@ -184,7 +155,7 @@
         return p.then(function () {
             console.log('[mediasync] Exit afterSyncData');
             return Promise.resolve();
-        })
+        });
     }
 
     function removeLocalItem(itemId, serverId) {
@@ -219,7 +190,7 @@
             return p.then(function () {
                 console.log('[mediasync] Exit getNewMedia');
                 return Promise.resolve();
-            })
+            });
         });
     }
 
@@ -278,7 +249,7 @@
 
             localItem.SyncStatus = 'transferring';
             return localassetmanager.addOrUpdateLocalItem(localItem);
-        })
+        });
     }
 
     function getImages(apiClient, jobItem, localItem) {
@@ -396,7 +367,7 @@
         return p.then(function () {
             console.log('[mediasync] Exit getSubtitles');
             return Promise.resolve();
-        })
+        });
     }
 
     function getItemSubtitle(file, apiClient, jobItem, localItem, mediaSource) {
@@ -428,6 +399,35 @@
             return localassetmanager.addOrUpdateLocalItem(localItem);
         });
     }
+
+    return function () {
+
+        var self = this;
+
+        self.sync = function (apiClient, serverInfo, options) {
+
+            console.log("[mediasync]************************************* Start sync");
+
+            return processDownloadStatus(apiClient, serverInfo, options).then(function () {
+
+                return reportOfflineActions(apiClient, serverInfo).then(function () {
+
+                    //// Do the first data sync
+                    //return syncData(apiClient, serverInfo, false).then(function () {
+
+                    // Download new content
+                    return getNewMedia(apiClient, serverInfo, options).then(function () {
+
+                        // Do the second data sync
+                        return syncData(apiClient, serverInfo, false).then(function () {
+                            console.log("[mediasync]************************************* Exit sync");
+                        });
+                    });
+                    //});
+                });
+            });
+        };
+    };
 
     //function syncUserItemAccess(syncDataResult, serverId) {
     //    console.log('[mediasync] Begin syncUserItemAccess');

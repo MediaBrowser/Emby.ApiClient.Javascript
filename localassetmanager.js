@@ -11,7 +11,7 @@
     }
 
     function getLocalItems(localItemIds) {
-        var list = new Array();
+        var list = [];
 
         localItemIds.forEach(function (id) {
             var res = itemrepository.get(id);
@@ -230,7 +230,7 @@
 
         var itemtype = item.Type.toLowerCase();
 
-        if (itemtype == 'episode') {
+        if (itemtype === 'episode') {
 
             parts.push("TV");
 
@@ -244,12 +244,12 @@
                 parts.push(seasonName);
             }
 
-        } else if (itemtype == 'video') {
+        } else if (itemtype === 'video') {
 
             parts.push("Videos");
             parts.push(item.Name);
 
-        } else if (itemtype == 'audio') {
+        } else if (itemtype === 'audio') {
 
             parts.push("Music");
 
@@ -259,21 +259,19 @@
             }
 
             var albumId = item.AlbumId;
-            var album = item.Album;
 
-            if ((albumId) && (album)) {
-                parts.push(album);
+            if ((albumId) && (item.Album)) {
+                parts.push(item.Album);
             }
 
-        } else if (itemtype == 'photo') {
+        } else if (itemtype === 'photo') {
 
             parts.push("Photos");
 
             var albumId = item.AlbumId;
-            var album = item.Album;
 
-            if ((albumId) && (album)) {
-                parts.push(album);
+            if ((albumId) && (item.Album)) {
+                parts.push(item.Album);
             }
 
         }
@@ -304,7 +302,7 @@
         var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
             var r = (d + Math.random() * 16) % 16 | 0;
             d = Math.floor(d / 16);
-            return (c == 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
         return uuid;
     }
