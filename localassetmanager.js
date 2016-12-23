@@ -75,46 +75,47 @@
 
         return itemrepository.getServerItemTypes(serverId, userId).then(function (types) {
 
-            var list = new Array();
+            var list = [];
+            var item;
 
             if (types.indexOf('audio') > -1) {
 
-                var item = {
+                item = {
                     Name: 'Music',
                     ServerId: serverId,
                     Id: 'localview:MusicView',
                     Type: 'MusicView',
                     CollectionType: 'Music',
                     IsFolder: true
-                }
+                };
 
                 list.push(item);
             }
 
             if (types.indexOf('photo') > -1) {
 
-                var item = {
+                item = {
                     Name: 'Photos',
                     ServerId: serverId,
                     Id: 'localview:PhotosView',
                     Type: 'PhotosView',
                     CollectionType: 'Photos',
                     IsFolder: true
-                }
+                };
 
                 list.push(item);
             }
 
             if (types.indexOf('episode') > -1) {
 
-                var item = {
+                item = {
                     Name: 'TV',
                     ServerId: serverId,
                     Id: 'localview:TVView',
                     Type: 'TVView',
                     CollectionType: 'TvShows',
                     IsFolder: true
-                }
+                };
 
                 list.push(item);
             }
@@ -123,14 +124,14 @@
                 types.indexOf('movie') > -1 ||
                 types.indexOf('musicvideo') > -1) {
 
-                var item = {
+                item = {
                     Name: 'Videos',
                     ServerId: serverId,
                     Id: 'localview:VideosView',
                     Type: 'VideosView',
                     CollectionType: 'HomeVideos',
                     IsFolder: true
-                }
+                };
 
                 list.push(item);
             }
@@ -252,7 +253,7 @@
             name += ".foreign";
         }
 
-        name =  name + "." + format.toLowerCase();
+        name = name + "." + format.toLowerCase();
 
         var localPathArray = [localItem.LocalFolder, name];
         var localFilePath = filerepository.getPathFromArray(localPathArray);
@@ -293,12 +294,12 @@
         var pathArray = getImagePath(serverId, itemId, imageType, index);
         var relPath = pathArray.join('/');
 
-        var prefix = 'ms-appdata:///local'
+        var prefix = 'ms-appdata:///local';
         return prefix + '/' + relPath;
     }
 
     function hasImage(serverId, itemId, imageType, index) {
-        
+
         var pathArray = getImagePath(serverId, itemId, imageType, index);
         var localFilePath = filerepository.getFullLocalPath(pathArray);
 
@@ -323,7 +324,7 @@
         var localFilePath = filerepository.getFullLocalPath(pathArray);
 
         if (!localItem.AdditionalFiles) {
-            localItem.AdditionalFiles = new Array();
+            localItem.AdditionalFiles = [];
         }
 
         var fileInfo = {
