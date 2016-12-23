@@ -10,19 +10,6 @@
         return itemrepository.get(id);
     }
 
-    function getLocalItems(localItemIds) {
-        var list = [];
-
-        localItemIds.forEach(function (id) {
-            var res = itemrepository.get(id);
-            list.push(res);
-        });
-
-        return Promise.all(list).then(function (values) {
-            return values;
-        });
-    }
-
     function getLocalId(serverId, itemId) {
 
         return CryptoJS.MD5(serverId + itemId).toString();
@@ -84,21 +71,121 @@
         });
     }
 
+    function getViews(serverId, userId) {
+
+        return itemrepository.getServerItemTypes(serverId, userId).then(function (types) {
+
+            var list = new Array();
+
+            if (types.indexOf('audio') > -1) {
+
+                var item = {
+                    Name: 'Music',
+                    ServerId: serverId,
+                    Id: 'localview:MusicView',
+                    Type: 'MusicView',
+                    CollectionType: 'Music',
+                    IsFolder: true
+                }
+
+                list.push(item);
+            }
+
+            if (types.indexOf('photo') > -1) {
+
+                var item = {
+                    Name: 'Photos',
+                    ServerId: serverId,
+                    Id: 'localview:PhotosView',
+                    Type: 'PhotosView',
+                    CollectionType: 'Photos',
+                    IsFolder: true
+                }
+
+                list.push(item);
+            }
+
+            if (types.indexOf('episode') > -1) {
+
+                var item = {
+                    Name: 'TV',
+                    ServerId: serverId,
+                    Id: 'localview:TVView',
+                    Type: 'TVView',
+                    CollectionType: 'TvShows',
+                    IsFolder: true
+                }
+
+                list.push(item);
+            }
+
+            if (types.indexOf('video') > -1 ||
+                types.indexOf('movie') > -1 ||
+                types.indexOf('musicvideo') > -1) {
+
+                var item = {
+                    Name: 'Videos',
+                    ServerId: serverId,
+                    Id: 'localview:VideosView',
+                    Type: 'VideosView',
+                    CollectionType: 'HomeVideos',
+                    IsFolder: true
+                }
+
+                list.push(item);
+            }
+
+            return Promise.resolve(list);
+        });
+    }
+
+    function getViewItems(serverId, userId, parentId) {
+
+        return getServerItems(serverId).then(function (items) {
+
+            var resultItems = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+
+                switch (parentId) {
+                    case 'localview:MusicView':
+                        return type === 'audio';
+                    case 'localview:PhotosView':
+                        return type === 'photo';
+                    case 'localview:TVView':
+                        return type === 'episode';
+                    case 'localview:VideosView':
+                        return type === 'movie' || type === 'video' || type === 'musicvideo';
+                    default:
+                        return false;
+                }
+            }).map(function (item2) {
+                return item2.Item;
+            });
+
+            return Promise.resolve(resultItems);
+        });
+    }
+
+
     function removeLocalItem(localItem) {
 
         return itemrepository.get(localItem.Id).then(function (item) {
             return filerepository.deleteFile(item.LocalPath).then(function () {
+
                 var p = Promise.resolve(true);
 
                 if (item.AdditionalFiles) {
                     item.AdditionalFiles.forEach(function (file) {
                         p = p.then(function () {
-                            return filerepository.deleteFile(file);
+                            return filerepository.deleteFile(file.Path);
                         });
                     });
                 }
 
-                return p.then(itemrepository.remove(localItem.Id));
+                return p.then(function (file) {
+                    return itemrepository.remove(localItem.Id);
+                });
 
             }, function (error) {
 
@@ -107,12 +194,14 @@
                 if (item.AdditionalFiles) {
                     item.AdditionalFiles.forEach(function (file) {
                         p = p.then(function (item) {
-                            return filerepository.deleteFile(file);
+                            return filerepository.deleteFile(file.Path);
                         });
                     });
                 }
 
-                return p.then(itemrepository.remove(localItem.Id));
+                return p.then(function (file) {
+                    return itemrepository.remove(localItem.Id);
+                });
             });
         });
     }
@@ -143,6 +232,7 @@
             ServerId: serverInfo.Id,
             LocalPath: localPath,
             LocalFolder: localFolder,
+            AdditionalFiles: jobItem.AdditionalFiles.slice(0),
             Id: getLocalId(serverInfo.Id, libraryItem.Id),
             SyncJobItemId: jobItem.SyncJobItemId
         };
@@ -150,15 +240,7 @@
         return Promise.resolve(item);
     }
 
-    function getLocalFilePath(localItem, fileName) {
-
-        var localPathArray = [localItem.LocalFolder, fileName];
-        var localFilePath = filerepository.getFullLocalPath(localPathArray);
-
-        return localFilePath;
-    }
-
-    function getSubtitleSaveFileName(mediaPath, language, isForced, format) {
+    function getSubtitleSaveFileName(localItem, mediaPath, language, isForced, format) {
 
         var name = getNameWithoutExtension(mediaPath);
 
@@ -170,7 +252,13 @@
             name += ".foreign";
         }
 
-        return name + "." + format.toLowerCase();
+        name =  name + "." + format.toLowerCase();
+
+        var localPathArray = [localItem.LocalFolder, name];
+        var localFilePath = filerepository.getPathFromArray(localPathArray);
+
+        return localFilePath;
+
     }
 
     function getItemFileSize(path) {
@@ -200,21 +288,59 @@
         return transfermanager.downloadSubtitles(url, fileName);
     }
 
-    function hasImage(serverId, itemId, imageTag) {
-        return imageRepository.hasImage(getImageRepositoryId(serverId, itemId), imageId);
+    function getImageUrl(serverId, itemId, imageType, index) {
+
+        var pathArray = getImagePath(serverId, itemId, imageType, index);
+        var relPath = pathArray.join('/');
+
+        var prefix = 'ms-appdata:///local'
+        return prefix + '/' + relPath;
     }
 
-    function downloadImage(url, fileName) {
+    function hasImage(serverId, itemId, imageType, index) {
+        
+        var pathArray = getImagePath(serverId, itemId, imageType, index);
+        var localFilePath = filerepository.getFullLocalPath(pathArray);
 
-        return transfermanager.downloadImage(url, fileName);
+        return filerepository.fileExists(localFilePath).then(function (exists) {
+            // TODO: Maybe check for broken download when file size is 0 and item is not queued
+            ////if (exists) {
+            ////    if (!transfermanager.isDownloadFileInQueue(localFilePath)) {
+            ////        // If file exists but 
+            ////        exists = false;
+            ////    }
+            ////}
+
+            return Promise.resolve(exists);
+        }, function (err) {
+            return Promise.resolve(false);
+        });
     }
 
-    function isDownloadInQueue(externalId) {
-        return transfermanager.isDownloadInQueue(externalId);
+    function downloadImage(localItem, url, serverId, itemId, imageType, index) {
+
+        var pathArray = getImagePath(serverId, itemId, imageType, index);
+        var localFilePath = filerepository.getFullLocalPath(pathArray);
+
+        if (!localItem.AdditionalFiles) {
+            localItem.AdditionalFiles = new Array();
+        }
+
+        var fileInfo = {
+            Path: localFilePath,
+            Type: 'Image',
+            Name: imageType + index.toString(),
+            ImageType: imageType
+        };
+
+        localItem.AdditionalFiles.push(fileInfo);
+
+        return transfermanager.downloadImage(url, localFilePath);
     }
 
-    function fileExists(path) {
-        return Promise.resolve(false);
+    function isDownloadFileInQueue(path) {
+
+        return transfermanager.isDownloadFileInQueue(path);
     }
 
     function translateFilePath(path) {
@@ -281,6 +407,23 @@
         return finalParts;
     }
 
+    function getImagePath(serverId, itemId, imageType, index) {
+
+        var parts = [];
+        parts.push('Metadata');
+        parts.push(serverId);
+        parts.push('images');
+        parts.push(itemId + '_' + imageType + '_' + index.toString() + '.png');
+
+        var finalParts = [];
+        for (var i = 0; i < parts.length; i++) {
+
+            finalParts.push(filerepository.getValidFileName(parts[i]));
+        }
+
+        return finalParts;
+    }
+
     function getLocalFileName(item, originalFileName) {
 
         var filename = originalFileName || item.Name;
@@ -288,7 +431,9 @@
         return filerepository.getValidFileName(filename);
     }
 
-
+    function resyncTransfers() {
+        return transfermanager.resyncTransfers();
+    }
 
     function createGuid() {
         var d = new Date().getTime();
@@ -321,14 +466,15 @@
         downloadSubtitles: downloadSubtitles,
         hasImage: hasImage,
         downloadImage: downloadImage,
-        fileExists: fileExists,
+        getImageUrl: getImageUrl,
         translateFilePath: translateFilePath,
-        getLocalFilePath: getLocalFilePath,
         getSubtitleSaveFileName: getSubtitleSaveFileName,
-        getLocalItems: getLocalItems,
         getLocalItemById: getLocalItemById,
         getServerItems: getServerItems,
         getItemFileSize: getItemFileSize,
-        isDownloadInQueue: isDownloadInQueue
+        isDownloadFileInQueue: isDownloadFileInQueue,
+        getViews: getViews,
+        getViewItems: getViewItems,
+        resyncTransfers: resyncTransfers
     };
 });
