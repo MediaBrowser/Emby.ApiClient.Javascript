@@ -177,9 +177,13 @@
             }]);
         }
 
+        var useSimpleAuth = false;
+
         self.setRequestHeaders = function (headers) {
 
             var currentServerInfo = self.serverInfo();
+
+            var accessToken = currentServerInfo.AccessToken;
 
             if (clientName) {
 
@@ -191,12 +195,15 @@
                     auth += ', UserId="' + userId + '"';
                 }
 
-                headers["X-Emby-Authorization"] = auth;
+                if (useSimpleAuth && accessToken) {
+                    auth += ', Token="' + accessToken + '"';
+                    headers["X-Emby-Authorization"] = auth;
+                } else {
+                    headers["Authorization"] = auth;
+                }
             }
 
-            var accessToken = currentServerInfo.AccessToken;
-
-            if (accessToken) {
+            if (accessToken && !useSimpleAuth) {
                 headers['X-MediaBrowser-Token'] = accessToken;
             }
         };
