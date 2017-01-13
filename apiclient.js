@@ -199,7 +199,7 @@
                     auth += ', Token="' + accessToken + '"';
                     headers["X-Emby-Authorization"] = auth;
                 } else {
-                    headers["Authorization"] = auth;
+                    headers.Authorization = auth;
                 }
             }
 
