@@ -245,7 +245,7 @@
 
             }).filter(filterDistinct);
 
-            var resultItems = new Array();
+            var resultItems = [];
 
             items.forEach(function (item) {
                 var found = false;

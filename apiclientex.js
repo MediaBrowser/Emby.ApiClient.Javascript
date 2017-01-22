@@ -75,6 +75,7 @@
         function getItems(userId, options) {
 
             var serverInfo = apiclientcore.serverInfo();
+            var i;
 
             if (serverInfo && options.ParentId === 'localview') {
 
@@ -108,7 +109,7 @@
 
                 var exItems = options.ExcludeItemIds.split(',');
 
-                for (var i = 0; i < exItems.length; i++) {
+                for (i = 0; i < exItems.length; i++) {
                     if (startsWith(exItems[i], localPrefix)) {
                         return Promise.resolve(createEmptyList());
                     }
@@ -118,7 +119,7 @@
                 var ids = options.Ids.split(',');
                 var hasLocal = false;
 
-                for (var i = 0; i < ids.length; i++) {
+                for (i = 0; i < ids.length; i++) {
                     if (startsWith(ids[i], localPrefix)) {
                         hasLocal = true;
                     }
