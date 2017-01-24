@@ -298,7 +298,30 @@
             return result;
         }
 
+        function getPlaybackInfo(itemId, options, deviceProfile) {
+
+            return localassetmanager.getLocalItem(apiclientcore.serverId(), stripStart(itemId, localPrefix)).then(function (item) {
+
+                // TODO: This was already done during the sync process, right? If so, remove it
+                var mediaSources = item.Item.MediaSources.map(function (m) {
+                    m.SupportsDirectPlay = true;
+                    m.SupportsDirectStream = false;
+                    m.SupportsTranscoding = false;
+                    return m;
+                });
+
+                return {
+                    MediaSources: mediaSources
+                };
+            });
+        }
+
         // "Override" methods
+
+        self.detectBitrate = function () {
+            return Promise.reject();
+        };
+
         self.getUserViews = getUserViews;
         self.getItems = getItems;
         self.getItem = getItem;
@@ -309,6 +332,7 @@
         self.getSimilarItems = getSimilarItems;
         self.updateFavoriteStatus = updateFavoriteStatus;
         self.getScaledImageUrl = getScaledImageUrl;
+        self.getPlaybackInfo = getPlaybackInfo;
     };
 
 });
