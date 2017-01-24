@@ -322,6 +322,33 @@
             return Promise.reject();
         };
 
+        self.reportPlaybackStart = function (options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            return Promise.resolve();
+        };
+
+        self.reportPlaybackProgress = function (options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            return Promise.resolve();
+        };
+
+        self.reportPlaybackStopped = function (options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            return Promise.resolve();
+        };
+
         self.getUserViews = getUserViews;
         self.getItems = getItems;
         self.getItem = getItem;
