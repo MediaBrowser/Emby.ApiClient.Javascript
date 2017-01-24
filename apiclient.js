@@ -1423,6 +1423,11 @@
             });
         };
 
+        self.getIntros = function(itemId) {
+
+            return self.getJSON(self.getUrl('Users/' + self.getCurrentUserId() + '/Items/' + itemId + '/Intros'));
+        };
+
         /**
          * Gets the directory contents of a path on the server
          */

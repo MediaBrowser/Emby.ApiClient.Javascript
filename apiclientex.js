@@ -349,6 +349,14 @@
             return Promise.resolve();
         };
 
+        self.getIntros = function (itemId) {
+
+            return Promise.resolve({
+                Items: [],
+                TotalRecordCount: 0
+            });
+        };
+
         self.getUserViews = getUserViews;
         self.getItems = getItems;
         self.getItem = getItem;
