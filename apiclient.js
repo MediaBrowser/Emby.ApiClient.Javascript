@@ -742,9 +742,9 @@
             });
         }
 
-        self.detectBitrate = function () {
+        self.detectBitrate = function (force) {
 
-            if (lastDetectedBitrate && (new Date().getTime() - (lastDetectedBitrateTime || 0)) <= 3600000) {
+            if (!force && lastDetectedBitrate && (new Date().getTime() - (lastDetectedBitrateTime || 0)) <= 3600000) {
                 return Promise.resolve(lastDetectedBitrate);
             }
 
