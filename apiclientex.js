@@ -28,6 +28,19 @@
             set: function (newValue) { apiclientcore.enableAutomaticBitrateDetection = newValue; }
         });
 
+        function getCurrentUser() {
+
+            if (apiclientcore.isLoggedIn()) {
+                return apiclientcore.getCurrentUser();
+            }
+
+            // TODO: Need to select a user some way if we don't have a user id
+            var id = apiclientcore.getCurrentUserId();
+            var user = localassetmanager.loadOfflineUser(id);
+
+            return Promise.resolve(user);
+        };
+
         function getUserViews(userId) {
 
             return apiclientcore.getUserViews(userId).then(function (result) {
@@ -48,7 +61,7 @@
                     });
                 }
 
-                return Promis.resolve(result);
+                return Promise.resolve(result);
             });
         }
 
@@ -88,12 +101,12 @@
                     return Promise.resolve(result);
                 });
 
-            } else if (serverInfo && options && (startsWith(options.ParentId, localViewPrefix) || startsWith(options.ParentId, localPrefix))) {
+            } else if (serverInfo && options && (isLocalId(options.ParentId) || isLocalViewId(options.ParentId))) {
 
-                return localassetmanager.getViewItems(serverInfo.Id, userId, options.ParentId).then(function (items) {
+                return localassetmanager.getViewItems(serverInfo.Id, userId, options).then(function (items) {
 
                     items.forEach(function (item) {
-                        item.Id = localPrefix + item.Id;
+                        adjustGuidProperties(item);
                     });
 
                     items.sort(function (a, b) { return a.SortName.toLowerCase().localeCompare(b.SortName.toLowerCase()); });
@@ -110,7 +123,7 @@
                 var exItems = options.ExcludeItemIds.split(',');
 
                 for (i = 0; i < exItems.length; i++) {
-                    if (startsWith(exItems[i], localPrefix)) {
+                    if (isLocalId(exItems[i])) {
                         return Promise.resolve(createEmptyList());
                     }
                 }
@@ -120,7 +133,7 @@
                 var hasLocal = false;
 
                 for (i = 0; i < ids.length; i++) {
-                    if (startsWith(ids[i], localPrefix)) {
+                    if (isLocalId(ids[i])) {
                         hasLocal = true;
                     }
                 }
@@ -129,7 +142,7 @@
                     return localassetmanager.getItemsFromIds(serverInfo.Id, ids).then(function (items) {
 
                         items.forEach(function (item) {
-                            item.Id = localPrefix + item.Id;
+                            adjustGuidProperties(item);
                         });
 
                         var result = {
@@ -153,7 +166,7 @@
 
             var serverInfo;
 
-            if (startsWith(itemId, localViewPrefix)) {
+            if (isLocalViewId(itemId)) {
 
                 serverInfo = apiclientcore.serverInfo();
 
@@ -174,14 +187,14 @@
                 }
             }
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)) {
 
                 serverInfo = apiclientcore.serverInfo();
 
                 if (serverInfo) {
-                    return localassetmanager.getLocalItem(serverInfo.Id, stripStart(itemId, localPrefix)).then(function (item) {
+                    return localassetmanager.getLocalItem(serverInfo.Id, stripLocalPrefix(itemId)).then(function (item) {
 
-                        item.Item.Id = localPrefix + item.Item.Id;
+                        adjustGuidProperties(item.Item);
 
                         return Promise.resolve(item.Item);
                     });
@@ -191,10 +204,39 @@
             return apiclientcore.getItem(userId, itemId);
         }
 
+        function adjustGuidProperties(downloadedItem) {
+
+            downloadedItem.Id = convertGuidToLocal(downloadedItem.Id);
+            downloadedItem.SeriesId = convertGuidToLocal(downloadedItem.SeriesId);
+
+            downloadedItem.AlbumId = convertGuidToLocal(downloadedItem.AlbumId);
+            downloadedItem.ParentId = convertGuidToLocal(downloadedItem.ParentId);
+            downloadedItem.ParentThumbItemId = convertGuidToLocal(downloadedItem.ParentThumbItemId);
+            downloadedItem.ParentPrimaryImageItemId = convertGuidToLocal(downloadedItem.ParentPrimaryImageItemId);
+            downloadedItem.PrimaryImageItemId = convertGuidToLocal(downloadedItem.PrimaryImageItemId);
+            downloadedItem.ParentLogoItemId = convertGuidToLocal(downloadedItem.ParentLogoItemId);
+            downloadedItem.ParentBackdropItemID = convertGuidToLocal(downloadedItem.ParentBackdropItemID);
+
+            downloadedItem.ParentBackdropImageTags = null;
+        }
+
+        function convertGuidToLocal(guid) {
+
+            if (!guid) {
+                return null;
+            }
+
+            if (isLocalId(guid)) {
+                return guid;
+            }
+
+            return 'local:' + guid;
+        }
+
         function getNextUpEpisodes(options) {
 
             if (options.SeriesId) {
-                if (startsWith(options.SeriesId, localPrefix)) {
+                if (isLocalId(options.SeriesId)) {
                     return Promise.resolve(createEmptyList());
                 }
             }
@@ -204,7 +246,7 @@
 
         function getSeasons(itemId, options) {
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)) {
                 options.ParentId = itemId;
                 return getItems(apiclientcore.getCurrentUserId(), options);
             }
@@ -214,7 +256,7 @@
 
         function getEpisodes(itemId, options) {
 
-            if (startsWith(options.SeasonId, localPrefix)) {
+            if (isLocalId(options.SeasonId)) {
                 options.ParentId = options.SeasonId;
                 return getItems(apiclientcore.getCurrentUserId(), options);
             }
@@ -224,7 +266,7 @@
 
         function getThemeMedia(userId, itemId, inherit) {
 
-            if (startsWith(itemId, localViewPrefix) || startsWith(itemId, localPrefix)) {
+            if (isLocalViewId(itemId) || isLocalId(itemId)) {
                 return Promise.reject();
             }
 
@@ -233,7 +275,7 @@
 
         function getSimilarItems(itemId, options) {
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)) {
                 return Promise.resolve(createEmptyList());
             }
 
@@ -242,7 +284,7 @@
 
         function updateFavoriteStatus(userId, itemId, isFavorite) {
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)) {
                 return Promise.resolve();
             }
 
@@ -251,14 +293,14 @@
 
         function getScaledImageUrl(itemId, options) {
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)
+                || (options && options.itemid && isLocalId(options.itemid))) {
 
                 var serverInfo = apiclientcore.serverInfo();
-                var id = stripStart(itemId, localPrefix);
+                var id = stripLocalPrefix(itemId);
 
                 return localassetmanager.getImageUrl(serverInfo.Id, id, options.type, 0);
             }
-
 
             return apiclientcore.getScaledImageUrl(itemId, options);
         }
@@ -268,7 +310,96 @@
             events.trigger(self, 'websocketmessage', [msg]);
         }
 
+
+        function getPlaybackInfo(itemId, options, deviceProfile) {
+
+            if (isLocalId(itemId)) {
+                return localassetmanager.getLocalItem(apiclientcore.serverId(), stripLocalPrefix(itemId)).then(function (item) {
+
+                    // TODO: This was already done during the sync process, right? If so, remove it
+                    var mediaSources = item.Item.MediaSources.map(function (m) {
+                        m.SupportsDirectPlay = true;
+                        m.SupportsDirectStream = false;
+                        m.SupportsTranscoding = false;
+                        return m;
+                    });
+
+                    return {
+                        MediaSources: mediaSources
+                    };
+                });
+            }
+
+            return apiclientcore.getPlaybackInfo(itemId, options, deviceProfile);
+        }
+
+        function reportPlaybackStart(options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            if (isLocalId(options.ItemId)) {
+                return Promise.resolve();
+            }
+
+            return apiclientcore.reportPlaybackStart(options);
+        }
+
+        function reportPlaybackProgress(options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            if (isLocalId(options.ItemId)) {
+                return Promise.resolve();
+            }
+
+            return apiclientcore.reportPlaybackProgress(options);
+        }
+
+        function reportPlaybackStopped(options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            if (isLocalId(options.ItemId)) {
+                return Promise.resolve();
+            }
+
+            return apiclientcore.reportPlaybackStopped(options);
+        }
+
+        function getIntros(itemId) {
+
+            if (isLocalId(itemId)) {
+                return Promise.resolve({
+                    Items: [],
+                    TotalRecordCount: 0
+                });
+            }
+
+            return apiclientcore.getIntros(itemId);
+        }
+
         // **************** Helper functions
+
+        function isLocalId(str) {
+            return startsWith(str, localPrefix);
+        }
+
+        function isLocalViewId(str) {
+            return startsWith(str, localViewPrefix);
+        }
+
+        function stripLocalPrefix(str) {
+            var res = stripStart(str, localPrefix);
+            res = stripStart(res, localViewPrefix);
+
+            return res;
+        }
 
         function startsWith(str, find) {
 
@@ -298,65 +429,13 @@
             return result;
         }
 
-        function getPlaybackInfo(itemId, options, deviceProfile) {
-
-            return localassetmanager.getLocalItem(apiclientcore.serverId(), stripStart(itemId, localPrefix)).then(function (item) {
-
-                // TODO: This was already done during the sync process, right? If so, remove it
-                var mediaSources = item.Item.MediaSources.map(function (m) {
-                    m.SupportsDirectPlay = true;
-                    m.SupportsDirectStream = false;
-                    m.SupportsTranscoding = false;
-                    return m;
-                });
-
-                return {
-                    MediaSources: mediaSources
-                };
-            });
-        }
-
-        // "Override" methods
-
+        // What to do with detectBitrate? When the app calls into apiclientex, this doesn't
+        // mean that we're offline. We could be online or offline...
         self.detectBitrate = function () {
             return Promise.reject();
         };
 
-        self.reportPlaybackStart = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            return Promise.resolve();
-        };
-
-        self.reportPlaybackProgress = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            return Promise.resolve();
-        };
-
-        self.reportPlaybackStopped = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            return Promise.resolve();
-        };
-
-        self.getIntros = function (itemId) {
-
-            return Promise.resolve({
-                Items: [],
-                TotalRecordCount: 0
-            });
-        };
-
+        self.getCurrentUser = getCurrentUser;
         self.getUserViews = getUserViews;
         self.getItems = getItems;
         self.getItem = getItem;
@@ -368,6 +447,10 @@
         self.updateFavoriteStatus = updateFavoriteStatus;
         self.getScaledImageUrl = getScaledImageUrl;
         self.getPlaybackInfo = getPlaybackInfo;
+        self.reportPlaybackStart = reportPlaybackStart;
+        self.reportPlaybackProgress = reportPlaybackProgress;
+        self.reportPlaybackStopped = reportPlaybackStopped;
+        self.getIntros = getIntros;
     };
 
 });

@@ -15,6 +15,10 @@
         return CryptoJS.MD5(serverId + itemId).toString();
     }
 
+    function loadOfflineUser(userId) {
+        return userrepository.get(userId);
+    }
+
     function saveOfflineUser(user) {
         return userrepository.set(user.Id, user);
     }
@@ -209,7 +213,9 @@
         return typeFilter;
     }
 
-    function getViewItems(serverId, userId, parentId) {
+    function getViewItems(serverId, userId, options) {
+
+        var parentId = options.ParentId;
 
         var typeFilter = getTypeFilterForTopLevelView(parentId);
 
@@ -593,6 +599,7 @@
     return {
 
         getLocalItem: getLocalItem,
+        loadOfflineUser: loadOfflineUser,
         saveOfflineUser: saveOfflineUser,
         deleteOfflineUser: deleteOfflineUser,
         recordUserAction: recordUserAction,

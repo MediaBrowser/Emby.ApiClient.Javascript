@@ -45,7 +45,7 @@
         return Promise.resolve([]);
     }
 
-    function getViewItems(serverId, userId, parentId) {
+    function getViewItems(serverId, userId, options) {
         return Promise.resolve([]);
     }
 
