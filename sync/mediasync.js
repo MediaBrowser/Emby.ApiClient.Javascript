@@ -223,8 +223,12 @@
             libraryItem.CanDownload = false;
             libraryItem.SupportsSync = false;
             libraryItem.People = [];
-            libraryItem.UserData = [];
+            libraryItem.Chapters = [];
+            libraryItem.Studios = [];
+            libraryItem.UserData = {};
             libraryItem.SpecialFeatureCount = null;
+            libraryItem.LocalTrailerCount = null;
+            libraryItem.RemoteTrailers = [];
 
             return localassetmanager.createLocalItem(libraryItem, serverInfo, jobItem).then(function (localItem) {
 
