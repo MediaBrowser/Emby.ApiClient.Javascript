@@ -208,6 +208,7 @@
 
             downloadedItem.Id = convertGuidToLocal(downloadedItem.Id);
             downloadedItem.SeriesId = convertGuidToLocal(downloadedItem.SeriesId);
+            downloadedItem.SeasonId = convertGuidToLocal(downloadedItem.SeasonId);
 
             downloadedItem.AlbumId = convertGuidToLocal(downloadedItem.AlbumId);
             downloadedItem.ParentId = convertGuidToLocal(downloadedItem.ParentId);
