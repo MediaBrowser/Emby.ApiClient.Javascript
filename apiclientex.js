@@ -39,7 +39,7 @@
             var user = localassetmanager.loadOfflineUser(id);
 
             return Promise.resolve(user);
-        };
+        }
 
         function getUserViews(userId) {
 
@@ -294,8 +294,7 @@
 
         function getScaledImageUrl(itemId, options) {
 
-            if (isLocalId(itemId)
-                || (options && options.itemid && isLocalId(options.itemid))) {
+            if (isLocalId(itemId) || (options && options.itemid && isLocalId(options.itemid))) {
 
                 var serverInfo = apiclientcore.serverInfo();
                 var id = stripLocalPrefix(itemId);
