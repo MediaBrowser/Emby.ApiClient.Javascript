@@ -1361,8 +1361,11 @@
                 }
 
             }).then(function (result) {
-
                 if (result && result.Status) {
+
+                    if (result.Status === 'SUCCESS') {
+                        return Promise.resolve(result);
+                    }
                     return Promise.reject({ errorCode: result.Status });
                 } else {
                     Promise.reject();
