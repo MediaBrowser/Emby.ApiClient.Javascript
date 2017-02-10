@@ -101,6 +101,14 @@
         return Promise.resolve();
     }
 
+    function getItemsFromIds(serverId, ids) {
+        return Promise.resolve([]);
+    }
+
+    function removeObsoleteContainerItems(serverId) {
+        return Promise.resolve();
+    }
+
     return {
 
         getLocalItem: getLocalItem,
@@ -127,6 +135,8 @@
         isDownloadFileInQueue: isDownloadFileInQueue,
         getViews: getViews,
         getViewItems: getViewItems,
-        resyncTransfers: resyncTransfers
+        resyncTransfers: resyncTransfers,
+        getItemsFromIds: getItemsFromIds,
+        removeObsoleteContainerItems: removeObsoleteContainerItems
     };
 });

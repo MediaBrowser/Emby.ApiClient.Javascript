@@ -11,12 +11,21 @@
 
                 console.log('[mediasync] Begin processDownloadStatus getServerItems completed');
 
+                var p = Promise.resolve();
+                var cnt = 0;
+
+                // Debugging only
+                //items.forEach(function (item) {
+                //    p = p.then(function () {
+                //        return localassetmanager.removeLocalItem(item);
+                //    });
+                //});
+
+                //return Promise.resolve();
+
                 var progressItems = items.filter(function (item) {
                     return item.SyncStatus === 'transferring' || item.SyncStatus === 'queued';
                 });
-
-                var p = Promise.resolve();
-                var cnt = 0;
 
                 progressItems.forEach(function (item) {
                     p = p.then(function () {
@@ -143,7 +152,8 @@
 
         var p = Promise.resolve();
 
-        if (syncDataResult.ItemIdsToRemove) {
+        if (syncDataResult.ItemIdsToRemove && syncDataResult.ItemIdsToRemove.length > 0) {
+
             syncDataResult.ItemIdsToRemove.forEach(function (itemId) {
                 p = p.then(function () {
                     return removeLocalItem(itemId, serverInfo.Id);
@@ -157,10 +167,20 @@
             });
         }
 
+        p = p.then(function () {
+            return removeObsoleteContainerItems(serverInfo.Id);
+        });
+
         return p.then(function () {
             console.log('[mediasync] Exit afterSyncData');
             return Promise.resolve();
         });
+    }
+
+    function removeObsoleteContainerItems(serverId) {
+        console.log('[mediasync] Begin removeObsoleteContainerItems');
+
+        return localassetmanager.removeObsoleteContainerItems(serverId);
     }
 
     function removeLocalItem(itemId, serverId) {
@@ -262,7 +282,7 @@
 
         switch (itemType) {
             case 'episode':
-                if (libraryItem.SeriesId && libraryItem.SeriesId) {
+                if (libraryItem.SeriesId) {
                     p = p.then(function () {
                         return downloadItem(apiClient, libraryItem, libraryItem.SeriesId, serverInfo).then(function (seriesItem) {
                             libraryItem.SeriesLogoImageTag = (seriesItem.Item.ImageTags || {}).Logo;
@@ -270,7 +290,7 @@
                         });
                     });
                 }
-                if (libraryItem.SeasonId && libraryItem.SeasonId) {
+                if (libraryItem.SeasonId) {
                     p = p.then(function () {
                         return downloadItem(apiClient, libraryItem, libraryItem.SeasonId, serverInfo).then(function (seasonItem) {
                             libraryItem.SeasonPrimaryImageTag = (seasonItem.Item.ImageTags || {}).Primary;
@@ -282,7 +302,7 @@
 
             case 'audio':
             case 'photo':
-                if (libraryItem.AlbumId && libraryItem.AlbumId) {
+                if (libraryItem.AlbumId) {
                     p = p.then(function () {
                         return downloadItem(apiClient, libraryItem, libraryItem.AlbumId, serverInfo);
                     });
@@ -323,6 +343,7 @@
             return Promise.resolve(null);
         });
     }
+
 
     function downloadMedia(apiClient, jobItem, localItem, options) {
 
@@ -395,19 +416,19 @@
         }
 
         // Backdrops
-        //if (libraryItem.Id && libraryItem.BackdropImageTags) {
-        //    for (var i = 0; i < libraryItem.BackdropImageTags.length; i++) {
+        if (libraryItem.Id && libraryItem.BackdropImageTags) {
+            for (var i = 0; i < libraryItem.BackdropImageTags.length; i++) {
 
-        //        var backdropImageTag = libraryItem.BackdropImageTags[i];
+                var backdropImageTag = libraryItem.BackdropImageTags[i];
 
-        //        // use self-invoking function to simulate block-level variable scope
-        //        (function (index, tag) {
-        //            p = p.then(function () {
-        //                return downloadImage(localItem, apiClient, serverId, libraryItem.Id, tag, 'backdrop', index);
-        //            });
-        //        })(i, backdropImageTag);
-        //    }
-        //}
+                // use self-invoking function to simulate block-level variable scope
+                (function (index, tag) {
+                    p = p.then(function () {
+                        return downloadImage(localItem, apiClient, serverId, libraryItem.Id, tag, 'backdrop', index);
+                    });
+                })(i, backdropImageTag);
+            }
+        }
 
         // case 1/2:
         if (libraryItem.SeriesId && libraryItem.SeriesPrimaryImageTag) {

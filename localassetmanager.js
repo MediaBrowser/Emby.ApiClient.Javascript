@@ -224,6 +224,8 @@
 
         return getServerItems(serverId).then(function (items) {
 
+            //debugPrintItems(items);
+
             var resultItemIds = items.filter(function (item) {
 
                 if (item.SyncStatus && item.SyncStatus !== 'synced') {
@@ -264,6 +266,94 @@
             });
 
             return Promise.resolve(resultItems);
+        });
+    }
+
+    function removeObsoleteContainerItems(serverId) {
+
+        return getServerItems(serverId).then(function (items) {
+
+            var seriesItems = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'series';
+            });
+
+
+            var seasonItems = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'season';
+            });
+
+            var albumItems = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'musicalbum' || type === 'photoalbum';
+            });
+
+            var requiredSeriesIds = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'episode';
+            }).map(function (item2) {
+
+                return item2.Item.SeriesId;
+            }).filter(filterDistinct);
+
+            var requiredSeasonIds = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'episode';
+            }).map(function (item2) {
+
+                return item2.Item.SeasonId;
+            }).filter(filterDistinct);
+
+            var requiredAlbumIds = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'audio' || type === 'photo';
+            }).map(function (item2) {
+
+                return item2.Item.AlbumId;
+            }).filter(filterDistinct);
+
+
+            var obsoleteItems = [];
+
+            seriesItems.forEach(function (item) {
+
+                if (requiredSeriesIds.indexOf(item.Item.Id) < 0) {
+                    obsoleteItems.push(item);
+                }
+            });
+
+            seasonItems.forEach(function (item) {
+
+                if (requiredSeasonIds.indexOf(item.Item.Id) < 0) {
+                    obsoleteItems.push(item);
+                }
+            });
+
+            albumItems.forEach(function (item) {
+
+                if (requiredAlbumIds.indexOf(item.Item.Id) < 0) {
+                    obsoleteItems.push(item);
+                }
+            });
+
+
+            var p = Promise.resolve();
+
+            obsoleteItems.forEach(function (item) {
+
+                p = p.then(function () {
+                    return itemrepository.remove(item.Id);
+                });
+            });
+
+            return p;
         });
     }
 
@@ -596,6 +686,19 @@
         return self.indexOf(value) === index;
     }
 
+    function debugPrintItems(items) {
+
+        console.log("Current local items:");
+        console.group();
+
+        items.forEach(function (item) {
+            console.info("ID: %s Type: %s Name: %s", item.Item.Id, item.Item.Type, item.Item.Name);
+        });
+
+        console.groupEnd();
+    }
+
+
     return {
 
         getLocalItem: getLocalItem,
@@ -625,6 +728,7 @@
         getViews: getViews,
         getViewItems: getViewItems,
         resyncTransfers: resyncTransfers,
-        getItemsFromIds: getItemsFromIds
+        getItemsFromIds: getItemsFromIds,
+        removeObsoleteContainerItems: removeObsoleteContainerItems
     };
 });
