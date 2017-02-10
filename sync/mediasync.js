@@ -419,14 +419,14 @@
         if (libraryItem.Id && libraryItem.BackdropImageTags) {
             for (var i = 0; i < libraryItem.BackdropImageTags.length; i++) {
 
-                var backdropImageTag = libraryItem.BackdropImageTags[i];
+                //var backdropImageTag = libraryItem.BackdropImageTags[i];
 
-                // use self-invoking function to simulate block-level variable scope
-                (function (index, tag) {
-                    p = p.then(function () {
-                        return downloadImage(localItem, apiClient, serverId, libraryItem.Id, tag, 'backdrop', index);
-                    });
-                })(i, backdropImageTag);
+                //// use self-invoking function to simulate block-level variable scope
+                //(function (index, tag) {
+                //    p = p.then(function () {
+                //        return downloadImage(localItem, apiClient, serverId, libraryItem.Id, tag, 'backdrop', index);
+                //    });
+                //})(i, backdropImageTag);
             }
         }
 
