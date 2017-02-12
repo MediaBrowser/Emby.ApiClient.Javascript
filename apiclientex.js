@@ -267,6 +267,13 @@
                 return getItems(apiclientcore.getCurrentUserId(), options);
             }
 
+            // get episodes by series id
+            if (isLocalId(itemId)) {
+                options.ParentId = itemId;
+                options.Recursive = true;
+                return getItems(apiclientcore.getCurrentUserId(), options);
+            }
+
             return apiclientcore.getEpisodes(itemId, options);
         }
 
@@ -477,12 +484,6 @@
 
             return result;
         }
-
-        // What to do with detectBitrate? When the app calls into apiclientex, this doesn't
-        // mean that we're offline. We could be online or offline...
-        self.detectBitrate = function () {
-            return Promise.reject();
-        };
 
         self.getCurrentUser = getCurrentUser;
         self.getUserViews = getUserViews;
