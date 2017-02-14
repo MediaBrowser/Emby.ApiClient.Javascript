@@ -267,11 +267,23 @@
                 return getItems(apiclientcore.getCurrentUserId(), options);
             }
 
-            // get episodes by series id
+            // get episodes by recursion
             if (isLocalId(itemId)) {
                 options.ParentId = itemId;
                 options.Recursive = true;
-                return getItems(apiclientcore.getCurrentUserId(), options);
+                return getItems(apiclientcore.getCurrentUserId(), options).then(function (items) {
+                    var items2 = items.Items.filter(function (item) {
+
+                        return item.Type.toLowerCase() === 'episode';
+                    });
+
+                    var result = {
+                        Items: items2,
+                        TotalRecordCount: items2.length
+                    };
+
+                    return Promise.resolve(result);
+                });
             }
 
             return apiclientcore.getEpisodes(itemId, options);

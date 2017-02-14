@@ -253,16 +253,40 @@
 
             }).filter(filterDistinct);
 
+            if (options.Recursive) {
+
+                // Recurse only one level for now
+                var resultItemIds2 = items.filter(function (item) {
+
+                    if (item.SyncStatus && item.SyncStatus !== 'synced') {
+                        return false;
+                    }
+
+                    return resultItemIds.indexOf(item.Item.ParentId) >= 0;
+                }).map(function (item2) {
+
+                    return item2.Item.Id;
+
+                });
+
+                resultItemIds = resultItemIds.concat(resultItemIds2);
+            }
+
             var resultItems = [];
 
             items.forEach(function (item) {
                 var found = false;
 
-                resultItemIds.forEach(function (id) {
-                    if (item.Item.Id === id) {
-                        resultItems.push(item.Item);
-                    }
-                });
+                if (options.Filters === 'IsNotFolder' && item.Item.IsFolder) {
+                    // Ignore item
+                } else {
+
+                    resultItemIds.forEach(function (id) {
+                        if (item.Item.Id === id) {
+                            resultItems.push(item.Item);
+                        }
+                    });
+                }
             });
 
             return Promise.resolve(resultItems);
