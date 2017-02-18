@@ -345,6 +345,7 @@
                         m.SupportsDirectPlay = true;
                         m.SupportsDirectStream = false;
                         m.SupportsTranscoding = false;
+                        m.IsLocal = true;
                         return m;
                     });
 
@@ -354,7 +355,25 @@
                 });
             }
 
-            return apiclientcore.getPlaybackInfo(itemId, options, deviceProfile);
+            return localassetmanager.getLocalItem(apiclientcore.serverId(), itemId).then(function (item) {
+
+                if (item) {
+
+                    var mediaSources = item.Item.MediaSources.map(function (m) {
+                        m.SupportsDirectPlay = true;
+                        m.SupportsDirectStream = false;
+                        m.SupportsTranscoding = false;
+                        m.IsLocal = true;
+                        return m;
+                    });
+
+                    return {
+                        MediaSources: mediaSources
+                    };
+                }
+
+                return apiclientcore.getPlaybackInfo(itemId, options, deviceProfile);
+            });
         }
 
         function reportPlaybackStart(options) {
