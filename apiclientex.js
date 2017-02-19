@@ -1,4 +1,4 @@
-﻿define(['apiclientcore', 'localassetmanager', 'events'], function (apiclientcorefactory, localassetmanager, events) {
+﻿define(['apiclientcore', 'localassetmanager', 'events', 'appStorage'], function (apiclientcorefactory, localassetmanager, events, appStorage) {
     'use strict';
 
     var localPrefix = 'local:';
@@ -30,15 +30,25 @@
 
         function getCurrentUser() {
 
-            if (apiclientcore.isLoggedIn()) {
-                return apiclientcore.getCurrentUser();
-            }
+            return apiclientcore.getCurrentUser().then(function (user) {
 
-            // TODO: Need to select a user some way if we don't have a user id
-            var id = apiclientcore.getCurrentUserId();
-            var user = localassetmanager.loadOfflineUser(id);
+                appStorage.setItem('user-' + user.Id, JSON.stringify(user));
+                return user;
 
-            return Promise.resolve(user);
+            }, function (error) {
+
+                var userId = apiclientcore.getCurrentUserId();
+
+                if (userId && apiclientcore.accessToken()) {
+                    var json = appStorage.getItem('user-' + userId);
+
+                    if (json) {
+                        return Promise.resolve(JSON.parse(json));
+                    }
+                }
+
+                return Promise.reject(error);
+            });
         }
 
         function getUserViews(userId) {
