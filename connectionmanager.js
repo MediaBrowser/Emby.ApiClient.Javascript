@@ -954,9 +954,7 @@
 
                     if (result.State === ConnectionState.Unavailable) {
 
-                        result.State = result.ConnectUser == null ?
-                            ConnectionState.ConnectSignIn :
-                            ConnectionState.ServerSelection;
+                        result.State = ConnectionState.ServerSelection;
                     }
 
                     console.log('resolving connectToServers with result.State: ' + result.State);
