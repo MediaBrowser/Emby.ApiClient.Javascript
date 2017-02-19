@@ -252,6 +252,13 @@
         };
 
         self.getApiClients = function () {
+
+            var servers = self.getSavedServers();
+
+            servers.map(function(s) {
+                self.getOrCreateApiClient(s.Id);
+            });
+
             return apiClients;
         };
 

@@ -83,6 +83,10 @@
             return self.serverInfo().Id;
         };
 
+        self.serverName = function () {
+            return self.serverInfo().Name;
+        };
+
         var currentUser;
         /**
          * Gets or sets the current user id.
@@ -1408,7 +1412,7 @@
             return self.getJSON(url);
         };
 
-        self.getPlaybackInfo = function(itemId, options, deviceProfile) {
+        self.getPlaybackInfo = function (itemId, options, deviceProfile) {
 
             var postData = {
                 DeviceProfile: deviceProfile
@@ -1423,7 +1427,7 @@
             });
         };
 
-        self.getIntros = function(itemId) {
+        self.getIntros = function (itemId) {
 
             return self.getJSON(self.getUrl('Users/' + self.getCurrentUserId() + '/Items/' + itemId + '/Intros'));
         };
@@ -3730,6 +3734,12 @@
                 url: self.getUrl('Auth/Pin', queryString),
                 dataType: 'json'
             });
+        };
+
+        self.getLatestItems = function (options) {
+
+            options = options || {};
+            return self.getJSON(self.getUrl('Users/' + self.getCurrentUserId() + '/Items/Latest', options));
         };
 
         function exchangePin(pinInfo) {

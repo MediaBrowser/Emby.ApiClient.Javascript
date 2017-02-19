@@ -67,7 +67,7 @@
 
         function getLocalView(serverId, userId) {
 
-            return localassetmanager.getViews(serverId, userId).then(function (views) {
+            return getLocalFolders(serverId, userId).then(function (views) {
 
                 var localView = null;
 
@@ -85,6 +85,14 @@
             });
         }
 
+        function getLocalFolders(userId) {
+
+            var serverInfo = apiclientcore.serverInfo();
+            userId = userId || serverInfo.UserId;
+
+            return localassetmanager.getViews(serverInfo.Id, userId);
+        }
+
         function getItems(userId, options) {
 
             var serverInfo = apiclientcore.serverInfo();
@@ -92,7 +100,7 @@
 
             if (serverInfo && options.ParentId === 'localview') {
 
-                return localassetmanager.getViews(serverInfo.Id, userId).then(function (items) {
+                return getLocalFolders(serverInfo.Id, userId).then(function (items) {
                     var result = {
                         Items: items,
                         TotalRecordCount: items.length
@@ -171,7 +179,7 @@
                 serverInfo = apiclientcore.serverInfo();
 
                 if (serverInfo) {
-                    return localassetmanager.getViews(serverInfo.Id, userId).then(function (items) {
+                    return getLocalFolders(serverInfo.Id, userId).then(function (items) {
 
                         var views = items.filter(function (item) {
                             return item.Id === itemId;
@@ -516,10 +524,20 @@
             return result;
         }
 
+        self.getLatestOfflineItems = function (options) {
+
+            // Supported options
+            // MediaType - Audio/Video/Photo/Book/Game
+            // Limit
+
+            return Promise.resolve([]);
+        };
+
         self.getCurrentUser = getCurrentUser;
         self.getUserViews = getUserViews;
         self.getItems = getItems;
         self.getItem = getItem;
+        self.getLocalFolders = getLocalFolders;
         self.getSeasons = getSeasons;
         self.getEpisodes = getEpisodes;
         self.getThemeMedia = getThemeMedia;
