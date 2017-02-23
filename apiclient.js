@@ -455,7 +455,7 @@
                 if (error) {
                     console.log("Request failed to " + request.url + ' ' + error.toString());
                 } else {
-                    console.log("Request timed out to " + request.url + ' ' + error.toString());
+                    console.log("Request timed out to " + request.url);
                 }
 
                 // http://api.jquery.com/jQuery.ajax/		     
