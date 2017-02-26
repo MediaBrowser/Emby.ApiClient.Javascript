@@ -48,7 +48,7 @@
                 uploadPhotos = false;
             }
 
-            var pr = syncOfflineUsers(server, options);
+            var pr = Promise.resolve();
 
             return pr.then(function () {
 
@@ -64,23 +64,6 @@
             });
         }
 
-
-        function syncOfflineUsers(server, options) {
-
-            if (options.syncOfflineUsers === false) {
-                return Promise.resolve();
-            }
-
-            return new Promise(function (resolve, reject) {
-
-                require(['offlineusersync'], function (OfflineUserSync) {
-
-                    var apiClient = connectionManager.getApiClient(server.Id);
-
-                    new OfflineUserSync().sync(apiClient, server).then(resolve, reject);
-                });
-            });
-        }
 
         function uploadContent(server, options) {
 

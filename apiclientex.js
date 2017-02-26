@@ -385,9 +385,19 @@
                         return m;
                     });
 
-                    return {
-                        MediaSources: mediaSources
-                    };
+                    return localassetmanager.fileExists(item.LocalPath).then(function (exists) {
+
+                        if (exists) {
+
+                            var res = {
+                                MediaSources: mediaSources
+                            };
+
+                            return Promise.resolve(res);
+                        }
+
+                        return apiclientcore.getPlaybackInfo(itemId, options, deviceProfile);
+                    });
                 }
 
                 return apiclientcore.getPlaybackInfo(itemId, options, deviceProfile);
@@ -539,9 +549,42 @@
             // Supported options
             // MediaType - Audio/Video/Photo/Book/Game
             // Limit
+            // Filters: 'IsNotFolder' or 'IsFolder'
+
+            var serverInfo = apiclientcore.serverInfo();
+
+            if (serverInfo) {
+
+                return localassetmanager.getViewItems(serverInfo.Id, null, options).then(function (items) {
+                        
+                    items.forEach(function (item) {
+                        adjustGuidProperties(item);
+                    });
+
+                    items.sort(function (a, b) { return compareDates(a.DateCreated, b.DateCreated); });
+
+                    return Promise.resolve(items);
+                });
+            }
 
             return Promise.resolve([]);
         };
+
+        function compareDates(a,b) {
+            // Compare two dates (could be of any type supported by the convert
+            // function above) and returns:
+            //  -1 : if a < b
+            //   0 : if a = b
+            //   1 : if a > b
+            // NaN : if a or b is an illegal date
+            // NOTE: The code inside isFinite does an assignment (=).
+            return (
+                isFinite(a=a.valueOf()) &&
+                isFinite(b=b.valueOf()) ?
+                (a>b)-(a<b) :
+                NaN
+            );
+        }
 
         self.getCurrentUser = getCurrentUser;
         self.getUserViews = getUserViews;

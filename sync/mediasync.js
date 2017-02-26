@@ -128,8 +128,7 @@
 
             var request = {
                 TargetId: apiClient.deviceId(),
-                LocalItemIds: completedItems.map(function (xitem) { return xitem.ItemId; }),
-                OfflineUserIds: (serverInfo.Users || []).map(function (u) { return u.Id; })
+                LocalItemIds: completedItems.map(function (xitem) { return xitem.ItemId; })
             };
 
             return apiClient.syncData(request).then(function (result) {
@@ -576,6 +575,44 @@
         });
     }
 
+    function checkLocalFileExistence(apiClient, serverInfo, options) {
+
+        if (options.checkFileExistence) {
+
+            console.log('[mediasync] Begin checkLocalFileExistence');
+
+            return localassetmanager.getServerItems(serverInfo.Id).then(function (items) {
+
+                var completedItems = items.filter(function (item) {
+                    return (item) && ((item.SyncStatus === 'synced') || (item.SyncStatus === 'error'));
+                });
+
+                var p = Promise.resolve();
+
+                completedItems.forEach(function (completedItem) {
+                    p = p.then(function () {
+                        return localassetmanager.fileExists(completedItem.LocalPath).then(function (exists) {
+                            if (!exists) {
+                                return localassetmanager.removeLocalItem(completedItem).then(function () {
+                                    return Promise.resolve();
+                                }, function () {
+                                    return Promise.resolve();
+                                });
+                            }
+
+                            return Promise.resolve();
+                        });
+                    });
+                });
+
+                return p;
+            });
+        }
+
+        return Promise.resolve();
+    }
+
+
     return function () {
 
         var self = this;
@@ -584,26 +621,29 @@
 
             console.log('[mediasync]************************************* Start sync');
 
-            return processDownloadStatus(apiClient, serverInfo, options).then(function () {
+            return checkLocalFileExistence(apiClient, serverInfo, options).then(function () {
 
-                return localassetmanager.getDownloadItemCount().then(function (downloadCount) {
+                return processDownloadStatus(apiClient, serverInfo, options).then(function () {
 
-                    if (options.syncCheckProgressOnly === true && downloadCount > 2) {
-                        return Promise.resolve();
-                    }
+                    return localassetmanager.getDownloadItemCount().then(function (downloadCount) {
 
-                    return reportOfflineActions(apiClient, serverInfo).then(function () {
+                        if (options.syncCheckProgressOnly === true && downloadCount > 2) {
+                            return Promise.resolve();
+                        }
 
-                        // Download new content
-                        return getNewMedia(apiClient, serverInfo, options, downloadCount).then(function () {
+                        return reportOfflineActions(apiClient, serverInfo).then(function () {
 
-                            // Do the second data sync
-                            return syncData(apiClient, serverInfo, false).then(function () {
-                                console.log('[mediasync]************************************* Exit sync');
-                                return Promise.resolve();
+                            // Download new content
+                            return getNewMedia(apiClient, serverInfo, options, downloadCount).then(function () {
+
+                                // Do the second data sync
+                                return syncData(apiClient, serverInfo, false).then(function () {
+                                    console.log('[mediasync]************************************* Exit sync');
+                                    return Promise.resolve();
+                                });
                             });
+                            //});
                         });
-                        //});
                     });
                 });
             }, function (err) {

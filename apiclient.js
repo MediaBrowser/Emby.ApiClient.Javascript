@@ -2317,21 +2317,6 @@
         };
 
         /**
-         * Gets a user by id
-         * @param {String} id
-         */
-        self.getOfflineUser = function (id) {
-
-            if (!id) {
-                throw new Error("Must supply a userId");
-            }
-
-            var url = self.getUrl("Users/" + id + "/Offline");
-
-            return self.getJSON(url);
-        };
-
-        /**
          * Gets a studio
          */
         self.getStudio = function (name, userId) {

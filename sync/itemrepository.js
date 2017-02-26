@@ -1,45 +1,74 @@
 ﻿define(['idb'], function () {
     'use strict';
 
-    // Database name
-    var dbName = "items";
-
     // Database version
     var dbVersion = 1;
 
-    var dbPromise;
+    var promisesMap = new Map();
 
-    function setup() {
+    function getDbName(serverId) {
 
-        dbPromise = idb.open(dbName, dbVersion, function (upgradeDB) {
-            // Note: we don't use 'break' in this switch statement,
-            // the fall-through behaviour is what we want.
-            switch (upgradeDB.oldVersion) {
-                case 0:
-                    upgradeDB.createObjectStore(dbName);
-                    //case 1:
-                    //    upgradeDB.createObjectStore('stuff', { keyPath: '' });
-            }
-        }); //.then(db => console.log("DB opened!", db));
+        return "items_" + serverId;
     }
 
-    function getServerItemIds(serverId) {
-        return dbPromise.then(function (db) {
-            return db.transaction(dbName).objectStore(dbName).getAll(null, 10000).then(function (all) {
-                return all.filter(function (item) {
-                    return item.ServerId === serverId;
-                }).map(function (item2) {
-                    return item2.ItemId;
-                });
+    function getPromise(dbName) {
+
+        if (!promisesMap.has(dbName)) {
+            return idb.open(dbName, dbVersion, upgradeDbFunc).then(function (dbPromise) {
+                promisesMap.set(dbName, dbPromise);
+                return Promise.resolve(dbPromise);
             });
+        }
+
+        var dbPromise = promisesMap.get(dbName);
+        return Promise.resolve(dbPromise);
+    }
+
+    function getTransaction(serverId, access) {
+
+        var dbName = getDbName(serverId);
+
+        if (!access) {
+            access = 'readonly';
+        }
+
+        return getPromise(dbName).then(function (db) {
+
+            return db.transaction(dbName, access);
         });
     }
 
+    function getObjectStore(serverId, access) {
+
+        var dbName = getDbName(serverId);
+
+        return getTransaction(serverId, access).then(function (tx) {
+
+            return tx.objectStore(dbName);
+        });
+    }
+
+    function upgradeDbFunc(upgradeDB) {
+
+        // Note: we don't use 'break' in this switch statement,
+        // the fall-through behaviour is what we want.
+        switch (upgradeDB.oldVersion) {
+            case 0:
+                upgradeDB.createObjectStore(upgradeDB.name);
+                //case 1:
+                //    upgradeDB.createObjectStore('stuff', { keyPath: '' });
+        }
+    }
+
+
+
     function getServerItemTypes(serverId, userId) {
-        return dbPromise.then(function (db) {
-            return db.transaction(dbName).objectStore(dbName).getAll(null, 10000).then(function (all) {
+
+        return getObjectStore(serverId).then(function (store) {
+
+            return store.getAll(null, 10000).then(function (all) {
                 return all.filter(function (item) {
-                    return item.ServerId === serverId && (item.UserIdsWithAccess == null || item.UserIdsWithAccess.contains(userId));
+                    return true; // item.ServerId === serverId && (item.UserIdsWithAccess == null || item.UserIdsWithAccess.contains(userId));
                 }).map(function (item2) {
                     return (item2.Item.Type || '').toLowerCase();
                 }).filter(filterDistinct);
@@ -47,50 +76,36 @@
         });
     }
 
-    function getServerIds(serverId) {
-        return dbPromise.then(function (db) {
-            return db.transaction(dbName).objectStore(dbName).getAll(null, 10000).then(function (all) {
-                return all.filter(function (item) {
-                    return item.ServerId === serverId;
-                }).map(function (item2) {
-                    return item2.Id;
-                });
-            });
+    function getAll(serverId) {
+
+        return getObjectStore(serverId).then(function (store) {
+            return store.getAll(null, 10000);
         });
     }
 
-    function getAll() {
-        return dbPromise.then(function (db) {
-            return db.transaction(dbName).objectStore(dbName).getAll(null, 10000);
+    function get(serverId, key) {
+        return getObjectStore(serverId).then(function (store) {
+            return store.get(key);
         });
     }
 
-    function get(key) {
-        return dbPromise.then(function (db) {
-            return db.transaction(dbName).objectStore(dbName).get(key);
-        });
-    }
-
-    function set(key, val) {
-        return dbPromise.then(function (db) {
-            var tx = db.transaction(dbName, 'readwrite');
-            tx.objectStore(dbName).put(val, key);
+    function set(serverId, key, val) {
+        return getTransaction(serverId, 'readwrite').then(function (tx) {
+            tx.objectStore(getDbName(serverId)).put(val, key);
             return tx.complete;
         });
     }
 
-    function remove(key) {
-        return dbPromise.then(function (db) {
-            var tx = db.transaction(dbName, 'readwrite');
-            tx.objectStore(dbName).delete(key);
+    function remove(serverId, key) {
+        return getTransaction(serverId, 'readwrite').then(function (tx) {
+            tx.objectStore(getDbName(serverId)).delete(key);
             return tx.complete;
         });
     }
 
-    function clear() {
-        return dbPromise.then(function (db) {
-            var tx = db.transaction(dbName, 'readwrite');
-            tx.objectStore(dbName).clear();
+    function clear(serverId) {
+        return getTransaction(serverId, 'readwrite').then(function (tx) {
+            tx.objectStore(getDbName(serverId)).clear();
             return tx.complete;
         });
     }
@@ -99,16 +114,12 @@
         return self.indexOf(value) === index;
     }
 
-    setup();
-
     return {
         get: get,
         set: set,
         remove: remove,
         clear: clear,
         getAll: getAll,
-        getServerItemIds: getServerItemIds,
-        getServerIds: getServerIds,
         getServerItemTypes: getServerItemTypes
     };
 });

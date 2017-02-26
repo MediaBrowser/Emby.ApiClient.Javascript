@@ -5,18 +5,6 @@
         return Promise.resolve();
     }
 
-    function getLocalItemById(id) {
-        return Promise.resolve();
-    }
-
-    function saveOfflineUser(user) {
-        return Promise.resolve();
-    }
-
-    function deleteOfflineUser(id) {
-        return Promise.resolve();
-    }
-
     function recordUserAction(action) {
         return Promise.resolve();
     }
@@ -31,10 +19,6 @@
 
     function deleteUserActions(actions) {
         return Promise.resolve();
-    }
-
-    function getServerItemIds(serverId) {
-        return Promise.resolve([]);
     }
 
     function getServerItems(serverId) {
@@ -112,13 +96,10 @@
     return {
 
         getLocalItem: getLocalItem,
-        saveOfflineUser: saveOfflineUser,
-        deleteOfflineUser: deleteOfflineUser,
         recordUserAction: recordUserAction,
         getUserActions: getUserActions,
         deleteUserAction: deleteUserAction,
         deleteUserActions: deleteUserActions,
-        getServerItemIds: getServerItemIds,
         removeLocalItem: removeLocalItem,
         addOrUpdateLocalItem: addOrUpdateLocalItem,
         createLocalItem: createLocalItem,
@@ -129,7 +110,6 @@
         getImageUrl: getImageUrl,
         translateFilePath: translateFilePath,
         getSubtitleSaveFileName: getSubtitleSaveFileName,
-        getLocalItemById: getLocalItemById,
         getServerItems: getServerItems,
         getItemFileSize: getItemFileSize,
         isDownloadFileInQueue: isDownloadFileInQueue,

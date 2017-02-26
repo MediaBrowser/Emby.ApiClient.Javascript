@@ -1,30 +1,8 @@
-﻿define(['filerepository', 'itemrepository', 'userrepository', 'useractionrepository', 'transfermanager', 'cryptojs-md5'], function (filerepository, itemrepository, userrepository, useractionrepository, transfermanager) {
+﻿define(['filerepository', 'itemrepository', 'useractionrepository', 'transfermanager', 'cryptojs-md5'], function (filerepository, itemrepository, useractionrepository, transfermanager) {
     'use strict';
 
     function getLocalItem(serverId, itemId) {
-        var id = getLocalId(serverId, itemId);
-        return itemrepository.get(id);
-    }
-
-    function getLocalItemById(id) {
-        return itemrepository.get(id);
-    }
-
-    function getLocalId(serverId, itemId) {
-
-        return CryptoJS.MD5(serverId + itemId).toString();
-    }
-
-    function loadOfflineUser(userId) {
-        return userrepository.get(userId);
-    }
-
-    function saveOfflineUser(user) {
-        return userrepository.set(user.Id, user);
-    }
-
-    function deleteOfflineUser(id) {
-        return userrepository.remove(id);
+        return itemrepository.get(serverId, itemId);
     }
 
     function recordUserAction(action) {
@@ -51,23 +29,9 @@
         return Promise.all(results);
     }
 
-    function getServerItemIds(serverId) {
-        return itemrepository.getServerItemIds(serverId);
-    }
-
     function getServerItems(serverId) {
 
-        return itemrepository.getServerIds(serverId).then(function (localIds) {
-
-            var actions = localIds.map(function (id) {
-                return getLocalItemById(id);
-            });
-
-            return Promise.all(actions).then(function (items) {
-
-                return Promise.resolve(items);
-            });
-        });
+        return itemrepository.getAll(serverId);
     }
 
     function getItemsFromIds(serverId, ids) {
@@ -217,7 +181,12 @@
 
         var parentId = options.ParentId;
 
-        var typeFilter = getTypeFilterForTopLevelView(parentId);
+        var typeFilterTop = getTypeFilterForTopLevelView(parentId);
+
+        var typeFilter = options.MediaType;
+        if (!typeFilter) {
+            typeFilter = typeFilterTop;
+        }
 
         parentId = stripStart(parentId, 'localview:');
         parentId = stripStart(parentId, 'local:');
@@ -232,6 +201,10 @@
                     return false;
                 }
 
+                if (options.MediaType) {
+                    return item.Item.MediaType === options.MediaType;
+                }
+
                 if (typeFilter) {
                     var type = (item.Item.Type || '').toLowerCase();
                     return typeFilter === type;
@@ -241,7 +214,7 @@
 
             }).map(function (item2) {
 
-                switch (typeFilter) {
+                switch (typeFilterTop) {
                     case 'audio':
                     case 'photo':
                         return item2.Item.AlbumId;
@@ -278,6 +251,8 @@
                 var found = false;
 
                 if (options.Filters === 'IsNotFolder' && item.Item.IsFolder) {
+                    // Ignore item
+                } else if (options.Filters === 'IsFolder' && !item.Item.IsFolder) {
                     // Ignore item
                 } else {
 
@@ -373,7 +348,7 @@
             obsoleteItems.forEach(function (item) {
 
                 p = p.then(function () {
-                    return itemrepository.remove(item.Id);
+                    return itemrepository.remove(item.ServerId, item.Id);
                 });
             });
 
@@ -384,7 +359,7 @@
 
     function removeLocalItem(localItem) {
 
-        return itemrepository.get(localItem.Id).then(function (item) {
+        return itemrepository.get(localItem.ServerId, localItem.Id).then(function (item) {
             return filerepository.deleteFile(item.LocalPath).then(function () {
 
                 var p = Promise.resolve(true);
@@ -398,7 +373,7 @@
                 }
 
                 return p.then(function (file) {
-                    return itemrepository.remove(localItem.Id);
+                    return itemrepository.remove(localItem.ServerId, localItem.Id);
                 });
 
             }, function (error) {
@@ -414,7 +389,7 @@
                 }
 
                 return p.then(function (file) {
-                    return itemrepository.remove(localItem.Id);
+                    return itemrepository.remove(localItem.ServerId, localItem.Id);
                 });
             });
         });
@@ -422,7 +397,7 @@
 
     function addOrUpdateLocalItem(localItem) {
         console.log('addOrUpdateLocalItem Start');
-        return itemrepository.set(localItem.Id, localItem).then(function (res) {
+        return itemrepository.set(localItem.ServerId, localItem.Id, localItem).then(function (res) {
             console.log('addOrUpdateLocalItem Success');
             return Promise.resolve(true);
         }, function (error) {
@@ -458,7 +433,8 @@
             ServerId: serverInfo.Id,
             LocalPath: localPath,
             LocalFolder: localFolder,
-            Id: getLocalId(serverInfo.Id, libraryItem.Id)
+            SyncDate: Date.now(),
+            Id: libraryItem.Id
         };
 
         if (jobItem) {
@@ -546,6 +522,10 @@
         }, function (err) {
             return Promise.resolve(false);
         });
+    }
+
+    function fileExists(localFilePath) {
+        return filerepository.fileExists(localFilePath);
     }
 
     function downloadImage(localItem, url, serverId, itemId, imageType, index) {
@@ -726,14 +706,10 @@
     return {
 
         getLocalItem: getLocalItem,
-        loadOfflineUser: loadOfflineUser,
-        saveOfflineUser: saveOfflineUser,
-        deleteOfflineUser: deleteOfflineUser,
         recordUserAction: recordUserAction,
         getUserActions: getUserActions,
         deleteUserAction: deleteUserAction,
         deleteUserActions: deleteUserActions,
-        getServerItemIds: getServerItemIds,
         removeLocalItem: removeLocalItem,
         addOrUpdateLocalItem: addOrUpdateLocalItem,
         createLocalItem: createLocalItem,
@@ -744,7 +720,6 @@
         getImageUrl: getImageUrl,
         translateFilePath: translateFilePath,
         getSubtitleSaveFileName: getSubtitleSaveFileName,
-        getLocalItemById: getLocalItemById,
         getServerItems: getServerItems,
         getItemFileSize: getItemFileSize,
         isDownloadFileInQueue: isDownloadFileInQueue,
@@ -753,6 +728,7 @@
         getViewItems: getViewItems,
         resyncTransfers: resyncTransfers,
         getItemsFromIds: getItemsFromIds,
-        removeObsoleteContainerItems: removeObsoleteContainerItems
+        removeObsoleteContainerItems: removeObsoleteContainerItems,
+        fileExists: fileExists
     };
 });
