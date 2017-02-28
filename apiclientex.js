@@ -551,7 +551,8 @@
             // Limit
             // Filters: 'IsNotFolder' or 'IsFolder'
 
-            options.Sort = 'DateDesc';
+            options.SortBy = 'DateCreated';
+            options.SortOrder = 'Descending';
 
             var serverInfo = apiclientcore.serverInfo();
 

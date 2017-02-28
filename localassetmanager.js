@@ -264,7 +264,7 @@
                 }
             });
 
-            if (options.Sort === 'DateDesc') {
+            if (options.SortBy === 'DateCreated') {
                 resultItems.sort(function (a, b) { return compareDates(a.DateCreated, b.DateCreated); });
             }
 
