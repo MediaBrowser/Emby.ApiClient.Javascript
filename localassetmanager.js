@@ -264,6 +264,14 @@
                 }
             });
 
+            if (options.Sort === 'DateDesc') {
+                resultItems.sort(function (a, b) { return compareDates(a.DateCreated, b.DateCreated); });
+            }
+
+            if (options.Limit) {
+                resultItems = resultItems.slice(0, options.Limit);
+            }
+
             return Promise.resolve(resultItems);
         });
     }
@@ -688,6 +696,22 @@
 
     function filterDistinct(value, index, self) {
         return self.indexOf(value) === index;
+    }
+
+    function compareDates(a, b) {
+        // Compare two dates (could be of any type supported by the convert
+        // function above) and returns:
+        //  -1 : if a < b
+        //   0 : if a = b
+        //   1 : if a > b
+        // NaN : if a or b is an illegal date
+        // NOTE: The code inside isFinite does an assignment (=).
+        return (
+            isFinite(a = a.valueOf()) &&
+            isFinite(b = b.valueOf()) ?
+            (a > b) - (a < b) :
+            NaN
+        );
     }
 
     function debugPrintItems(items) {

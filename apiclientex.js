@@ -551,6 +551,8 @@
             // Limit
             // Filters: 'IsNotFolder' or 'IsFolder'
 
+            options.Sort = 'DateDesc';
+
             var serverInfo = apiclientcore.serverInfo();
 
             if (serverInfo) {
@@ -561,30 +563,12 @@
                         adjustGuidProperties(item);
                     });
 
-                    items.sort(function (a, b) { return compareDates(a.DateCreated, b.DateCreated); });
-
                     return Promise.resolve(items);
                 });
             }
 
             return Promise.resolve([]);
         };
-
-        function compareDates(a,b) {
-            // Compare two dates (could be of any type supported by the convert
-            // function above) and returns:
-            //  -1 : if a < b
-            //   0 : if a = b
-            //   1 : if a > b
-            // NaN : if a or b is an illegal date
-            // NOTE: The code inside isFinite does an assignment (=).
-            return (
-                isFinite(a=a.valueOf()) &&
-                isFinite(b=b.valueOf()) ?
-                (a>b)-(a<b) :
-                NaN
-            );
-        }
 
         self.getCurrentUser = getCurrentUser;
         self.getUserViews = getUserViews;
