@@ -494,7 +494,8 @@
     function downloadFile(url, localItem) {
 
         var folder = filerepository.getLocalPath();
-        return transfermanager.downloadFile(url, folder, localItem);
+        var imageUrl = getImageUrl(localItem.Item.ServerId, localItem.Item.Id, 'Primary', 0);
+        return transfermanager.downloadFile(url, folder, localItem, imageUrl);
     }
 
     function downloadSubtitles(url, fileName) {
