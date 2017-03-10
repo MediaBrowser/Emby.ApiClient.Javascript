@@ -84,7 +84,7 @@
                 if (views.length > 0) {
 
                     localView = {
-                        Name: 'Offline Items',
+                        Name: self.downloadsTitleText || 'Downloads',
                         ServerId: serverId,
                         Id: 'localview',
                         Type: 'localview'
