@@ -754,12 +754,12 @@
 
             return detectBitrateInternal([
             {
-                bytes: 100000,
-                threshold: 5000000
+                bytes: 500000,
+                threshold: 500000
             },
             {
                 bytes: 1000000,
-                threshold: 50000000
+                threshold: 20000000
             },
             {
                 bytes: 3000000,
