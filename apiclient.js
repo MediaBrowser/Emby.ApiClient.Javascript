@@ -3437,12 +3437,14 @@
 
             if (self.isWebSocketOpen()) {
 
-                return new Promise(function (resolve, reject) {
+                try {
+                    self.sendWebSocketMessage("ReportPlaybackProgress", JSON.stringify(options));
+                    return Promise.resolve();
+                } catch (err) {
 
-                    var msg = JSON.stringify(options);
-                    self.sendWebSocketMessage("ReportPlaybackProgress", msg);
-                    resolve();
-                });
+                    // Log and send via http
+                    console.log('Error sending playback progress report: ' + err);
+                }
             }
 
             var url = self.getUrl("Sessions/Playing/Progress");
