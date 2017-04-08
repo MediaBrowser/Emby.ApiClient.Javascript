@@ -178,6 +178,10 @@
 
         function getItem(userId, itemId) {
 
+            if (!itemId) {
+                throw new Error("null itemId");
+            }
+
             if (itemId) {
                 itemId = itemId.toString();
             }
