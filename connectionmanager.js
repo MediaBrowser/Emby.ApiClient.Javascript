@@ -255,7 +255,7 @@
 
             var servers = self.getSavedServers();
 
-            servers.map(function(s) {
+            servers.map(function (s) {
                 self.getOrCreateApiClient(s.Id);
             });
 
@@ -1625,6 +1625,10 @@
 
         self.getPinStatus = function (pinInfo) {
 
+            if (!pinInfo) {
+                throw new Error('pinInfo cannot be null');
+            }
+
             var queryString = {
                 deviceId: pinInfo.DeviceId,
                 pin: pinInfo.Pin
@@ -1644,6 +1648,10 @@
 
         function exchangePin(pinInfo) {
 
+            if (!pinInfo) {
+                throw new Error('pinInfo cannot be null');
+            }
+
             var request = {
                 type: 'POST',
                 url: getConnectUrl('pin/authenticate'),
@@ -1660,6 +1668,10 @@
         }
 
         self.exchangePin = function (pinInfo) {
+
+            if (!pinInfo) {
+                throw new Error('pinInfo cannot be null');
+            }
 
             return exchangePin(pinInfo).then(function (result) {
 

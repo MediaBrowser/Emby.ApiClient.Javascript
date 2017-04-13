@@ -3709,20 +3709,6 @@
             });
         };
 
-        self.getPinStatus = function (pinInfo) {
-
-            var queryString = {
-                deviceId: pinInfo.DeviceId,
-                pin: pinInfo.Pin
-            };
-
-            return self.ajax({
-                type: 'GET',
-                url: self.getUrl('Auth/Pin', queryString),
-                dataType: 'json'
-            });
-        };
-
         self.getLatestItems = function (options) {
 
             options = options || {};
