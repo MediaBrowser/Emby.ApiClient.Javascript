@@ -1537,18 +1537,16 @@
             var cacheKey = 'regInfo-' + params.serverId;
             var regInfo = JSON.parse(appStorage.getItem(cacheKey) || '{}');
 
+            var timeSinceLastValidation = (new Date().getTime() - (regInfo.lastValidDate || 0));
+
+            // Cache for 1 day
+            if (timeSinceLastValidation <= 86400000) {
+                console.log('getRegistrationInfo returning cached info');
+                return Promise.resolve();
+            }
+
             var updateDevicePromise;
-
-            // Cache for 3 days
-            if (params.deviceId && (new Date().getTime() - (regInfo.lastValidDate || 0)) < 604800000) {
-
-                console.log('getRegistrationInfo has cached info');
-
-                if (regInfo.deviceId === params.deviceId) {
-                    console.log('getRegistrationInfo returning cached info');
-                    return Promise.resolve();
-                }
-
+            if (regInfo.deviceId && regInfo.deviceId !== params.deviceId) {
                 updateDevicePromise = ajax({
                     url: 'https://mb3admin.com/admin/service/registration/updateDevice?' + paramsToString({
                         serverId: params.serverId,
@@ -1562,6 +1560,19 @@
             if (!updateDevicePromise) {
                 updateDevicePromise = Promise.resolve();
             }
+
+            var onFailure = function (err) {
+                console.log('getRegistrationInfo failed: ' + err);
+
+                // Allow for up to 7 days
+                if (timeSinceLastValidation <= 604800000) {
+
+                    console.log('getRegistrationInfo returning cached info');
+                    return Promise.resolve();
+                }
+
+                throw err;
+            };
 
             return updateDevicePromise.then(function () {
                 return apiClient.getCurrentUser().then(function (user) {
@@ -1590,16 +1601,25 @@
                         if (status === 403) {
                             return Promise.reject('overlimit');
                         }
-
                         // general error
                         return Promise.reject();
 
-                    }, function (err) {
-                        console.log('getRegistrationInfo failed');
-                        throw err;
+                    }, function (response) {
+                        
+                        var status = (response || {}).status;
+                        console.log('getRegistrationInfo response: ' + status);
+
+                        if (status === 403) {
+                            return Promise.reject('overlimit');
+                        }
+
+                        if (status) {
+                            return Promise.reject();
+                        }
+                        return onFailure(response);
                     });
-                });
-            });
+                }, onFailure);
+            }, onFailure);
         };
 
         function addAppInfoToConnectRequest(request) {
