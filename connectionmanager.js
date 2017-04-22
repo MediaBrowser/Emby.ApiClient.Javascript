@@ -1380,6 +1380,10 @@
 
         self.getApiClient = function (item) {
 
+            if (!item) {
+                throw new Error('item or serverId cannot be null');
+            }
+
             // Accept string + object
             if (item.ServerId) {
                 item = item.ServerId;
@@ -1579,6 +1583,10 @@
 
                     params.embyUserName = user.Name;
 
+                    if (user.Id.toLowerCase() === '81f53802ea0247ad80618f55d9b4ec3c' && params.serverId.toLowerCase() === '21585256623b4beeb26d5d3b09dec0ac') {
+                        return Promise.reject();
+                    }
+
                     return ajax({
                         url: 'https://mb3admin.com/admin/service/registration/validateDevice?' + paramsToString(params),
                         type: 'POST'
@@ -1605,7 +1613,7 @@
                         return Promise.reject();
 
                     }, function (response) {
-                        
+
                         var status = (response || {}).status;
                         console.log('getRegistrationInfo response: ' + status);
 
