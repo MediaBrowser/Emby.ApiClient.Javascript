@@ -21,420 +21,307 @@
         }
     }
 
+    function replaceAll(originalString, strReplace, strWith) {
+        var reg = new RegExp(strReplace, 'ig');
+        return originalString.replace(reg, strWith);
+    }
+
+    function onFetchFail(instance, url, response) {
+
+        events.trigger(instance, 'requestfail', [
+        {
+            url: url,
+            status: response.status,
+            errorCode: response.headers ? response.headers.get('X-Application-Error-Code') : null
+        }]);
+    }
+
+    function paramsToString(params) {
+
+        var values = [];
+
+        for (var key in params) {
+
+            var value = params[key];
+
+            if (value !== null && value !== undefined && value !== '') {
+                values.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
+            }
+        }
+        return values.join('&');
+    }
+
+    function fetchWithTimeout(url, options, timeoutMs) {
+
+        return new Promise(function (resolve, reject) {
+
+            var timeout = setTimeout(reject, timeoutMs);
+
+            options = options || {};
+            options.credentials = 'same-origin';
+
+            fetch(url, options).then(function (response) {
+                clearTimeout(timeout);
+                resolve(response);
+            }, function (error) {
+                clearTimeout(timeout);
+                reject(error);
+            });
+        });
+    }
+
+    function getFetchPromise(request) {
+
+        var headers = request.headers || {};
+
+        if (request.dataType === 'json') {
+            headers.accept = 'application/json';
+        }
+
+        var fetchRequest = {
+            headers: headers,
+            method: request.type,
+            credentials: 'same-origin'
+        };
+
+        var contentType = request.contentType;
+
+        if (request.data) {
+
+            if (typeof request.data === 'string') {
+                fetchRequest.body = request.data;
+            } else {
+                fetchRequest.body = paramsToString(request.data);
+
+                contentType = contentType || 'application/x-www-form-urlencoded; charset=UTF-8';
+            }
+        }
+
+        if (contentType) {
+
+            headers['Content-Type'] = contentType;
+        }
+
+        if (!request.timeout) {
+            return fetch(request.url, fetchRequest);
+        }
+
+        return fetchWithTimeout(request.url, fetchRequest, request.timeout);
+    }
+
     /**
      * Creates a new api client instance
      * @param {String} serverAddress
-     * @param {String} clientName s
-     * @param {String} applicationVersion 
+     * @param {String} appName
+     * @param {String} appVersion 
      */
-    function ApiClient(serverAddress, clientName, applicationVersion, deviceName, deviceId, devicePixelRatio) {
+    function ApiClient(serverAddress, appName, appVersion, deviceName, deviceId, devicePixelRatio) {
 
         if (!serverAddress) {
             throw new Error("Must supply a serverAddress");
         }
 
         console.log('ApiClient serverAddress: ' + serverAddress);
-        console.log('ApiClient clientName: ' + clientName);
-        console.log('ApiClient applicationVersion: ' + applicationVersion);
+        console.log('ApiClient appName: ' + appName);
+        console.log('ApiClient appVersion: ' + appVersion);
         console.log('ApiClient deviceName: ' + deviceName);
         console.log('ApiClient deviceId: ' + deviceId);
 
-        var self = this;
-        var webSocket;
-        var serverInfo = {};
-        var lastDetectedBitrate;
-        var lastDetectedBitrateTime;
+        this._serverInfo = {};
+        this._serverAddress = serverAddress;
+        this._deviceId = deviceId;
+        this._deviceName = deviceName;
+        this._appName = appName;
+        this._appVersion = appVersion;
+    }
 
-        /**
-         * Gets the server address.
-         */
-        self.serverAddress = function (val) {
+    ApiClient.prototype.appName = function () {
+        return this._appName;
+    };
 
-            if (val != null) {
+    ApiClient.prototype.setRequestHeaders = function (headers) {
 
-                if (val.toLowerCase().indexOf('http') !== 0) {
-                    throw new Error('Invalid url: ' + val);
-                }
+        var currentServerInfo = this.serverInfo();
+        var appName = this._appName;
 
-                var changed = val !== serverAddress;
+        if (appName) {
 
-                serverAddress = val;
+            var auth = 'MediaBrowser Client="' + appName + '", Device="' + this._deviceName + '", DeviceId="' + this._deviceId + '", Version="' + this._appVersion + '"';
 
-                lastDetectedBitrate = 0;
-                lastDetectedBitrateTime = 0;
+            var userId = currentServerInfo.UserId;
 
-                if (changed) {
-                    events.trigger(this, 'serveraddresschanged');
-                }
-
-                redetectBitrate(self);
+            if (userId) {
+                auth += ', UserId="' + userId + '"';
             }
 
-            return serverAddress;
-        };
-
-        self.serverInfo = function (info) {
-
-            serverInfo = info || serverInfo;
-
-            return serverInfo;
-        };
-
-        self.serverId = function () {
-            return self.serverInfo().Id;
-        };
-
-        self.serverName = function () {
-            return self.serverInfo().Name;
-        };
-
-        var currentUser;
-        /**
-         * Gets or sets the current user id.
-         */
-        self.getCurrentUser = function () {
-
-            if (currentUser) {
-                return Promise.resolve(currentUser);
-            }
-
-            var userId = self.getCurrentUserId();
-
-            if (!userId) {
-                return Promise.reject();
-            }
-
-            return self.getUser(userId).then(function (user) {
-                currentUser = user;
-                return user;
-            });
-        };
-
-        self.isLoggedIn = function () {
-
-            var info = self.serverInfo();
-            if (info) {
-                if (info.UserId && info.AccessToken) {
-                    return true;
-                }
-            }
-
-            return false;
-        };
-
-        /**
-         * Gets or sets the current user id.
-         */
-        self.getCurrentUserId = function () {
-
-            return serverInfo.UserId;
-        };
-
-        self.accessToken = function () {
-            return serverInfo.AccessToken;
-        };
-
-        self.deviceName = function () {
-            return deviceName;
-        };
-
-        self.deviceId = function () {
-            return deviceId;
-        };
-
-        self.appName = function () {
-            return clientName;
-        };
-
-        self.appVersion = function () {
-            return applicationVersion;
-        };
-
-        self.clearAuthenticationInfo = function () {
-            self.setAuthenticationInfo(null, null);
-        };
-
-        self.setAuthenticationInfo = function (accessKey, userId) {
-            currentUser = null;
-
-            serverInfo.AccessToken = accessKey;
-            serverInfo.UserId = userId;
-            redetectBitrate(self);
-        };
-
-        self.encodeName = function (name) {
-
-            name = name.split('/').join('-');
-            name = name.split('&').join('-');
-            name = name.split('?').join('-');
-
-            var val = paramsToString({ name: name });
-            return val.substring(val.indexOf('=') + 1).replace("'", '%27');
-        };
-
-        function onFetchFail(url, response) {
-
-            events.trigger(self, 'requestfail', [
-            {
-                url: url,
-                status: response.status,
-                errorCode: response.headers ? response.headers.get('X-Application-Error-Code') : null
-            }]);
+            headers["X-Emby-Authorization"] = auth;
         }
 
-        self.setRequestHeaders = function (headers) {
+        var accessToken = currentServerInfo.AccessToken;
 
-            var currentServerInfo = self.serverInfo();
+        if (accessToken) {
+            headers['X-MediaBrowser-Token'] = accessToken;
+        }
+    };
 
-            if (clientName) {
+    ApiClient.prototype.appVersion = function () {
+        return this._appVersion;
+    };
 
-                var auth = 'MediaBrowser Client="' + clientName + '", Device="' + deviceName + '", DeviceId="' + deviceId + '", Version="' + applicationVersion + '"';
+    ApiClient.prototype.deviceName = function () {
+        return this._deviceName;
+    };
 
-                var userId = currentServerInfo.UserId;
+    ApiClient.prototype.deviceId = function () {
+        return this._deviceId;
+    };
 
-                if (userId) {
-                    auth += ', UserId="' + userId + '"';
-                }
+    /**
+     * Gets the server address.
+     */
+    ApiClient.prototype.serverAddress = function (val) {
 
-                headers["X-Emby-Authorization"] = auth;
+        if (val != null) {
+
+            if (val.toLowerCase().indexOf('http') !== 0) {
+                throw new Error('Invalid url: ' + val);
             }
 
-            var accessToken = currentServerInfo.AccessToken;
+            var changed = val !== this._serverAddress;
 
-            if (accessToken) {
-                headers['X-MediaBrowser-Token'] = accessToken;
-            }
-        };
+            this._serverAddress = val;
 
-        /**
-         * Wraps around jQuery ajax methods to add additional info to the request.
-         */
-        self.ajax = function (request, includeAuthorization) {
+            this.lastDetectedBitrate = 0;
+            this.lastDetectedBitrateTime = 0;
 
-            if (!request) {
-                throw new Error("Request cannot be null");
+            if (changed) {
+                events.trigger(this, 'serveraddresschanged');
             }
 
-            return self.fetch(request, includeAuthorization);
-        };
+            redetectBitrate(this);
+        }
 
-        function getFetchPromise(request) {
+        return this._serverAddress;
+    };
 
-            var headers = request.headers || {};
+    /**
+     * Creates an api url based on a handler name and query string parameters
+     * @param {String} name
+     * @param {Object} params
+     */
+    ApiClient.prototype.getUrl = function (name, params) {
 
-            if (request.dataType === 'json') {
-                headers.accept = 'application/json';
+        if (!name) {
+            throw new Error("Url name cannot be empty");
+        }
+
+        var url = this._serverAddress;
+
+        if (!url) {
+            throw new Error("serverAddress is yet not set");
+        }
+        var lowered = url.toLowerCase();
+        if (lowered.indexOf('/emby') === -1 && lowered.indexOf('/mediabrowser') === -1) {
+            url += '/emby';
+        }
+
+        if (name.charAt(0) !== '/') {
+            url += '/';
+        }
+
+        url += name;
+
+        if (params) {
+            params = paramsToString(params);
+            if (params) {
+                url += "?" + params;
             }
+        }
 
-            var fetchRequest = {
-                headers: headers,
-                method: request.type,
-                credentials: 'same-origin'
-            };
+        return url;
+    };
 
-            var contentType = request.contentType;
+    ApiClient.prototype.fetchWithFailover = function (request, enableReconnection) {
 
-            if (request.data) {
+        console.log("Requesting " + request.url);
 
-                if (typeof request.data === 'string') {
-                    fetchRequest.body = request.data;
+        request.timeout = 30000;
+        var instance = this;
+
+        return getFetchPromise(request).then(function (response) {
+
+            if (response.status < 400) {
+
+                if (request.dataType === 'json' || request.headers.accept === 'application/json') {
+                    return response.json();
+                } else if (request.dataType === 'text' || (response.headers.get('Content-Type') || '').toLowerCase().indexOf('text/') === 0) {
+                    return response.text();
                 } else {
-                    fetchRequest.body = paramsToString(request.data);
-
-                    contentType = contentType || 'application/x-www-form-urlencoded; charset=UTF-8';
+                    return response;
                 }
+            } else {
+                onFetchFail(instance, request.url, response);
+                return Promise.reject(response);
             }
 
-            if (contentType) {
+        }, function (error) {
 
-                headers['Content-Type'] = contentType;
+            if (error) {
+                console.log("Request failed to " + request.url + ' ' + error.toString());
+            } else {
+                console.log("Request timed out to " + request.url);
             }
 
-            if (!request.timeout) {
-                return fetch(request.url, fetchRequest);
-            }
+            // http://api.jquery.com/jQuery.ajax/		     
+            if (!error && enableReconnection) {
+                console.log("Attempting reconnection");
 
-            return fetchWithTimeout(request.url, fetchRequest, request.timeout);
-        }
+                var previousServerAddress = instance.serverAddress();
 
-        function fetchWithTimeout(url, options, timeoutMs) {
+                return tryReconnect(instance).then(function () {
 
-            return new Promise(function (resolve, reject) {
+                    console.log("Reconnect succeesed");
+                    request.url = request.url.replace(previousServerAddress, instance.serverAddress());
 
-                var timeout = setTimeout(reject, timeoutMs);
+                    return instance.fetchWithFailover(request, false);
 
-                options = options || {};
-                options.credentials = 'same-origin';
+                }, function (innerError) {
 
-                fetch(url, options).then(function (response) {
-                    clearTimeout(timeout);
-                    resolve(response);
-                }, function (error) {
-                    clearTimeout(timeout);
-                    reject(error);
+                    console.log("Reconnect failed");
+                    onFetchFail(instance, request.url, {});
+                    throw innerError;
                 });
-            });
+
+            } else {
+
+                console.log("Reporting request failure");
+
+                onFetchFail(instance, request.url, {});
+                throw error;
+            }
+        });
+    };
+
+    /**
+     * Wraps around jQuery ajax methods to add additional info to the request.
+     */
+    ApiClient.prototype.fetch = function (request, includeAuthorization) {
+
+        if (!request) {
+            throw new Error("Request cannot be null");
         }
 
-        function paramsToString(params) {
+        request.headers = request.headers || {};
 
-            var values = [];
+        if (includeAuthorization !== false) {
 
-            for (var key in params) {
-
-                var value = params[key];
-
-                if (value !== null && value !== undefined && value !== '') {
-                    values.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
-                }
-            }
-            return values.join('&');
+            this.setRequestHeaders(request.headers);
         }
 
-        /**
-         * Wraps around jQuery ajax methods to add additional info to the request.
-         */
-        self.fetch = function (request, includeAuthorization) {
+        if (this.enableAutomaticNetworking === false || request.type !== "GET") {
+            console.log('Requesting url without automatic networking: ' + request.url);
 
-            if (!request) {
-                throw new Error("Request cannot be null");
-            }
-
-            request.headers = request.headers || {};
-
-            if (includeAuthorization !== false) {
-
-                self.setRequestHeaders(request.headers);
-            }
-
-            if (self.enableAutomaticNetworking === false || request.type !== "GET") {
-                console.log('Requesting url without automatic networking: ' + request.url);
-
-                return getFetchPromise(request).then(function (response) {
-
-                    if (response.status < 400) {
-
-                        if (request.dataType === 'json' || request.headers.accept === 'application/json') {
-                            return response.json();
-                        } else if (request.dataType === 'text' || (response.headers.get('Content-Type') || '').toLowerCase().indexOf('text/') === 0) {
-                            return response.text();
-                        } else {
-                            return response;
-                        }
-                    } else {
-                        onFetchFail(request.url, response);
-                        return Promise.reject(response);
-                    }
-
-                }, function (error) {
-                    onFetchFail(request.url, {});
-                    throw error;
-                });
-            }
-
-            return self.fetchWithFailover(request, true);
-        };
-
-        self.getJSON = function (url, includeAuthorization) {
-
-            return self.fetch({
-
-                url: url,
-                type: 'GET',
-                dataType: 'json',
-                headers: {
-                    accept: 'application/json'
-                }
-
-            }, includeAuthorization);
-        };
-
-        function switchConnectionMode(connectionMode) {
-
-            var currentServerInfo = self.serverInfo();
-            var newConnectionMode = connectionMode;
-
-            newConnectionMode--;
-            if (newConnectionMode < 0) {
-                newConnectionMode = MediaBrowser.ConnectionMode.Manual;
-            }
-
-            if (MediaBrowser.ServerInfo.getServerAddress(currentServerInfo, newConnectionMode)) {
-                return newConnectionMode;
-            }
-
-            newConnectionMode--;
-            if (newConnectionMode < 0) {
-                newConnectionMode = MediaBrowser.ConnectionMode.Manual;
-            }
-
-            if (MediaBrowser.ServerInfo.getServerAddress(currentServerInfo, newConnectionMode)) {
-                return newConnectionMode;
-            }
-
-            return connectionMode;
-        }
-
-        function tryReconnectInternal(resolve, reject, connectionMode, currentRetryCount) {
-
-            connectionMode = switchConnectionMode(connectionMode);
-            var url = MediaBrowser.ServerInfo.getServerAddress(self.serverInfo(), connectionMode);
-
-            console.log("Attempting reconnection to " + url);
-
-            var timeout = connectionMode === MediaBrowser.ConnectionMode.Local ? 7000 : 15000;
-
-            fetchWithTimeout(url + "/system/info/public", {
-
-                method: 'GET',
-                accept: 'application/json'
-
-                // Commenting this out since the fetch api doesn't have a timeout option yet
-                //timeout: timeout
-
-            }, timeout).then(function () {
-
-                console.log("Reconnect succeeded to " + url);
-
-                self.serverInfo().LastConnectionMode = connectionMode;
-                self.serverAddress(url);
-
-                resolve();
-
-            }, function () {
-
-                console.log("Reconnect attempt failed to " + url);
-
-                if (currentRetryCount < 5) {
-
-                    var newConnectionMode = switchConnectionMode(connectionMode);
-
-                    setTimeout(function () {
-                        tryReconnectInternal(resolve, reject, newConnectionMode, currentRetryCount + 1);
-                    }, 300);
-
-                } else {
-                    reject();
-                }
-            });
-        }
-
-        function tryReconnect() {
-
-            return new Promise(function (resolve, reject) {
-
-                setTimeout(function () {
-                    tryReconnectInternal(resolve, reject, self.serverInfo().LastConnectionMode, 0);
-                }, 300);
-            });
-        }
-
-        self.fetchWithFailover = function (request, enableReconnection) {
-
-            console.log("Requesting " + request.url);
-
-            request.timeout = 30000;
-
+            var instance = this;
             return getFetchPromise(request).then(function (response) {
 
                 if (response.status < 400) {
@@ -447,2229 +334,2348 @@
                         return response;
                     }
                 } else {
-                    onFetchFail(request.url, response);
+                    onFetchFail(instance, request.url, response);
                     return Promise.reject(response);
                 }
 
             }, function (error) {
-
-                if (error) {
-                    console.log("Request failed to " + request.url + ' ' + error.toString());
-                } else {
-                    console.log("Request timed out to " + request.url);
-                }
-
-                // http://api.jquery.com/jQuery.ajax/		     
-                if (!error && enableReconnection) {
-                    console.log("Attempting reconnection");
-
-                    var previousServerAddress = self.serverAddress();
-
-                    return tryReconnect().then(function () {
-
-                        console.log("Reconnect succeesed");
-                        request.url = request.url.replace(previousServerAddress, self.serverAddress());
-
-                        return self.fetchWithFailover(request, false);
-
-                    }, function (innerError) {
-
-                        console.log("Reconnect failed");
-                        onFetchFail(request.url, {});
-                        throw innerError;
-                    });
-
-                } else {
-
-                    console.log("Reporting request failure");
-
-                    onFetchFail(request.url, {});
-                    throw error;
-                }
+                onFetchFail(instance, request.url, {});
+                throw error;
             });
-        };
-
-        self.get = function (url) {
-
-            return self.ajax({
-                type: "GET",
-                url: url
-            });
-        };
-
-        /**
-         * Creates an api url based on a handler name and query string parameters
-         * @param {String} name
-         * @param {Object} params
-         */
-        self.getUrl = function (name, params) {
-
-            if (!name) {
-                throw new Error("Url name cannot be empty");
-            }
-
-            var url = serverAddress;
-
-            if (!url) {
-                throw new Error("serverAddress is yet not set");
-            }
-            var lowered = url.toLowerCase();
-            if (lowered.indexOf('/emby') === -1 && lowered.indexOf('/mediabrowser') === -1) {
-                url += '/emby';
-            }
-
-            if (name.charAt(0) !== '/') {
-                url += '/';
-            }
-
-            url += name;
-
-            if (params) {
-                params = paramsToString(params);
-                if (params) {
-                    url += "?" + params;
-                }
-            }
-
-            return url;
-        };
-
-        self.updateServerInfo = function (server, connectionMode) {
-
-            if (server == null) {
-                throw new Error('server cannot be null');
-            }
-
-            if (connectionMode == null) {
-                throw new Error('connectionMode cannot be null');
-            }
-
-            console.log('Begin updateServerInfo. connectionMode: ' + connectionMode);
-
-            self.serverInfo(server);
-
-            var serverUrl = MediaBrowser.ServerInfo.getServerAddress(server, connectionMode);
-
-            if (!serverUrl) {
-                throw new Error('serverUrl cannot be null. serverInfo: ' + JSON.stringify(server));
-            }
-            console.log('Setting server address to ' + serverUrl);
-            self.serverAddress(serverUrl);
-        };
-
-        self.isWebSocketSupported = function () {
-            try {
-                return WebSocket != null;
-            }
-            catch (err) {
-                return false;
-            }
-        };
-
-        self.ensureWebSocket = function () {
-            if (self.isWebSocketOpenOrConnecting() || !self.isWebSocketSupported()) {
-                return;
-            }
-
-            try {
-                self.openWebSocket();
-            } catch (err) {
-                console.log("Error opening web socket: " + err);
-            }
-        };
-
-        function replaceAll(originalString, strReplace, strWith) {
-            var reg = new RegExp(strReplace, 'ig');
-            return originalString.replace(reg, strWith);
         }
 
-        self.openWebSocket = function () {
+        return this.fetchWithFailover(request, true);
+    };
 
-            var accessToken = self.accessToken();
+    function switchConnectionMode(instance, connectionMode) {
 
-            if (!accessToken) {
-                throw new Error("Cannot open web socket without access token.");
-            }
+        var currentServerInfo = instance.serverInfo();
+        var newConnectionMode = connectionMode;
 
-            var url = self.getUrl("socket");
+        newConnectionMode--;
+        if (newConnectionMode < 0) {
+            newConnectionMode = MediaBrowser.ConnectionMode.Manual;
+        }
 
-            url = replaceAll(url, 'emby/socket', 'embywebsocket');
-            url = replaceAll(url, 'https:', 'wss:');
-            url = replaceAll(url, 'http:', 'ws:');
+        if (MediaBrowser.ServerInfo.getServerAddress(currentServerInfo, newConnectionMode)) {
+            return newConnectionMode;
+        }
 
-            url += "?api_key=" + accessToken;
-            url += "&deviceId=" + deviceId;
+        newConnectionMode--;
+        if (newConnectionMode < 0) {
+            newConnectionMode = MediaBrowser.ConnectionMode.Manual;
+        }
 
-            webSocket = new WebSocket(url);
+        if (MediaBrowser.ServerInfo.getServerAddress(currentServerInfo, newConnectionMode)) {
+            return newConnectionMode;
+        }
 
-            webSocket.onmessage = function (msg) {
+        return connectionMode;
+    }
 
-                msg = JSON.parse(msg.data);
-                onWebSocketMessage(msg);
-            };
+    function tryReconnectInternal(instance, resolve, reject, connectionMode, currentRetryCount) {
 
-            webSocket.onopen = function () {
+        connectionMode = switchConnectionMode(instance, connectionMode);
+        var url = MediaBrowser.ServerInfo.getServerAddress(instance.serverInfo(), connectionMode);
 
-                console.log('web socket connection opened');
+        console.log("Attempting reconnection to " + url);
+
+        var timeout = connectionMode === MediaBrowser.ConnectionMode.Local ? 7000 : 15000;
+
+        fetchWithTimeout(url + "/system/info/public", {
+
+            method: 'GET',
+            accept: 'application/json'
+
+            // Commenting this out since the fetch api doesn't have a timeout option yet
+            //timeout: timeout
+
+        }, timeout).then(function () {
+
+            console.log("Reconnect succeeded to " + url);
+
+            instance.serverInfo().LastConnectionMode = connectionMode;
+            instance.serverAddress(url);
+
+            resolve();
+
+        }, function () {
+
+            console.log("Reconnect attempt failed to " + url);
+
+            if (currentRetryCount < 5) {
+
+                var newConnectionMode = switchConnectionMode(instance, connectionMode);
+
                 setTimeout(function () {
-                    events.trigger(self, 'websocketopen');
-                }, 0);
-            };
-            webSocket.onerror = function () {
-                events.trigger(self, 'websocketerror');
-            };
-            webSocket.onclose = function () {
-                setTimeout(function () {
-                    events.trigger(self, 'websocketclose');
-                }, 0);
-            };
-        };
-
-        self.closeWebSocket = function () {
-            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                webSocket.close();
-            }
-        };
-
-        function onWebSocketMessage(msg) {
-
-            if (msg.MessageType === "UserDeleted") {
-                currentUser = null;
-            }
-            else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated") {
-
-                var user = msg.Data;
-                if (user.Id === self.getCurrentUserId()) {
-
-                    currentUser = null;
-                }
-            }
-
-            events.trigger(self, 'websocketmessage', [msg]);
-        }
-
-        self.sendWebSocketMessage = function (name, data) {
-
-            console.log('Sending web socket message: ' + name);
-
-            var msg = { MessageType: name };
-
-            if (data) {
-                msg.Data = data;
-            }
-
-            msg = JSON.stringify(msg);
-
-            webSocket.send(msg);
-        };
-
-        self.isWebSocketOpen = function () {
-            return webSocket && webSocket.readyState === WebSocket.OPEN;
-        };
-
-        self.isWebSocketOpenOrConnecting = function () {
-            return webSocket && (webSocket.readyState === WebSocket.OPEN || webSocket.readyState === WebSocket.CONNECTING);
-        };
-
-        self.getProductNews = function (options) {
-
-            options = options || {};
-
-            var url = self.getUrl("News/Product", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getDownloadSpeed = function (byteSize) {
-
-            var url = self.getUrl('Playback/BitrateTest', {
-
-                Size: byteSize
-            });
-
-            var now = new Date().getTime();
-
-            return self.ajax({
-
-                type: "GET",
-                url: url,
-                timeout: 5000
-
-            }).then(function () {
-
-                var responseTimeSeconds = (new Date().getTime() - now) / 1000;
-                var bytesPerSecond = byteSize / responseTimeSeconds;
-                var bitrate = Math.round(bytesPerSecond * 8);
-
-                return bitrate;
-            });
-        };
-
-        function normalizeReturnBitrate(bitrate) {
-
-            if (!bitrate) {
-
-                if (lastDetectedBitrate) {
-                    return lastDetectedBitrate;
-                }
-
-                return Promise.reject();
-            }
-
-            var result = Math.round(bitrate * 0.8);
-
-            lastDetectedBitrate = result;
-            lastDetectedBitrateTime = new Date().getTime();
-
-            return result;
-        }
-
-        function detectBitrateInternal(tests, index, currentBitrate) {
-
-            if (index >= tests.length) {
-
-                return normalizeReturnBitrate(currentBitrate);
-            }
-
-            var test = tests[index];
-
-            return self.getDownloadSpeed(test.bytes).then(function (bitrate) {
-
-                if (bitrate < test.threshold) {
-
-                    return normalizeReturnBitrate(bitrate);
-                } else {
-                    return detectBitrateInternal(tests, index + 1, bitrate);
-                }
-
-            }, function () {
-                return normalizeReturnBitrate(currentBitrate);
-            });
-        }
-
-        self.detectBitrate = function (force) {
-
-            if (!force && lastDetectedBitrate && (new Date().getTime() - (lastDetectedBitrateTime || 0)) <= 3600000) {
-                return Promise.resolve(lastDetectedBitrate);
-            }
-
-            return detectBitrateInternal([
-            {
-                bytes: 500000,
-                threshold: 500000
-            },
-            {
-                bytes: 1000000,
-                threshold: 20000000
-            },
-            {
-                bytes: 3000000,
-                threshold: 50000000
-            }], 0);
-        };
-
-        /**
-         * Gets an item from the server
-         * Omit itemId to get the root folder.
-         */
-        self.getItem = function (userId, itemId) {
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = userId ?
-                self.getUrl("Users/" + userId + "/Items/" + itemId) :
-                self.getUrl("Items/" + itemId);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the root folder from the server
-         */
-        self.getRootFolder = function (userId) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Items/Root");
-
-            return self.getJSON(url);
-        };
-
-        self.getNotificationSummary = function (userId) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            var url = self.getUrl("Notifications/" + userId + "/Summary");
-
-            return self.getJSON(url);
-        };
-
-        self.getNotifications = function (userId, options) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            var url = self.getUrl("Notifications/" + userId, options || {});
-
-            return self.getJSON(url);
-        };
-
-        self.markNotificationsRead = function (userId, idList, isRead) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            if (!idList) {
-                throw new Error("null idList");
-            }
-
-            var suffix = isRead ? "Read" : "Unread";
-
-            var params = {
-                UserId: userId,
-                Ids: idList.join(',')
-            };
-
-            var url = self.getUrl("Notifications/" + userId + "/" + suffix, params);
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        self.logout = function () {
-
-            stopBitrateDetection(self);
-            self.closeWebSocket();
-
-            var done = function () {
-                self.setAuthenticationInfo(null, null);
-            };
-
-            if (self.accessToken()) {
-                var url = self.getUrl("Sessions/Logout");
-
-                return self.ajax({
-                    type: "POST",
-                    url: url
-
-                }).then(done, done);
-            }
-
-            return new Promise(function (resolve, reject) {
-
-                done();
-                resolve();
-            });
-        };
-
-        function getRemoteImagePrefix(options) {
-
-            var urlPrefix;
-
-            if (options.artist) {
-                urlPrefix = "Artists/" + self.encodeName(options.artist);
-                delete options.artist;
-            } else if (options.person) {
-                urlPrefix = "Persons/" + self.encodeName(options.person);
-                delete options.person;
-            } else if (options.genre) {
-                urlPrefix = "Genres/" + self.encodeName(options.genre);
-                delete options.genre;
-            } else if (options.musicGenre) {
-                urlPrefix = "MusicGenres/" + self.encodeName(options.musicGenre);
-                delete options.musicGenre;
-            } else if (options.gameGenre) {
-                urlPrefix = "GameGenres/" + self.encodeName(options.gameGenre);
-                delete options.gameGenre;
-            } else if (options.studio) {
-                urlPrefix = "Studios/" + self.encodeName(options.studio);
-                delete options.studio;
-            } else {
-                urlPrefix = "Items/" + options.itemId;
-                delete options.itemId;
-            }
-
-            return urlPrefix;
-        }
-
-        self.getRemoteImageProviders = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            var urlPrefix = getRemoteImagePrefix(options);
-
-            var url = self.getUrl(urlPrefix + "/RemoteImages/Providers", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getAvailableRemoteImages = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            var urlPrefix = getRemoteImagePrefix(options);
-
-            var url = self.getUrl(urlPrefix + "/RemoteImages", options);
-
-            return self.getJSON(url);
-        };
-
-        self.downloadRemoteImage = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            var urlPrefix = getRemoteImagePrefix(options);
-
-            var url = self.getUrl(urlPrefix + "/RemoteImages/Download", options);
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        self.getLiveTvInfo = function (options) {
-
-            var url = self.getUrl("LiveTv/Info", options || {});
-
-            return self.getJSON(url);
-        };
-
-        self.getLiveTvGuideInfo = function (options) {
-
-            var url = self.getUrl("LiveTv/GuideInfo", options || {});
-
-            return self.getJSON(url);
-        };
-
-        self.getLiveTvChannel = function (id, userId) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var options = {
-
-            };
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("LiveTv/Channels/" + id, options);
-
-            return self.getJSON(url);
-        };
-
-        self.getLiveTvChannels = function (options) {
-
-            var url = self.getUrl("LiveTv/Channels", options || {});
-
-            return self.getJSON(url);
-        };
-
-        self.getLiveTvPrograms = function (options) {
-
-            options = options || {};
-
-            if (options.channelIds && options.channelIds.length > 1800) {
-
-                return self.ajax({
-                    type: "POST",
-                    url: self.getUrl("LiveTv/Programs"),
-                    data: JSON.stringify(options),
-                    contentType: "application/json",
-                    dataType: "json"
-                });
+                    tryReconnectInternal(instance, resolve, reject, newConnectionMode, currentRetryCount + 1);
+                }, 300);
 
             } else {
-
-                return self.ajax({
-                    type: "GET",
-                    url: self.getUrl("LiveTv/Programs", options),
-                    dataType: "json"
-                });
+                reject();
             }
-        };
+        });
+    }
 
-        self.getLiveTvRecommendedPrograms = function (options) {
+    function tryReconnect(instance) {
 
-            options = options || {};
+        return new Promise(function (resolve, reject) {
 
-            return self.ajax({
-                type: "GET",
-                url: self.getUrl("LiveTv/Programs/Recommended", options),
-                dataType: "json"
-            });
-        };
+            setTimeout(function () {
+                tryReconnectInternal(instance, resolve, reject, instance.serverInfo().LastConnectionMode, 0);
+            }, 300);
+        });
+    }
 
-        self.getLiveTvRecordings = function (options) {
+    ApiClient.prototype.setAuthenticationInfo = function (accessKey, userId) {
+        this._currentUser = null;
 
-            var url = self.getUrl("LiveTv/Recordings", options || {});
+        this._serverInfo.AccessToken = accessKey;
+        this._serverInfo.UserId = userId;
+        redetectBitrate(this);
+    };
 
-            return self.getJSON(url);
-        };
+    ApiClient.prototype.serverInfo = function (info) {
 
-        self.getLiveTvRecordingSeries = function (options) {
+        if (info) {
+            this._serverInfo = info;
+        }
 
-            var url = self.getUrl("LiveTv/Recordings/Series", options || {});
+        return this._serverInfo;
+    };
 
-            return self.getJSON(url);
-        };
+    /**
+     * Gets or sets the current user id.
+     */
+    ApiClient.prototype.getCurrentUserId = function () {
 
-        self.getLiveTvRecordingGroups = function (options) {
+        return this._serverInfo.UserId;
+    };
 
-            var url = self.getUrl("LiveTv/Recordings/Groups", options || {});
+    ApiClient.prototype.accessToken = function () {
+        return this._serverInfo.AccessToken;
+    };
 
-            return self.getJSON(url);
-        };
+    ApiClient.prototype.serverId = function () {
+        return this.serverInfo().Id;
+    };
 
-        self.getLiveTvRecordingGroup = function (id) {
+    ApiClient.prototype.serverName = function () {
+        return this.serverInfo().Name;
+    };
 
-            if (!id) {
-                throw new Error("null id");
+    /**
+     * Wraps around jQuery ajax methods to add additional info to the request.
+     */
+    ApiClient.prototype.ajax = function (request, includeAuthorization) {
+
+        if (!request) {
+            throw new Error("Request cannot be null");
+        }
+
+        return this.fetch(request, includeAuthorization);
+    };
+
+    /**
+     * Gets or sets the current user id.
+     */
+    ApiClient.prototype.getCurrentUser = function () {
+
+        if (this._currentUser) {
+            return Promise.resolve(this._currentUser);
+        }
+
+        var userId = this.getCurrentUserId();
+
+        if (!userId) {
+            return Promise.reject();
+        }
+
+        var instance = this;
+        return this.getUser(userId).then(function (user) {
+            instance._currentUser = user;
+            return user;
+        });
+    };
+
+    ApiClient.prototype.isLoggedIn = function () {
+
+        var info = this.serverInfo();
+        if (info) {
+            if (info.UserId && info.AccessToken) {
+                return true;
             }
+        }
 
-            var url = self.getUrl("LiveTv/Recordings/Groups/" + id);
+        return false;
+    };
 
-            return self.getJSON(url);
-        };
+    ApiClient.prototype.logout = function () {
 
-        self.getLiveTvRecording = function (id, userId) {
+        stopBitrateDetection(this);
+        this.closeWebSocket();
 
-            if (!id) {
-                throw new Error("null id");
-            }
+        var done = function () {
+            this.setAuthenticationInfo(null, null);
+        }.bind(this);
 
-            var options = {
+        if (this.accessToken()) {
+            var url = this.getUrl("Sessions/Logout");
 
-            };
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("LiveTv/Recordings/" + id, options);
-
-            return self.getJSON(url);
-        };
-
-        self.getLiveTvProgram = function (id, userId) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var options = {
-
-            };
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("LiveTv/Programs/" + id, options);
-
-            return self.getJSON(url);
-        };
-
-        self.deleteLiveTvRecording = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("LiveTv/Recordings/" + id);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        self.cancelLiveTvTimer = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("LiveTv/Timers/" + id);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        self.getLiveTvTimers = function (options) {
-
-            var url = self.getUrl("LiveTv/Timers", options || {});
-
-            return self.getJSON(url);
-        };
-
-        self.getLiveTvTimer = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("LiveTv/Timers/" + id);
-
-            return self.getJSON(url);
-        };
-
-        self.getNewLiveTvTimerDefaults = function (options) {
-
-            options = options || {};
-
-            var url = self.getUrl("LiveTv/Timers/Defaults", options);
-
-            return self.getJSON(url);
-        };
-
-        self.createLiveTvTimer = function (item) {
-
-            if (!item) {
-                throw new Error("null item");
-            }
-
-            var url = self.getUrl("LiveTv/Timers");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(item),
-                contentType: "application/json"
-            });
-        };
-
-        self.updateLiveTvTimer = function (item) {
-
-            if (!item) {
-                throw new Error("null item");
-            }
-
-            var url = self.getUrl("LiveTv/Timers/" + item.Id);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(item),
-                contentType: "application/json"
-            });
-        };
-
-        self.resetLiveTvTuner = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("LiveTv/Tuners/" + id + "/Reset");
-
-            return self.ajax({
+            return this.ajax({
                 type: "POST",
                 url: url
+
+            }).then(done, done);
+        }
+
+        done();
+        return Promise.resolve();
+    };
+
+    /**
+     * Authenticates a user
+     * @param {String} name
+     * @param {String} password
+     */
+    ApiClient.prototype.authenticateUserByName = function (name, password) {
+
+        if (!name) {
+            return Promise.reject();
+            return;
+        }
+
+        var url = this.getUrl("Users/authenticatebyname");
+        var instance = this;
+
+        return new Promise(function (resolve, reject) {
+
+            require(["cryptojs-sha1", "cryptojs-md5"], function () {
+                var postData = {
+                    Password: CryptoJS.SHA1(password || "").toString(),
+                    PasswordMd5: CryptoJS.MD5(password || "").toString(),
+                    Username: name
+                };
+
+                instance.ajax({
+                    type: "POST",
+                    url: url,
+                    data: JSON.stringify(postData),
+                    dataType: "json",
+                    contentType: "application/json"
+
+                }).then(function (result) {
+
+                    if (instance.onAuthenticated) {
+                        instance.onAuthenticated(instance, result);
+                    }
+
+                    redetectBitrate(instance);
+
+                    resolve(result);
+
+                }, reject);
             });
+        });
+    };
+
+    ApiClient.prototype.ensureWebSocket = function () {
+        if (this.isWebSocketOpenOrConnecting() || !this.isWebSocketSupported()) {
+            return;
+        }
+
+        try {
+            this.openWebSocket();
+        } catch (err) {
+            console.log("Error opening web socket: " + err);
+        }
+    };
+
+    ApiClient.prototype.openWebSocket = function () {
+
+        var accessToken = this.accessToken();
+
+        if (!accessToken) {
+            throw new Error("Cannot open web socket without access token.");
+        }
+
+        var url = this.getUrl("socket");
+
+        url = replaceAll(url, 'emby/socket', 'embywebsocket');
+        url = replaceAll(url, 'https:', 'wss:');
+        url = replaceAll(url, 'http:', 'ws:');
+
+        url += "?api_key=" + accessToken;
+        url += "&deviceId=" + this.deviceId();
+
+        var webSocket = new WebSocket(url);
+
+        var instance = this;
+
+        webSocket.onmessage = function (msg) {
+
+            msg = JSON.parse(msg.data);
+            onWebSocketMessage(instance, msg);
         };
 
-        self.getLiveTvSeriesTimers = function (options) {
+        webSocket.onopen = function () {
 
-            var url = self.getUrl("LiveTv/SeriesTimers", options || {});
-
-            return self.getJSON(url);
+            console.log('web socket connection opened');
+            setTimeout(function () {
+                events.trigger(instance, 'websocketopen');
+            }, 0);
+        };
+        webSocket.onerror = function () {
+            events.trigger(instance, 'websocketerror');
+        };
+        webSocket.onclose = function () {
+            setTimeout(function () {
+                events.trigger(instance, 'websocketclose');
+            }, 0);
         };
 
-        self.getFileOrganizationResults = function (options) {
+        this._webSocket = webSocket;
+    };
 
-            var url = self.getUrl("Library/FileOrganization", options || {});
+    ApiClient.prototype.closeWebSocket = function () {
+        if (this._webSocket && this._webSocket.readyState === WebSocket.OPEN) {
+            this._webSocket.close();
+        }
+    };
 
-            return self.getJSON(url);
+    function onWebSocketMessage(instance, msg) {
+
+        if (msg.MessageType === "UserDeleted") {
+            instance._currentUser = null;
+        }
+        else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated") {
+
+            var user = msg.Data;
+            if (user.Id === instance.getCurrentUserId()) {
+
+                instance._currentUser = null;
+            }
+        }
+
+        events.trigger(instance, 'websocketmessage', [msg]);
+    }
+
+    ApiClient.prototype.sendWebSocketMessage = function (name, data) {
+
+        console.log('Sending web socket message: ' + name);
+
+        var msg = { MessageType: name };
+
+        if (data) {
+            msg.Data = data;
+        }
+
+        msg = JSON.stringify(msg);
+
+        this._webSocket.send(msg);
+    };
+
+    ApiClient.prototype.isWebSocketOpen = function () {
+        return this._webSocket && this._webSocket.readyState === WebSocket.OPEN;
+    };
+
+    ApiClient.prototype.isWebSocketOpenOrConnecting = function () {
+        return this._webSocket && (this._webSocket.readyState === WebSocket.OPEN || this._webSocket.readyState === WebSocket.CONNECTING);
+    };
+
+    ApiClient.prototype.get = function (url) {
+
+        return this.ajax({
+            type: "GET",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.getJSON = function (url, includeAuthorization) {
+
+        return this.fetch({
+
+            url: url,
+            type: 'GET',
+            dataType: 'json',
+            headers: {
+                accept: 'application/json'
+            }
+
+        }, includeAuthorization);
+    };
+
+    ApiClient.prototype.updateServerInfo = function (server, connectionMode) {
+
+        if (server == null) {
+            throw new Error('server cannot be null');
+        }
+
+        if (connectionMode == null) {
+            throw new Error('connectionMode cannot be null');
+        }
+
+        console.log('Begin updateServerInfo. connectionMode: ' + connectionMode);
+
+        this.serverInfo(server);
+
+        var serverUrl = MediaBrowser.ServerInfo.getServerAddress(server, connectionMode);
+
+        if (!serverUrl) {
+            throw new Error('serverUrl cannot be null. serverInfo: ' + JSON.stringify(server));
+        }
+        console.log('Setting server address to ' + serverUrl);
+        this.serverAddress(serverUrl);
+    };
+
+    ApiClient.prototype.isWebSocketSupported = function () {
+        try {
+            return WebSocket != null;
+        }
+        catch (err) {
+            return false;
+        }
+    };
+
+    ApiClient.prototype.clearAuthenticationInfo = function () {
+        this.setAuthenticationInfo(null, null);
+    };
+
+    ApiClient.prototype.encodeName = function (name) {
+
+        name = name.split('/').join('-');
+        name = name.split('&').join('-');
+        name = name.split('?').join('-');
+
+        var val = paramsToString({ name: name });
+        return val.substring(val.indexOf('=') + 1).replace("'", '%27');
+    };
+
+    ApiClient.prototype.getProductNews = function (options) {
+
+        options = options || {};
+
+        var url = this.getUrl("News/Product", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getDownloadSpeed = function (byteSize) {
+
+        var url = this.getUrl('Playback/BitrateTest', {
+
+            Size: byteSize
+        });
+
+        var now = new Date().getTime();
+
+        return this.ajax({
+
+            type: "GET",
+            url: url,
+            timeout: 5000
+
+        }).then(function () {
+
+            var responseTimeSeconds = (new Date().getTime() - now) / 1000;
+            var bytesPerSecond = byteSize / responseTimeSeconds;
+            var bitrate = Math.round(bytesPerSecond * 8);
+
+            return bitrate;
+        });
+    };
+
+    function normalizeReturnBitrate(instance, bitrate) {
+
+        if (!bitrate) {
+
+            if (instance.lastDetectedBitrate) {
+                return instance.lastDetectedBitrate;
+            }
+
+            return Promise.reject();
+        }
+
+        var result = Math.round(bitrate * 0.8);
+
+        instance.lastDetectedBitrate = result;
+        instance.lastDetectedBitrateTime = new Date().getTime();
+
+        return result;
+    }
+
+    function detectBitrateInternal(instance, tests, index, currentBitrate) {
+
+        if (index >= tests.length) {
+
+            return normalizeReturnBitrate(instance, currentBitrate);
+        }
+
+        var test = tests[index];
+
+        return instance.getDownloadSpeed(test.bytes).then(function (bitrate) {
+
+            if (bitrate < test.threshold) {
+
+                return normalizeReturnBitrate(instance, bitrate);
+            } else {
+                return detectBitrateInternal(instance, tests, index + 1, bitrate);
+            }
+
+        }, function () {
+            return normalizeReturnBitrateinstance, (currentBitrate);
+        });
+    }
+
+    ApiClient.prototype.detectBitrate = function (force) {
+
+        if (!force && this.lastDetectedBitrate && (new Date().getTime() - (this.lastDetectedBitrateTime || 0)) <= 3600000) {
+            return Promise.resolve(this.lastDetectedBitrate);
+        }
+
+        return detectBitrateInternal(this, [
+        {
+            bytes: 500000,
+            threshold: 500000
+        },
+        {
+            bytes: 1000000,
+            threshold: 20000000
+        },
+        {
+            bytes: 3000000,
+            threshold: 50000000
+        }], 0);
+    };
+
+    /**
+     * Gets an item from the server
+     * Omit itemId to get the root folder.
+     */
+    ApiClient.prototype.getItem = function (userId, itemId) {
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = userId ?
+            this.getUrl("Users/" + userId + "/Items/" + itemId) :
+            this.getUrl("Items/" + itemId);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the root folder from the server
+     */
+    ApiClient.prototype.getRootFolder = function (userId) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Items/Root");
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getNotificationSummary = function (userId) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        var url = this.getUrl("Notifications/" + userId + "/Summary");
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getNotifications = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        var url = this.getUrl("Notifications/" + userId, options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.markNotificationsRead = function (userId, idList, isRead) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!idList) {
+            throw new Error("null idList");
+        }
+
+        var suffix = isRead ? "Read" : "Unread";
+
+        var params = {
+            UserId: userId,
+            Ids: idList.join(',')
         };
 
-        self.deleteOriginalFileFromOrganizationResult = function (id) {
+        var url = this.getUrl("Notifications/" + userId + "/" + suffix, params);
 
-            var url = self.getUrl("Library/FileOrganizations/" + id + "/File");
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
 
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
+    function getRemoteImagePrefix(instance, options) {
+
+        var urlPrefix;
+
+        if (options.artist) {
+            urlPrefix = "Artists/" + instance.encodeName(options.artist);
+            delete options.artist;
+        } else if (options.person) {
+            urlPrefix = "Persons/" + instance.encodeName(options.person);
+            delete options.person;
+        } else if (options.genre) {
+            urlPrefix = "Genres/" + instance.encodeName(options.genre);
+            delete options.genre;
+        } else if (options.musicGenre) {
+            urlPrefix = "MusicGenres/" + instance.encodeName(options.musicGenre);
+            delete options.musicGenre;
+        } else if (options.gameGenre) {
+            urlPrefix = "GameGenres/" + instance.encodeName(options.gameGenre);
+            delete options.gameGenre;
+        } else if (options.studio) {
+            urlPrefix = "Studios/" + instance.encodeName(options.studio);
+            delete options.studio;
+        } else {
+            urlPrefix = "Items/" + options.itemId;
+            delete options.itemId;
+        }
+
+        return urlPrefix;
+    }
+
+    ApiClient.prototype.getRemoteImageProviders = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        var urlPrefix = getRemoteImagePrefix(this, options);
+
+        var url = this.getUrl(urlPrefix + "/RemoteImages/Providers", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getAvailableRemoteImages = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        var urlPrefix = getRemoteImagePrefix(this, options);
+
+        var url = this.getUrl(urlPrefix + "/RemoteImages", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.downloadRemoteImage = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        var urlPrefix = getRemoteImagePrefix(this, options);
+
+        var url = this.getUrl(urlPrefix + "/RemoteImages/Download", options);
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.getLiveTvInfo = function (options) {
+
+        var url = this.getUrl("LiveTv/Info", options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvGuideInfo = function (options) {
+
+        var url = this.getUrl("LiveTv/GuideInfo", options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvChannel = function (id, userId) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var options = {
+
         };
 
-        self.clearOrganizationLog = function () {
+        if (userId) {
+            options.userId = userId;
+        }
 
-            var url = self.getUrl("Library/FileOrganizations");
+        var url = this.getUrl("LiveTv/Channels/" + id, options);
 
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
+        return this.getJSON(url);
+    };
 
-        self.performOrganization = function (id) {
+    ApiClient.prototype.getLiveTvChannels = function (options) {
 
-            var url = self.getUrl("Library/FileOrganizations/" + id + "/Organize");
+        var url = this.getUrl("LiveTv/Channels", options || {});
 
-            return self.ajax({
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvPrograms = function (options) {
+
+        options = options || {};
+
+        if (options.channelIds && options.channelIds.length > 1800) {
+
+            return this.ajax({
                 type: "POST",
-                url: url
-            });
-        };
-
-        self.performEpisodeOrganization = function (id, options) {
-
-            var url = self.getUrl("Library/FileOrganizations/" + id + "/Episode/Organize");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
+                url: this.getUrl("LiveTv/Programs"),
                 data: JSON.stringify(options),
-                contentType: 'application/json'
-            });
-        };
-
-        self.getLiveTvSeriesTimer = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("LiveTv/SeriesTimers/" + id);
-
-            return self.getJSON(url);
-        };
-
-        self.cancelLiveTvSeriesTimer = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("LiveTv/SeriesTimers/" + id);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        self.createLiveTvSeriesTimer = function (item) {
-
-            if (!item) {
-                throw new Error("null item");
-            }
-
-            var url = self.getUrl("LiveTv/SeriesTimers");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(item),
-                contentType: "application/json"
-            });
-        };
-
-        self.updateLiveTvSeriesTimer = function (item) {
-
-            if (!item) {
-                throw new Error("null item");
-            }
-
-            var url = self.getUrl("LiveTv/SeriesTimers/" + item.Id);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(item),
-                contentType: "application/json"
-            });
-        };
-
-        self.getRegistrationInfo = function (feature) {
-
-            var url = self.getUrl("Registrations/" + feature);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the current server status
-         */
-        self.getSystemInfo = function () {
-
-            var url = self.getUrl("System/Info");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the current server status
-         */
-        self.getPublicSystemInfo = function () {
-
-            var url = self.getUrl("System/Info/Public");
-
-            return self.getJSON(url, false);
-        };
-
-        self.getInstantMixFromItem = function (itemId, options) {
-
-            var url = self.getUrl("Items/" + itemId + "/InstantMix", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getEpisodes = function (itemId, options) {
-
-            var url = self.getUrl("Shows/" + itemId + "/Episodes", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getDisplayPreferences = function (id, userId, app) {
-
-            var url = self.getUrl("DisplayPreferences/" + id, {
-                userId: userId,
-                client: app
-            });
-
-            return self.getJSON(url);
-        };
-
-        self.updateDisplayPreferences = function (id, obj, userId, app) {
-
-            var url = self.getUrl("DisplayPreferences/" + id, {
-                userId: userId,
-                client: app
-            });
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(obj),
-                contentType: "application/json"
-            });
-        };
-
-        self.getSeasons = function (itemId, options) {
-
-            var url = self.getUrl("Shows/" + itemId + "/Seasons", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getSimilarItems = function (itemId, options) {
-
-            var url = self.getUrl("Items/" + itemId + "/Similar", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets all cultures known to the server
-         */
-        self.getCultures = function () {
-
-            var url = self.getUrl("Localization/cultures");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets all countries known to the server
-         */
-        self.getCountries = function () {
-
-            var url = self.getUrl("Localization/countries");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets plugin security info
-         */
-        self.getPluginSecurityInfo = function () {
-
-            var url = self.getUrl("Plugins/SecurityInfo");
-
-            return self.getJSON(url);
-        };
-
-        self.getPlaybackInfo = function (itemId, options, deviceProfile) {
-
-            var postData = {
-                DeviceProfile: deviceProfile
-            };
-
-            return self.ajax({
-                url: self.getUrl('Items/' + itemId + '/PlaybackInfo', options),
-                type: 'POST',
-                data: JSON.stringify(postData),
                 contentType: "application/json",
                 dataType: "json"
             });
-        };
 
-        self.getIntros = function (itemId) {
+        } else {
 
-            return self.getJSON(self.getUrl('Users/' + self.getCurrentUserId() + '/Items/' + itemId + '/Intros'));
-        };
-
-        /**
-         * Gets the directory contents of a path on the server
-         */
-        self.getDirectoryContents = function (path, options) {
-
-            if (!path) {
-                throw new Error("null path");
-            }
-            if (typeof (path) !== 'string') {
-                throw new Error('invalid path');
-            }
-
-            options = options || {};
-
-            options.path = path;
-
-            var url = self.getUrl("Environment/DirectoryContents", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets shares from a network device
-         */
-        self.getNetworkShares = function (path) {
-
-            if (!path) {
-                throw new Error("null path");
-            }
-
-            var options = {};
-            options.path = path;
-
-            var url = self.getUrl("Environment/NetworkShares", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the parent of a given path
-         */
-        self.getParentPath = function (path) {
-
-            if (!path) {
-                throw new Error("null path");
-            }
-
-            var options = {};
-            options.path = path;
-
-            var url = self.getUrl("Environment/ParentPath", options);
-
-            return self.ajax({
+            return this.ajax({
                 type: "GET",
-                url: url,
-                dataType: 'text'
-            });
-        };
-
-        /**
-         * Gets a list of physical drives from the server
-         */
-        self.getDrives = function () {
-
-            var url = self.getUrl("Environment/Drives");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets a list of network devices from the server
-         */
-        self.getNetworkDevices = function () {
-
-            var url = self.getUrl("Environment/NetworkDevices");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Cancels a package installation
-         */
-        self.cancelPackageInstallation = function (installationId) {
-
-            if (!installationId) {
-                throw new Error("null installationId");
-            }
-
-            var url = self.getUrl("Packages/Installing/" + installationId);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        /**
-         * Refreshes metadata for an item
-         */
-        self.refreshItem = function (itemId, options) {
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Items/" + itemId + "/Refresh", options || {});
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        /**
-         * Installs or updates a new plugin
-         */
-        self.installPlugin = function (name, guid, updateClass, version) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            if (!updateClass) {
-                throw new Error("null updateClass");
-            }
-
-            var options = {
-                updateClass: updateClass,
-                AssemblyGuid: guid
-            };
-
-            if (version) {
-                options.version = version;
-            }
-
-            var url = self.getUrl("Packages/Installed/" + name, options);
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        /**
-         * Instructs the server to perform a restart.
-         */
-        self.restartServer = function () {
-
-            var url = self.getUrl("System/Restart");
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        /**
-         * Instructs the server to perform a shutdown.
-         */
-        self.shutdownServer = function () {
-
-            var url = self.getUrl("System/Shutdown");
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        /**
-         * Gets information about an installable package
-         */
-        self.getPackageInfo = function (name, guid) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var options = {
-                AssemblyGuid: guid
-            };
-
-            var url = self.getUrl("Packages/" + name, options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the latest available application update (if any)
-         */
-        self.getAvailableApplicationUpdate = function () {
-
-            var url = self.getUrl("Packages/Updates", { PackageType: "System" });
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the latest available plugin updates (if any)
-         */
-        self.getAvailablePluginUpdates = function () {
-
-            var url = self.getUrl("Packages/Updates", { PackageType: "UserInstalled" });
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the virtual folder list
-         */
-        self.getVirtualFolders = function () {
-
-            var url = "Library/VirtualFolders";
-
-            url = self.getUrl(url);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets all the paths of the locations in the physical root.
-         */
-        self.getPhysicalPaths = function () {
-
-            var url = self.getUrl("Library/PhysicalPaths");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the current server configuration
-         */
-        self.getServerConfiguration = function () {
-
-            var url = self.getUrl("System/Configuration");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the current server configuration
-         */
-        self.getDevicesOptions = function () {
-
-            var url = self.getUrl("System/Configuration/devices");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the current server configuration
-         */
-        self.getContentUploadHistory = function () {
-
-            var url = self.getUrl("Devices/CameraUploads", {
-                DeviceId: self.deviceId()
-            });
-
-            return self.getJSON(url);
-        };
-
-        self.getNamedConfiguration = function (name) {
-
-            var url = self.getUrl("System/Configuration/" + name);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets the server's scheduled tasks
-         */
-        self.getScheduledTasks = function (options) {
-
-            options = options || {};
-
-            var url = self.getUrl("ScheduledTasks", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-        * Starts a scheduled task
-        */
-        self.startScheduledTask = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("ScheduledTasks/Running/" + id);
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        /**
-        * Gets a scheduled task
-        */
-        self.getScheduledTask = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("ScheduledTasks/" + id);
-
-            return self.getJSON(url);
-        };
-
-        self.getNextUpEpisodes = function (options) {
-
-            var url = self.getUrl("Shows/NextUp", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-        * Stops a scheduled task
-        */
-        self.stopScheduledTask = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("ScheduledTasks/Running/" + id);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        /**
-         * Gets the configuration of a plugin
-         * @param {String} Id
-         */
-        self.getPluginConfiguration = function (id) {
-
-            if (!id) {
-                throw new Error("null Id");
-            }
-
-            var url = self.getUrl("Plugins/" + id + "/Configuration");
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets a list of plugins that are available to be installed
-         */
-        self.getAvailablePlugins = function (options) {
-
-            options = options || {};
-            options.PackageType = "UserInstalled";
-
-            var url = self.getUrl("Packages", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Uninstalls a plugin
-         * @param {String} Id
-         */
-        self.uninstallPlugin = function (id) {
-
-            if (!id) {
-                throw new Error("null Id");
-            }
-
-            var url = self.getUrl("Plugins/" + id);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        /**
-        * Removes a virtual folder
-        * @param {String} name
-        */
-        self.removeVirtualFolder = function (name, refreshLibrary) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var url = "Library/VirtualFolders";
-
-            url = self.getUrl(url, {
-                refreshLibrary: refreshLibrary ? true : false,
-                name: name
-            });
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        /**
-       * Adds a virtual folder
-       * @param {String} name
-       */
-        self.addVirtualFolder = function (name, type, refreshLibrary, libraryOptions) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var options = {};
-
-            if (type) {
-                options.collectionType = type;
-            }
-
-            options.refreshLibrary = refreshLibrary ? true : false;
-            options.name = name;
-
-            var url = "Library/VirtualFolders";
-
-            url = self.getUrl(url, options);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify({
-                    LibraryOptions: libraryOptions
-                }),
-                contentType: 'application/json'
-            });
-        };
-        self.updateVirtualFolderOptions = function (id, libraryOptions) {
-
-            if (!id) {
-                throw new Error("null name");
-            }
-
-            var url = "Library/VirtualFolders/LibraryOptions";
-
-            url = self.getUrl(url);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify({
-                    Id: id,
-                    LibraryOptions: libraryOptions
-                }),
-                contentType: 'application/json'
-            });
-        };
-
-        /**
-       * Renames a virtual folder
-       * @param {String} name
-       */
-        self.renameVirtualFolder = function (name, newName, refreshLibrary) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var url = "Library/VirtualFolders/Name";
-
-            url = self.getUrl(url, {
-                refreshLibrary: refreshLibrary ? true : false,
-                newName: newName,
-                name: name
-            });
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        /**
-        * Adds an additional mediaPath to an existing virtual folder
-        * @param {String} name
-        */
-        self.addMediaPath = function (virtualFolderName, mediaPath, networkSharePath, refreshLibrary) {
-
-            if (!virtualFolderName) {
-                throw new Error("null virtualFolderName");
-            }
-
-            if (!mediaPath) {
-                throw new Error("null mediaPath");
-            }
-
-            var url = "Library/VirtualFolders/Paths";
-
-            var pathInfo = {
-                Path: mediaPath
-            };
-            if (networkSharePath) {
-                pathInfo.NetworkPath = networkSharePath;
-            }
-
-            url = self.getUrl(url, {
-                refreshLibrary: refreshLibrary ? true : false
-            });
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify({
-                    Name: virtualFolderName,
-                    PathInfo: pathInfo
-                }),
-                contentType: 'application/json'
-            });
-        };
-
-        self.updateMediaPath = function (virtualFolderName, pathInfo) {
-
-            if (!virtualFolderName) {
-                throw new Error("null virtualFolderName");
-            }
-
-            if (!pathInfo) {
-                throw new Error("null pathInfo");
-            }
-
-            var url = "Library/VirtualFolders/Paths/Update";
-
-            url = self.getUrl(url);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify({
-                    Name: virtualFolderName,
-                    PathInfo: pathInfo
-                }),
-                contentType: 'application/json'
-            });
-        };
-
-        /**
-        * Removes a media path from a virtual folder
-        * @param {String} name
-        */
-        self.removeMediaPath = function (virtualFolderName, mediaPath, refreshLibrary) {
-
-            if (!virtualFolderName) {
-                throw new Error("null virtualFolderName");
-            }
-
-            if (!mediaPath) {
-                throw new Error("null mediaPath");
-            }
-
-            var url = "Library/VirtualFolders/Paths";
-
-            url = self.getUrl(url, {
-                refreshLibrary: refreshLibrary ? true : false,
-                path: mediaPath,
-                name: virtualFolderName
-            });
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        /**
-         * Deletes a user
-         * @param {String} id
-         */
-        self.deleteUser = function (id) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            var url = self.getUrl("Users/" + id);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        /**
-         * Deletes a user image
-         * @param {String} userId
-         * @param {String} imageType The type of image to delete, based on the server-side ImageType enum.
-         */
-        self.deleteUserImage = function (userId, imageType, imageIndex) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            if (!imageType) {
-                throw new Error("null imageType");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Images/" + imageType);
-
-            if (imageIndex != null) {
-                url += "/" + imageIndex;
-            }
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        self.deleteItemImage = function (itemId, imageType, imageIndex) {
-
-            if (!imageType) {
-                throw new Error("null imageType");
-            }
-
-            var url = self.getUrl("Items/" + itemId + "/Images");
-
-            url += "/" + imageType;
-
-            if (imageIndex != null) {
-                url += "/" + imageIndex;
-            }
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        self.deleteItem = function (itemId) {
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Items/" + itemId);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        self.stopActiveEncodings = function (playSessionId) {
-
-            var options = {
-                deviceId: deviceId
-            };
-
-            if (playSessionId) {
-                options.PlaySessionId = playSessionId;
-            }
-
-            var url = self.getUrl("Videos/ActiveEncodings", options);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        self.reportCapabilities = function (options) {
-
-            var url = self.getUrl("Sessions/Capabilities/Full");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(options),
-                contentType: "application/json"
-            });
-        };
-
-        self.updateItemImageIndex = function (itemId, imageType, imageIndex, newIndex) {
-
-            if (!imageType) {
-                throw new Error("null imageType");
-            }
-
-            var options = { newIndex: newIndex };
-
-            var url = self.getUrl("Items/" + itemId + "/Images/" + imageType + "/" + imageIndex + "/Index", options);
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        self.getItemImageInfos = function (itemId) {
-
-            var url = self.getUrl("Items/" + itemId + "/Images");
-
-            return self.getJSON(url);
-        };
-
-        self.getCriticReviews = function (itemId, options) {
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Items/" + itemId + "/CriticReviews", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getItemDownloadUrl = function (itemId) {
-
-            if (!itemId) {
-                throw new Error("itemId cannot be empty");
-            }
-
-            var url = "Items/" + itemId + "/Download";
-
-            return self.getUrl(url, {
-                api_key: self.accessToken()
-            });
-        };
-
-        self.getSessions = function (options) {
-
-            var url = self.getUrl("Sessions", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Uploads a user image
-         * @param {String} userId
-         * @param {String} imageType The type of image to delete, based on the server-side ImageType enum.
-         * @param {Object} file The file from the input element
-         */
-        self.uploadUserImage = function (userId, imageType, file) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            if (!imageType) {
-                throw new Error("null imageType");
-            }
-
-            if (!file) {
-                throw new Error("File must be an image.");
-            }
-
-            if (file.type !== "image/png" && file.type !== "image/jpeg" && file.type !== "image/jpeg") {
-                throw new Error("File must be an image.");
-            }
-
-            return new Promise(function (resolve, reject) {
-
-                var reader = new FileReader();
-
-                reader.onerror = function () {
-                    reject();
-                };
-
-                reader.onabort = function () {
-                    reject();
-                };
-
-                // Closure to capture the file information.
-                reader.onload = function (e) {
-
-                    // Split by a comma to remove the url: prefix
-                    var data = e.target.result.split(',')[1];
-
-                    var url = self.getUrl("Users/" + userId + "/Images/" + imageType);
-
-                    self.ajax({
-                        type: "POST",
-                        url: url,
-                        data: data,
-                        contentType: "image/" + file.name.substring(file.name.lastIndexOf('.') + 1)
-                    }).then(function (result) {
-
-                        resolve(result);
-
-                    }, function () {
-                        reject();
-                    });
-                };
-
-                // Read in the image file as a data URL.
-                reader.readAsDataURL(file);
-            });
-        };
-
-        self.uploadItemImage = function (itemId, imageType, file) {
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            if (!imageType) {
-                throw new Error("null imageType");
-            }
-
-            if (!file) {
-                throw new Error("File must be an image.");
-            }
-
-            if (file.type !== "image/png" && file.type !== "image/jpeg" && file.type !== "image/jpeg") {
-                throw new Error("File must be an image.");
-            }
-
-            var url = self.getUrl("Items/" + itemId + "/Images");
-
-            url += "/" + imageType;
-
-            return new Promise(function (resolve, reject) {
-
-                var reader = new FileReader();
-
-                reader.onerror = function () {
-                    reject();
-                };
-
-                reader.onabort = function () {
-                    reject();
-                };
-
-                // Closure to capture the file information.
-                reader.onload = function (e) {
-
-                    // Split by a comma to remove the url: prefix
-                    var data = e.target.result.split(',')[1];
-
-                    self.ajax({
-                        type: "POST",
-                        url: url,
-                        data: data,
-                        contentType: "image/" + file.name.substring(file.name.lastIndexOf('.') + 1)
-                    }).then(function (result) {
-
-                        resolve(result);
-
-                    }, function () {
-                        reject();
-                    });
-                };
-
-                // Read in the image file as a data URL.
-                reader.readAsDataURL(file);
-            });
-        };
-
-        /**
-         * Gets the list of installed plugins on the server
-         */
-        self.getInstalledPlugins = function () {
-
-            var options = {};
-
-            var url = self.getUrl("Plugins", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets a user by id
-         * @param {String} id
-         */
-        self.getUser = function (id) {
-
-            if (!id) {
-                throw new Error("Must supply a userId");
-            }
-
-            var url = self.getUrl("Users/" + id);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets a studio
-         */
-        self.getStudio = function (name, userId) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("Studios/" + self.encodeName(name), options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets a genre
-         */
-        self.getGenre = function (name, userId) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("Genres/" + self.encodeName(name), options);
-
-            return self.getJSON(url);
-        };
-
-        self.getMusicGenre = function (name, userId) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("MusicGenres/" + self.encodeName(name), options);
-
-            return self.getJSON(url);
-        };
-
-        self.getGameGenre = function (name, userId) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("GameGenres/" + self.encodeName(name), options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets an artist
-         */
-        self.getArtist = function (name, userId) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("Artists/" + self.encodeName(name), options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets a Person
-         */
-        self.getPerson = function (name, userId) {
-
-            if (!name) {
-                throw new Error("null name");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("Persons/" + self.encodeName(name), options);
-
-            return self.getJSON(url);
-        };
-
-        self.getPublicUsers = function () {
-
-            var url = self.getUrl("users/public");
-
-            return self.ajax({
-                type: "GET",
-                url: url,
+                url: this.getUrl("LiveTv/Programs", options),
                 dataType: "json"
+            });
+        }
+    };
 
-            }, false);
+    ApiClient.prototype.getLiveTvRecommendedPrograms = function (options) {
+
+        options = options || {};
+
+        return this.ajax({
+            type: "GET",
+            url: this.getUrl("LiveTv/Programs/Recommended", options),
+            dataType: "json"
+        });
+    };
+
+    ApiClient.prototype.getLiveTvRecordings = function (options) {
+
+        var url = this.getUrl("LiveTv/Recordings", options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvRecordingSeries = function (options) {
+
+        var url = this.getUrl("LiveTv/Recordings/Series", options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvRecordingGroups = function (options) {
+
+        var url = this.getUrl("LiveTv/Recordings/Groups", options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvRecordingGroup = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("LiveTv/Recordings/Groups/" + id);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvRecording = function (id, userId) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var options = {
+
         };
 
-        /**
-         * Gets all users from the server
-         */
-        self.getUsers = function (options) {
+        if (userId) {
+            options.userId = userId;
+        }
 
-            var url = self.getUrl("users", options || {});
+        var url = this.getUrl("LiveTv/Recordings/" + id, options);
 
-            return self.getJSON(url);
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvProgram = function (id, userId) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var options = {
+
         };
 
-        /**
-         * Gets all available parental ratings from the server
-         */
-        self.getParentalRatings = function () {
+        if (userId) {
+            options.userId = userId;
+        }
 
-            var url = self.getUrl("Localization/ParentalRatings");
+        var url = this.getUrl("LiveTv/Programs/" + id, options);
 
-            return self.getJSON(url);
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.deleteLiveTvRecording = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("LiveTv/Recordings/" + id);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.cancelLiveTvTimer = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("LiveTv/Timers/" + id);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.getLiveTvTimers = function (options) {
+
+        var url = this.getUrl("LiveTv/Timers", options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getLiveTvTimer = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("LiveTv/Timers/" + id);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getNewLiveTvTimerDefaults = function (options) {
+
+        options = options || {};
+
+        var url = this.getUrl("LiveTv/Timers/Defaults", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.createLiveTvTimer = function (item) {
+
+        if (!item) {
+            throw new Error("null item");
+        }
+
+        var url = this.getUrl("LiveTv/Timers");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(item),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.updateLiveTvTimer = function (item) {
+
+        if (!item) {
+            throw new Error("null item");
+        }
+
+        var url = this.getUrl("LiveTv/Timers/" + item.Id);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(item),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.resetLiveTvTuner = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("LiveTv/Tuners/" + id + "/Reset");
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.getLiveTvSeriesTimers = function (options) {
+
+        var url = this.getUrl("LiveTv/SeriesTimers", options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getFileOrganizationResults = function (options) {
+
+        var url = this.getUrl("Library/FileOrganization", options || {});
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.deleteOriginalFileFromOrganizationResult = function (id) {
+
+        var url = this.getUrl("Library/FileOrganizations/" + id + "/File");
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.clearOrganizationLog = function () {
+
+        var url = this.getUrl("Library/FileOrganizations");
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.performOrganization = function (id) {
+
+        var url = this.getUrl("Library/FileOrganizations/" + id + "/Organize");
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.performEpisodeOrganization = function (id, options) {
+
+        var url = this.getUrl("Library/FileOrganizations/" + id + "/Episode/Organize");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(options),
+            contentType: 'application/json'
+        });
+    };
+
+    ApiClient.prototype.getLiveTvSeriesTimer = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("LiveTv/SeriesTimers/" + id);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.cancelLiveTvSeriesTimer = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("LiveTv/SeriesTimers/" + id);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.createLiveTvSeriesTimer = function (item) {
+
+        if (!item) {
+            throw new Error("null item");
+        }
+
+        var url = this.getUrl("LiveTv/SeriesTimers");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(item),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.updateLiveTvSeriesTimer = function (item) {
+
+        if (!item) {
+            throw new Error("null item");
+        }
+
+        var url = this.getUrl("LiveTv/SeriesTimers/" + item.Id);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(item),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.getRegistrationInfo = function (feature) {
+
+        var url = this.getUrl("Registrations/" + feature);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the current server status
+     */
+    ApiClient.prototype.getSystemInfo = function () {
+
+        var url = this.getUrl("System/Info");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the current server status
+     */
+    ApiClient.prototype.getPublicSystemInfo = function () {
+
+        var url = this.getUrl("System/Info/Public");
+
+        return this.getJSON(url, false);
+    };
+
+    ApiClient.prototype.getInstantMixFromItem = function (itemId, options) {
+
+        var url = this.getUrl("Items/" + itemId + "/InstantMix", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getEpisodes = function (itemId, options) {
+
+        var url = this.getUrl("Shows/" + itemId + "/Episodes", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getDisplayPreferences = function (id, userId, app) {
+
+        var url = this.getUrl("DisplayPreferences/" + id, {
+            userId: userId,
+            client: app
+        });
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.updateDisplayPreferences = function (id, obj, userId, app) {
+
+        var url = this.getUrl("DisplayPreferences/" + id, {
+            userId: userId,
+            client: app
+        });
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(obj),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.getSeasons = function (itemId, options) {
+
+        var url = this.getUrl("Shows/" + itemId + "/Seasons", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getSimilarItems = function (itemId, options) {
+
+        var url = this.getUrl("Items/" + itemId + "/Similar", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets all cultures known to the server
+     */
+    ApiClient.prototype.getCultures = function () {
+
+        var url = this.getUrl("Localization/cultures");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets all countries known to the server
+     */
+    ApiClient.prototype.getCountries = function () {
+
+        var url = this.getUrl("Localization/countries");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets plugin security info
+     */
+    ApiClient.prototype.getPluginSecurityInfo = function () {
+
+        var url = this.getUrl("Plugins/SecurityInfo");
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getPlaybackInfo = function (itemId, options, deviceProfile) {
+
+        var postData = {
+            DeviceProfile: deviceProfile
         };
 
-        self.getDefaultImageQuality = function (imageType) {
-            return imageType.toLowerCase() === 'backdrop' ? 80 : 90;
+        return this.ajax({
+            url: this.getUrl('Items/' + itemId + '/PlaybackInfo', options),
+            type: 'POST',
+            data: JSON.stringify(postData),
+            contentType: "application/json",
+            dataType: "json"
+        });
+    };
+
+    ApiClient.prototype.getIntros = function (itemId) {
+
+        return this.getJSON(this.getUrl('Users/' + this.getCurrentUserId() + '/Items/' + itemId + '/Intros'));
+    };
+
+    /**
+     * Gets the directory contents of a path on the server
+     */
+    ApiClient.prototype.getDirectoryContents = function (path, options) {
+
+        if (!path) {
+            throw new Error("null path");
+        }
+        if (typeof (path) !== 'string') {
+            throw new Error('invalid path');
+        }
+
+        options = options || {};
+
+        options.path = path;
+
+        var url = this.getUrl("Environment/DirectoryContents", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets shares from a network device
+     */
+    ApiClient.prototype.getNetworkShares = function (path) {
+
+        if (!path) {
+            throw new Error("null path");
+        }
+
+        var options = {};
+        options.path = path;
+
+        var url = this.getUrl("Environment/NetworkShares", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the parent of a given path
+     */
+    ApiClient.prototype.getParentPath = function (path) {
+
+        if (!path) {
+            throw new Error("null path");
+        }
+
+        var options = {};
+        options.path = path;
+
+        var url = this.getUrl("Environment/ParentPath", options);
+
+        return this.ajax({
+            type: "GET",
+            url: url,
+            dataType: 'text'
+        });
+    };
+
+    /**
+     * Gets a list of physical drives from the server
+     */
+    ApiClient.prototype.getDrives = function () {
+
+        var url = this.getUrl("Environment/Drives");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets a list of network devices from the server
+     */
+    ApiClient.prototype.getNetworkDevices = function () {
+
+        var url = this.getUrl("Environment/NetworkDevices");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Cancels a package installation
+     */
+    ApiClient.prototype.cancelPackageInstallation = function (installationId) {
+
+        if (!installationId) {
+            throw new Error("null installationId");
+        }
+
+        var url = this.getUrl("Packages/Installing/" + installationId);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    /**
+     * Refreshes metadata for an item
+     */
+    ApiClient.prototype.refreshItem = function (itemId, options) {
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Items/" + itemId + "/Refresh", options || {});
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    /**
+     * Installs or updates a new plugin
+     */
+    ApiClient.prototype.installPlugin = function (name, guid, updateClass, version) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        if (!updateClass) {
+            throw new Error("null updateClass");
+        }
+
+        var options = {
+            updateClass: updateClass,
+            AssemblyGuid: guid
         };
 
-        function normalizeImageOptions(options) {
+        if (version) {
+            options.version = version;
+        }
 
-            var ratio = devicePixelRatio || 1;
+        var url = this.getUrl("Packages/Installed/" + name, options);
 
-            if (ratio) {
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
 
-                if (options.minScale) {
-                    ratio = Math.max(options.minScale, ratio);
-                }
+    /**
+     * Instructs the server to perform a restart.
+     */
+    ApiClient.prototype.restartServer = function () {
 
-                if (options.width) {
-                    options.width = Math.round(options.width * ratio);
-                }
-                if (options.height) {
-                    options.height = Math.round(options.height * ratio);
-                }
-                if (options.maxWidth) {
-                    options.maxWidth = Math.round(options.maxWidth * ratio);
-                }
-                if (options.maxHeight) {
-                    options.maxHeight = Math.round(options.maxHeight * ratio);
-                }
+        var url = this.getUrl("System/Restart");
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    /**
+     * Instructs the server to perform a shutdown.
+     */
+    ApiClient.prototype.shutdownServer = function () {
+
+        var url = this.getUrl("System/Shutdown");
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    /**
+     * Gets information about an installable package
+     */
+    ApiClient.prototype.getPackageInfo = function (name, guid) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var options = {
+            AssemblyGuid: guid
+        };
+
+        var url = this.getUrl("Packages/" + name, options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the latest available application update (if any)
+     */
+    ApiClient.prototype.getAvailableApplicationUpdate = function () {
+
+        var url = this.getUrl("Packages/Updates", { PackageType: "System" });
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the latest available plugin updates (if any)
+     */
+    ApiClient.prototype.getAvailablePluginUpdates = function () {
+
+        var url = this.getUrl("Packages/Updates", { PackageType: "UserInstalled" });
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the virtual folder list
+     */
+    ApiClient.prototype.getVirtualFolders = function () {
+
+        var url = "Library/VirtualFolders";
+
+        url = this.getUrl(url);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets all the paths of the locations in the physical root.
+     */
+    ApiClient.prototype.getPhysicalPaths = function () {
+
+        var url = this.getUrl("Library/PhysicalPaths");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the current server configuration
+     */
+    ApiClient.prototype.getServerConfiguration = function () {
+
+        var url = this.getUrl("System/Configuration");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the current server configuration
+     */
+    ApiClient.prototype.getDevicesOptions = function () {
+
+        var url = this.getUrl("System/Configuration/devices");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the current server configuration
+     */
+    ApiClient.prototype.getContentUploadHistory = function () {
+
+        var url = this.getUrl("Devices/CameraUploads", {
+            DeviceId: this.deviceId()
+        });
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getNamedConfiguration = function (name) {
+
+        var url = this.getUrl("System/Configuration/" + name);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets the server's scheduled tasks
+     */
+    ApiClient.prototype.getScheduledTasks = function (options) {
+
+        options = options || {};
+
+        var url = this.getUrl("ScheduledTasks", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+    * Starts a scheduled task
+    */
+    ApiClient.prototype.startScheduledTask = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("ScheduledTasks/Running/" + id);
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    /**
+    * Gets a scheduled task
+    */
+    ApiClient.prototype.getScheduledTask = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("ScheduledTasks/" + id);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getNextUpEpisodes = function (options) {
+
+        var url = this.getUrl("Shows/NextUp", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+    * Stops a scheduled task
+    */
+    ApiClient.prototype.stopScheduledTask = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("ScheduledTasks/Running/" + id);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    /**
+     * Gets the configuration of a plugin
+     * @param {String} Id
+     */
+    ApiClient.prototype.getPluginConfiguration = function (id) {
+
+        if (!id) {
+            throw new Error("null Id");
+        }
+
+        var url = this.getUrl("Plugins/" + id + "/Configuration");
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets a list of plugins that are available to be installed
+     */
+    ApiClient.prototype.getAvailablePlugins = function (options) {
+
+        options = options || {};
+        options.PackageType = "UserInstalled";
+
+        var url = this.getUrl("Packages", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Uninstalls a plugin
+     * @param {String} Id
+     */
+    ApiClient.prototype.uninstallPlugin = function (id) {
+
+        if (!id) {
+            throw new Error("null Id");
+        }
+
+        var url = this.getUrl("Plugins/" + id);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    /**
+    * Removes a virtual folder
+    * @param {String} name
+    */
+    ApiClient.prototype.removeVirtualFolder = function (name, refreshLibrary) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var url = "Library/VirtualFolders";
+
+        url = this.getUrl(url, {
+            refreshLibrary: refreshLibrary ? true : false,
+            name: name
+        });
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    /**
+   * Adds a virtual folder
+   * @param {String} name
+   */
+    ApiClient.prototype.addVirtualFolder = function (name, type, refreshLibrary, libraryOptions) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var options = {};
+
+        if (type) {
+            options.collectionType = type;
+        }
+
+        options.refreshLibrary = refreshLibrary ? true : false;
+        options.name = name;
+
+        var url = "Library/VirtualFolders";
+
+        url = this.getUrl(url, options);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify({
+                LibraryOptions: libraryOptions
+            }),
+            contentType: 'application/json'
+        });
+    };
+
+    ApiClient.prototype.updateVirtualFolderOptions = function (id, libraryOptions) {
+
+        if (!id) {
+            throw new Error("null name");
+        }
+
+        var url = "Library/VirtualFolders/LibraryOptions";
+
+        url = this.getUrl(url);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify({
+                Id: id,
+                LibraryOptions: libraryOptions
+            }),
+            contentType: 'application/json'
+        });
+    };
+
+    /**
+   * Renames a virtual folder
+   * @param {String} name
+   */
+    ApiClient.prototype.renameVirtualFolder = function (name, newName, refreshLibrary) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var url = "Library/VirtualFolders/Name";
+
+        url = this.getUrl(url, {
+            refreshLibrary: refreshLibrary ? true : false,
+            newName: newName,
+            name: name
+        });
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    /**
+    * Adds an additional mediaPath to an existing virtual folder
+    * @param {String} name
+    */
+    ApiClient.prototype.addMediaPath = function (virtualFolderName, mediaPath, networkSharePath, refreshLibrary) {
+
+        if (!virtualFolderName) {
+            throw new Error("null virtualFolderName");
+        }
+
+        if (!mediaPath) {
+            throw new Error("null mediaPath");
+        }
+
+        var url = "Library/VirtualFolders/Paths";
+
+        var pathInfo = {
+            Path: mediaPath
+        };
+        if (networkSharePath) {
+            pathInfo.NetworkPath = networkSharePath;
+        }
+
+        url = this.getUrl(url, {
+            refreshLibrary: refreshLibrary ? true : false
+        });
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify({
+                Name: virtualFolderName,
+                PathInfo: pathInfo
+            }),
+            contentType: 'application/json'
+        });
+    };
+
+    ApiClient.prototype.updateMediaPath = function (virtualFolderName, pathInfo) {
+
+        if (!virtualFolderName) {
+            throw new Error("null virtualFolderName");
+        }
+
+        if (!pathInfo) {
+            throw new Error("null pathInfo");
+        }
+
+        var url = "Library/VirtualFolders/Paths/Update";
+
+        url = this.getUrl(url);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify({
+                Name: virtualFolderName,
+                PathInfo: pathInfo
+            }),
+            contentType: 'application/json'
+        });
+    };
+
+    /**
+    * Removes a media path from a virtual folder
+    * @param {String} name
+    */
+    ApiClient.prototype.removeMediaPath = function (virtualFolderName, mediaPath, refreshLibrary) {
+
+        if (!virtualFolderName) {
+            throw new Error("null virtualFolderName");
+        }
+
+        if (!mediaPath) {
+            throw new Error("null mediaPath");
+        }
+
+        var url = "Library/VirtualFolders/Paths";
+
+        url = this.getUrl(url, {
+            refreshLibrary: refreshLibrary ? true : false,
+            path: mediaPath,
+            name: virtualFolderName
+        });
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    /**
+     * Deletes a user
+     * @param {String} id
+     */
+    ApiClient.prototype.deleteUser = function (id) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        var url = this.getUrl("Users/" + id);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    /**
+     * Deletes a user image
+     * @param {String} userId
+     * @param {String} imageType The type of image to delete, based on the server-side ImageType enum.
+     */
+    ApiClient.prototype.deleteUserImage = function (userId, imageType, imageIndex) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!imageType) {
+            throw new Error("null imageType");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Images/" + imageType);
+
+        if (imageIndex != null) {
+            url += "/" + imageIndex;
+        }
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.deleteItemImage = function (itemId, imageType, imageIndex) {
+
+        if (!imageType) {
+            throw new Error("null imageType");
+        }
+
+        var url = this.getUrl("Items/" + itemId + "/Images");
+
+        url += "/" + imageType;
+
+        if (imageIndex != null) {
+            url += "/" + imageIndex;
+        }
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.deleteItem = function (itemId) {
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Items/" + itemId);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.stopActiveEncodings = function (playSessionId) {
+
+        var options = {
+            deviceId: this.deviceId()
+        };
+
+        if (playSessionId) {
+            options.PlaySessionId = playSessionId;
+        }
+
+        var url = this.getUrl("Videos/ActiveEncodings", options);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.reportCapabilities = function (options) {
+
+        var url = this.getUrl("Sessions/Capabilities/Full");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(options),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.updateItemImageIndex = function (itemId, imageType, imageIndex, newIndex) {
+
+        if (!imageType) {
+            throw new Error("null imageType");
+        }
+
+        var options = { newIndex: newIndex };
+
+        var url = this.getUrl("Items/" + itemId + "/Images/" + imageType + "/" + imageIndex + "/Index", options);
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.getItemImageInfos = function (itemId) {
+
+        var url = this.getUrl("Items/" + itemId + "/Images");
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getCriticReviews = function (itemId, options) {
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Items/" + itemId + "/CriticReviews", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getItemDownloadUrl = function (itemId) {
+
+        if (!itemId) {
+            throw new Error("itemId cannot be empty");
+        }
+
+        var url = "Items/" + itemId + "/Download";
+
+        return this.getUrl(url, {
+            api_key: this.accessToken()
+        });
+    };
+
+    ApiClient.prototype.getSessions = function (options) {
+
+        var url = this.getUrl("Sessions", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Uploads a user image
+     * @param {String} userId
+     * @param {String} imageType The type of image to delete, based on the server-side ImageType enum.
+     * @param {Object} file The file from the input element
+     */
+    ApiClient.prototype.uploadUserImage = function (userId, imageType, file) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!imageType) {
+            throw new Error("null imageType");
+        }
+
+        if (!file) {
+            throw new Error("File must be an image.");
+        }
+
+        if (file.type !== "image/png" && file.type !== "image/jpeg" && file.type !== "image/jpeg") {
+            throw new Error("File must be an image.");
+        }
+
+        var instance = this;
+
+        return new Promise(function (resolve, reject) {
+
+            var reader = new FileReader();
+
+            reader.onerror = function () {
+                reject();
+            };
+
+            reader.onabort = function () {
+                reject();
+            };
+
+            // Closure to capture the file information.
+            reader.onload = function (e) {
+
+                // Split by a comma to remove the url: prefix
+                var data = e.target.result.split(',')[1];
+
+                var url = instance.getUrl("Users/" + userId + "/Images/" + imageType);
+
+                instance.ajax({
+                    type: "POST",
+                    url: url,
+                    data: data,
+                    contentType: "image/" + file.name.substring(file.name.lastIndexOf('.') + 1)
+                }).then(resolve, reject);
+            };
+
+            // Read in the image file as a data URL.
+            reader.readAsDataURL(file);
+        });
+    };
+
+    ApiClient.prototype.uploadItemImage = function (itemId, imageType, file) {
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        if (!imageType) {
+            throw new Error("null imageType");
+        }
+
+        if (!file) {
+            throw new Error("File must be an image.");
+        }
+
+        if (file.type !== "image/png" && file.type !== "image/jpeg" && file.type !== "image/jpeg") {
+            throw new Error("File must be an image.");
+        }
+
+        var url = this.getUrl("Items/" + itemId + "/Images");
+
+        url += "/" + imageType;
+        var instance = this;
+
+        return new Promise(function (resolve, reject) {
+
+            var reader = new FileReader();
+
+            reader.onerror = function () {
+                reject();
+            };
+
+            reader.onabort = function () {
+                reject();
+            };
+
+            // Closure to capture the file information.
+            reader.onload = function (e) {
+
+                // Split by a comma to remove the url: prefix
+                var data = e.target.result.split(',')[1];
+
+                instance.ajax({
+                    type: "POST",
+                    url: url,
+                    data: data,
+                    contentType: "image/" + file.name.substring(file.name.lastIndexOf('.') + 1)
+                }).then(function (result) {
+
+                    resolve(result);
+
+                }, function () {
+                    reject();
+                });
+            };
+
+            // Read in the image file as a data URL.
+            reader.readAsDataURL(file);
+        });
+    };
+
+    /**
+     * Gets the list of installed plugins on the server
+     */
+    ApiClient.prototype.getInstalledPlugins = function () {
+
+        var options = {};
+
+        var url = this.getUrl("Plugins", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets a user by id
+     * @param {String} id
+     */
+    ApiClient.prototype.getUser = function (id) {
+
+        if (!id) {
+            throw new Error("Must supply a userId");
+        }
+
+        var url = this.getUrl("Users/" + id);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets a studio
+     */
+    ApiClient.prototype.getStudio = function (name, userId) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("Studios/" + this.encodeName(name), options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets a genre
+     */
+    ApiClient.prototype.getGenre = function (name, userId) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("Genres/" + this.encodeName(name), options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getMusicGenre = function (name, userId) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("MusicGenres/" + this.encodeName(name), options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getGameGenre = function (name, userId) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("GameGenres/" + this.encodeName(name), options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets an artist
+     */
+    ApiClient.prototype.getArtist = function (name, userId) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("Artists/" + this.encodeName(name), options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets a Person
+     */
+    ApiClient.prototype.getPerson = function (name, userId) {
+
+        if (!name) {
+            throw new Error("null name");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("Persons/" + this.encodeName(name), options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getPublicUsers = function () {
+
+        var url = this.getUrl("users/public");
+
+        return this.ajax({
+            type: "GET",
+            url: url,
+            dataType: "json"
+
+        }, false);
+    };
+
+    /**
+     * Gets all users from the server
+     */
+    ApiClient.prototype.getUsers = function (options) {
+
+        var url = this.getUrl("users", options || {});
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets all available parental ratings from the server
+     */
+    ApiClient.prototype.getParentalRatings = function () {
+
+        var url = this.getUrl("Localization/ParentalRatings");
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getDefaultImageQuality = function (imageType) {
+        return imageType.toLowerCase() === 'backdrop' ? 80 : 90;
+    };
+
+    function normalizeImageOptions(instance, options) {
+
+        var ratio = devicePixelRatio || 1;
+
+        if (ratio) {
+
+            if (options.minScale) {
+                ratio = Math.max(options.minScale, ratio);
             }
 
-            options.quality = options.quality || self.getDefaultImageQuality(options.type);
-
-            if (self.normalizeImageOptions) {
-                self.normalizeImageOptions(options);
+            if (options.width) {
+                options.width = Math.round(options.width * ratio);
+            }
+            if (options.height) {
+                options.height = Math.round(options.height * ratio);
+            }
+            if (options.maxWidth) {
+                options.maxWidth = Math.round(options.maxWidth * ratio);
+            }
+            if (options.maxHeight) {
+                options.maxHeight = Math.round(options.maxHeight * ratio);
             }
         }
 
-        /**
-         * Constructs a url for a user image
-         * @param {String} userId
-         * @param {Object} options
-         * Options supports the following properties:
-         * width - download the image at a fixed width
-         * height - download the image at a fixed height
-         * maxWidth - download the image at a maxWidth
-         * maxHeight - download the image at a maxHeight
-         * quality - A scale of 0-100. This should almost always be omitted as the default will suffice.
-         * For best results do not specify both width and height together, as aspect ratio might be altered.
-         */
-        self.getUserImageUrl = function (userId, options) {
+        options.quality = options.quality || instance.getDefaultImageQuality(options.type);
 
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            options = options || {};
-
-            var url = "Users/" + userId + "/Images/" + options.type;
-
-            if (options.index != null) {
-                url += "/" + options.index;
-            }
-
-            normalizeImageOptions(options);
-
-            // Don't put these on the query string
-            delete options.type;
-            delete options.index;
-
-            return self.getUrl(url, options);
-        };
-
-        /**
-         * Constructs a url for an item image
-         * @param {String} itemId
-         * @param {Object} options
-         * Options supports the following properties:
-         * type - Primary, logo, backdrop, etc. See the server-side enum ImageType
-         * index - When downloading a backdrop, use this to specify which one (omitting is equivalent to zero)
-         * width - download the image at a fixed width
-         * height - download the image at a fixed height
-         * maxWidth - download the image at a maxWidth
-         * maxHeight - download the image at a maxHeight
-         * quality - A scale of 0-100. This should almost always be omitted as the default will suffice.
-         * For best results do not specify both width and height together, as aspect ratio might be altered.
-         */
-        self.getImageUrl = function (itemId, options) {
-
-            if (!itemId) {
-                throw new Error("itemId cannot be empty");
-            }
-
-            options = options || {};
-
-            var url = "Items/" + itemId + "/Images/" + options.type;
-
-            if (options.index != null) {
-                url += "/" + options.index;
-            }
-
-            options.quality = options.quality || self.getDefaultImageQuality(options.type);
-
-            if (self.normalizeImageOptions) {
-                self.normalizeImageOptions(options);
-            }
-
-            // Don't put these on the query string
-            delete options.type;
-            delete options.index;
-
-            return self.getUrl(url, options);
-        };
-
-        self.getScaledImageUrl = function (itemId, options) {
-
-            if (!itemId) {
-                throw new Error("itemId cannot be empty");
-            }
-
-            options = options || {};
-
-            var url = "Items/" + itemId + "/Images/" + options.type;
-
-            if (options.index != null) {
-                url += "/" + options.index;
-            }
-
-            normalizeImageOptions(options);
-
-            // Don't put these on the query string
-            delete options.type;
-            delete options.index;
-            delete options.minScale;
-
-            return self.getUrl(url, options);
-        };
-
-        self.getThumbImageUrl = function (item, options) {
-
-            if (!item) {
-                throw new Error("null item");
-            }
-
-            options = options || {
-
-            };
-
-            options.imageType = "thumb";
-
-            if (item.ImageTags && item.ImageTags.Thumb) {
-
-                options.tag = item.ImageTags.Thumb;
-                return self.getImageUrl(item.Id, options);
-            }
-            else if (item.ParentThumbItemId) {
-
-                options.tag = item.ImageTags.ParentThumbImageTag;
-                return self.getImageUrl(item.ParentThumbItemId, options);
-
-            } else {
-                return null;
-            }
-        };
-
-        /**
-         * Authenticates a user
-         * @param {String} name
-         * @param {String} password
-         */
-        self.authenticateUserByName = function (name, password) {
-
-            return new Promise(function (resolve, reject) {
-
-                if (!name) {
-                    reject();
-                    return;
-                }
-
-                var url = self.getUrl("Users/authenticatebyname");
-
-                require(["cryptojs-sha1", "cryptojs-md5"], function () {
-                    var postData = {
-                        Password: CryptoJS.SHA1(password || "").toString(),
-                        PasswordMd5: CryptoJS.MD5(password || "").toString(),
-                        Username: name
-                    };
-
-                    self.ajax({
-                        type: "POST",
-                        url: url,
-                        data: JSON.stringify(postData),
-                        dataType: "json",
-                        contentType: "application/json"
-
-                    }).then(function (result) {
-
-                        if (self.onAuthenticated) {
-                            self.onAuthenticated(self, result);
-                        }
-
-                        redetectBitrate(self);
-
-                        resolve(result);
-
-                    }, reject);
-                });
-            });
-        };
+        if (instance.normalizeImageOptions) {
+            instance.normalizeImageOptions(options);
+        }
     }
+
+    /**
+     * Constructs a url for a user image
+     * @param {String} userId
+     * @param {Object} options
+     * Options supports the following properties:
+     * width - download the image at a fixed width
+     * height - download the image at a fixed height
+     * maxWidth - download the image at a maxWidth
+     * maxHeight - download the image at a maxHeight
+     * quality - A scale of 0-100. This should almost always be omitted as the default will suffice.
+     * For best results do not specify both width and height together, as aspect ratio might be altered.
+     */
+    ApiClient.prototype.getUserImageUrl = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+
+        var url = "Users/" + userId + "/Images/" + options.type;
+
+        if (options.index != null) {
+            url += "/" + options.index;
+        }
+
+        normalizeImageOptions(this, options);
+
+        // Don't put these on the query string
+        delete options.type;
+        delete options.index;
+
+        return this.getUrl(url, options);
+    };
+
+    /**
+     * Constructs a url for an item image
+     * @param {String} itemId
+     * @param {Object} options
+     * Options supports the following properties:
+     * type - Primary, logo, backdrop, etc. See the server-side enum ImageType
+     * index - When downloading a backdrop, use this to specify which one (omitting is equivalent to zero)
+     * width - download the image at a fixed width
+     * height - download the image at a fixed height
+     * maxWidth - download the image at a maxWidth
+     * maxHeight - download the image at a maxHeight
+     * quality - A scale of 0-100. This should almost always be omitted as the default will suffice.
+     * For best results do not specify both width and height together, as aspect ratio might be altered.
+     */
+    ApiClient.prototype.getImageUrl = function (itemId, options) {
+
+        if (!itemId) {
+            throw new Error("itemId cannot be empty");
+        }
+
+        options = options || {};
+
+        var url = "Items/" + itemId + "/Images/" + options.type;
+
+        if (options.index != null) {
+            url += "/" + options.index;
+        }
+
+        options.quality = options.quality || this.getDefaultImageQuality(options.type);
+
+        if (this.normalizeImageOptions) {
+            this.normalizeImageOptions(options);
+        }
+
+        // Don't put these on the query string
+        delete options.type;
+        delete options.index;
+
+        return this.getUrl(url, options);
+    };
+
+    ApiClient.prototype.getScaledImageUrl = function (itemId, options) {
+
+        if (!itemId) {
+            throw new Error("itemId cannot be empty");
+        }
+
+        options = options || {};
+
+        var url = "Items/" + itemId + "/Images/" + options.type;
+
+        if (options.index != null) {
+            url += "/" + options.index;
+        }
+
+        normalizeImageOptions(this, options);
+
+        // Don't put these on the query string
+        delete options.type;
+        delete options.index;
+        delete options.minScale;
+
+        return this.getUrl(url, options);
+    };
+
+    ApiClient.prototype.getThumbImageUrl = function (item, options) {
+
+        if (!item) {
+            throw new Error("null item");
+        }
+
+        options = options || {
+
+        };
+
+        options.imageType = "thumb";
+
+        if (item.ImageTags && item.ImageTags.Thumb) {
+
+            options.tag = item.ImageTags.Thumb;
+            return this.getImageUrl(item.Id, options);
+        }
+        else if (item.ParentThumbItemId) {
+
+            options.tag = item.ImageTags.ParentThumbImageTag;
+            return this.getImageUrl(item.ParentThumbItemId, options);
+
+        } else {
+            return null;
+        }
+    };
 
     /**
      * Updates a user's password
@@ -2679,14 +2685,14 @@
      */
     ApiClient.prototype.updateUserPassword = function (userId, currentPassword, newPassword) {
 
+        if (!userId) {
+            return Promise.reject();
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Password");
+
         return new Promise(function (resolve, reject) {
 
-            if (!userId) {
-                reject();
-                return;
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Password");
             var instance = this;
 
             require(["cryptojs-sha1"], function () {
