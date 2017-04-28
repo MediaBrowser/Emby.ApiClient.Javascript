@@ -19,7 +19,7 @@
 
                     options.cameraUploadServers = appSettings.cameraUploadServers();
 
-                    syncPromise = new MultiServerSync(connectionManager).sync(options).then(function () {
+                    syncPromise = new MultiServerSync().sync(connectionManager, options).then(function () {
 
                         syncPromise = null;
                         resolve();

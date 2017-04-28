@@ -15,7 +15,7 @@
 
         console.log("Creating ServerSync to server: " + server.Id);
 
-        new ServerSync(connectionManager).sync(server, options).then(function () {
+        new ServerSync().sync(connectionManager, server, options).then(function () {
 
             syncNext(connectionManager, servers, index + 1, options, resolve, reject);
 
@@ -25,18 +25,19 @@
         });
     }
 
-    return function (connectionManager) {
+    function MultiServerSync() {
 
-        var self = this;
-
-        self.sync = function (options) {
-
-            return new Promise(function (resolve, reject) {
-
-                var servers = connectionManager.getSavedServers();
-
-                syncNext(connectionManager, servers, 0, options, resolve, reject);
-            });
-        };
     };
+
+    MultiServerSync.prototype.sync = function (connectionManager, options) {
+
+        return new Promise(function (resolve, reject) {
+
+            var servers = connectionManager.getSavedServers();
+
+            syncNext(connectionManager, servers, 0, options, resolve, reject);
+        });
+    };
+
+    return MultiServerSync;
 });

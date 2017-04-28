@@ -1,7 +1,7 @@
 ﻿define([], function () {
     'use strict';
 
-    function MyStore(defaultObject) {
+    function MyStore() {
 
         this.localData = {};
     }

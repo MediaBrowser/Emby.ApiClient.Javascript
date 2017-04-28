@@ -1,93 +1,94 @@
 ﻿define([], function () {
     'use strict';
 
-    return function (connectionManager) {
+    function performSync(connectionManager, server, options) {
 
-        var self = this;
+        console.log("ServerSync.performSync to server: " + server.Id);
 
-        self.sync = function (server, options) {
+        options = options || {};
 
-            if (!server.AccessToken && !server.ExchangeToken) {
+        var uploadPhotos = options.uploadPhotos !== false;
 
-                console.log('Skipping sync to server ' + server.Id + ' because there is no saved authentication information.');
-                return Promise.resolve();
+        if (options.cameraUploadServers && options.cameraUploadServers.indexOf(server.Id) === -1) {
+            uploadPhotos = false;
+        }
+
+        var pr = Promise.resolve();
+
+        return pr.then(function () {
+
+            if (uploadPhotos) {
+                return uploadContent(connectionManager, server, options);
             }
 
-            var connectionOptions = {
-                updateDateLastAccessed: false,
-                enableWebSocket: false,
-                reportCapabilities: false,
-                enableAutomaticBitrateDetection: false
-            };
+            return Promise.resolve();
 
-            return connectionManager.connectToServer(server, connectionOptions).then(function (result) {
+        }).then(function () {
 
-                if (result.State === MediaBrowser.ConnectionState.SignedIn) {
-                    return performSync(server, options);
-                } else {
-                    console.log('Unable to connect to server id: ' + server.Id);
-                    return Promise.reject();
-                }
+            return syncMedia(connectionManager, server, options);
+        });
+    }
 
-            }, function (err) {
 
-                console.log('Unable to connect to server id: ' + server.Id);
-                throw err;
+    function uploadContent(connectionManager, server, options) {
+
+        return new Promise(function (resolve, reject) {
+
+            require(['contentuploader'], function (contentuploader) {
+
+                uploader = new ContentUploader(connectionManager);
+                uploader.uploadImages(server).then(resolve, reject);
             });
+        });
+    }
+
+    function syncMedia(connectionManager, server, options) {
+
+        return new Promise(function (resolve, reject) {
+
+            require(['mediasync'], function (MediaSync) {
+
+                var apiClient = connectionManager.getApiClient(server.Id);
+
+                new MediaSync().sync(apiClient, server, options).then(resolve, reject);
+            });
+        });
+    }
+
+    function ServerSync() {
+
+    }
+
+    ServerSync.prototype.sync = function (connectionManager, server, options) {
+
+        if (!server.AccessToken && !server.ExchangeToken) {
+
+            console.log('Skipping sync to server ' + server.Id + ' because there is no saved authentication information.');
+            return Promise.resolve();
+        }
+
+        var connectionOptions = {
+            updateDateLastAccessed: false,
+            enableWebSocket: false,
+            reportCapabilities: false,
+            enableAutomaticBitrateDetection: false
         };
 
-        function performSync(server, options) {
+        return connectionManager.connectToServer(server, connectionOptions).then(function (result) {
 
-            console.log("ServerSync.performSync to server: " + server.Id);
-
-            options = options || {};
-
-            var uploadPhotos = options.uploadPhotos !== false;
-
-            if (options.cameraUploadServers && options.cameraUploadServers.indexOf(server.Id) === -1) {
-                uploadPhotos = false;
+            if (result.State === MediaBrowser.ConnectionState.SignedIn) {
+                return performSync(server, options);
+            } else {
+                console.log('Unable to connect to server id: ' + server.Id);
+                return Promise.reject();
             }
 
-            var pr = Promise.resolve();
+        }, function (err) {
 
-            return pr.then(function () {
-
-                if (uploadPhotos) {
-                    return uploadContent(server, options);
-                }
-
-                return Promise.resolve();
-
-            }).then(function () {
-
-                return syncMedia(server, options);
-            });
-        }
-
-
-        function uploadContent(server, options) {
-
-            return new Promise(function (resolve, reject) {
-
-                require(['contentuploader'], function (contentuploader) {
-
-                    uploader = new ContentUploader(connectionManager);
-                    uploader.uploadImages(server).then(resolve, reject);
-                });
-            });
-        }
-
-        function syncMedia(server, options) {
-
-            return new Promise(function (resolve, reject) {
-
-                require(['mediasync'], function (MediaSync) {
-
-                    var apiClient = connectionManager.getApiClient(server.Id);
-
-                    new MediaSync().sync(apiClient, server, options).then(resolve, reject);
-                });
-            });
-        }
+            console.log('Unable to connect to server id: ' + server.Id);
+            throw err;
+        });
     };
+
+    return ServerSync;
 });
