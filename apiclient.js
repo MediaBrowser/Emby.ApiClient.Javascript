@@ -542,7 +542,6 @@
 
         if (!name) {
             return Promise.reject();
-            return;
         }
 
         var url = this.getUrl("Users/authenticatebyname");
