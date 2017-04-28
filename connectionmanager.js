@@ -1,6 +1,8 @@
 ﻿define(['events', 'apiclient', 'appStorage'], function (events, apiClientFactory, appStorage) {
     'use strict';
 
+    var defaultTimeout = 20000;
+
     var ConnectionState = {
         Unavailable: 0,
         ServerSelection: 1,
@@ -33,183 +35,182 @@
         }
     };
 
+    function paramsToString(params) {
+
+        var values = [];
+
+        for (var key in params) {
+
+            var value = params[key];
+
+            if (value !== null && value !== undefined && value !== '') {
+                values.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
+            }
+        }
+        return values.join('&');
+    }
+
+    function resolveFailure(instance, resolve) {
+
+        resolve({
+            State: ConnectionState.Unavailable,
+            ConnectUser: instance.connectUser()
+        });
+    }
+
+    function mergeServers(credentialProvider, list1, list2) {
+
+        for (var i = 0, length = list2.length; i < length; i++) {
+            credentialProvider.addOrUpdateServer(list1, list2[i]);
+        }
+
+        return list1;
+    }
+
+    function updateServerInfo(server, systemInfo) {
+
+        server.Name = systemInfo.ServerName;
+        server.Id = systemInfo.Id;
+
+        if (systemInfo.LocalAddress) {
+            server.LocalAddress = systemInfo.LocalAddress;
+        }
+        if (systemInfo.WanAddress) {
+            server.RemoteAddress = systemInfo.WanAddress;
+        }
+        if (systemInfo.MacAddress) {
+            server.WakeOnLanInfos = [
+                    { MacAddress: systemInfo.MacAddress }
+            ];
+        }
+    }
+
+    function getEmbyServerUrl(baseUrl, handler) {
+        return baseUrl + "/emby/" + handler;
+    }
+
+    function getFetchPromise(request) {
+
+        var headers = request.headers || {};
+
+        if (request.dataType === 'json') {
+            headers.accept = 'application/json';
+        }
+
+        var fetchRequest = {
+            headers: headers,
+            method: request.type,
+            credentials: 'same-origin'
+        };
+
+        var contentType = request.contentType;
+
+        if (request.data) {
+
+            if (typeof request.data === 'string') {
+                fetchRequest.body = request.data;
+            } else {
+                fetchRequest.body = paramsToString(request.data);
+
+                contentType = contentType || 'application/x-www-form-urlencoded; charset=UTF-8';
+            }
+        }
+
+        if (contentType) {
+
+            headers['Content-Type'] = contentType;
+        }
+
+        if (!request.timeout) {
+            return fetch(request.url, fetchRequest);
+        }
+
+        return fetchWithTimeout(request.url, fetchRequest, request.timeout);
+    }
+
+    function fetchWithTimeout(url, options, timeoutMs) {
+
+        console.log('fetchWithTimeout: timeoutMs: ' + timeoutMs + ', url: ' + url);
+
+        return new Promise(function (resolve, reject) {
+
+            var timeout = setTimeout(reject, timeoutMs);
+
+            options = options || {};
+            options.credentials = 'same-origin';
+
+            fetch(url, options).then(function (response) {
+                clearTimeout(timeout);
+
+                console.log('fetchWithTimeout: succeeded connecting to url: ' + url);
+
+                resolve(response);
+            }, function (error) {
+
+                clearTimeout(timeout);
+
+                console.log('fetchWithTimeout: timed out connecting to url: ' + url);
+
+                reject();
+            });
+        });
+    }
+
+    function ajax(request) {
+
+        if (!request) {
+            throw new Error("Request cannot be null");
+        }
+
+        request.headers = request.headers || {};
+
+        console.log('ConnectionManager requesting url: ' + request.url);
+
+        return getFetchPromise(request).then(function (response) {
+
+            console.log('ConnectionManager response status: ' + response.status + ', url: ' + request.url);
+
+            if (response.status < 400) {
+
+                if (request.dataType === 'json' || request.headers.accept === 'application/json') {
+                    return response.json();
+                } else {
+                    return response;
+                }
+            } else {
+                return Promise.reject(response);
+            }
+
+        }, function (err) {
+
+            console.log('ConnectionManager request failed to url: ' + request.url);
+            throw err;
+        });
+    }
+
+    function tryConnect(url, timeout) {
+
+        url = getEmbyServerUrl(url, "system/info/public");
+
+        console.log('tryConnect url: ' + url);
+
+        return ajax({
+
+            type: "GET",
+            url: url,
+            dataType: "json",
+
+            timeout: timeout || defaultTimeout
+
+        });
+    }
+
     var ConnectionManager = function (credentialProvider, appName, appVersion, deviceName, deviceId, capabilities, devicePixelRatio) {
 
         console.log('Begin ConnectionManager constructor');
 
         var self = this;
         var apiClients = [];
-        var defaultTimeout = 20000;
-
-        function mergeServers(list1, list2) {
-
-            for (var i = 0, length = list2.length; i < length; i++) {
-                credentialProvider.addOrUpdateServer(list1, list2[i]);
-            }
-
-            return list1;
-        }
-
-        function resolveFailure(resolve) {
-
-            resolve({
-                State: ConnectionState.Unavailable,
-                ConnectUser: self.connectUser()
-            });
-        }
-
-        function updateServerInfo(server, systemInfo) {
-
-            server.Name = systemInfo.ServerName;
-            server.Id = systemInfo.Id;
-
-            if (systemInfo.LocalAddress) {
-                server.LocalAddress = systemInfo.LocalAddress;
-            }
-            if (systemInfo.WanAddress) {
-                server.RemoteAddress = systemInfo.WanAddress;
-            }
-            if (systemInfo.MacAddress) {
-                server.WakeOnLanInfos = [
-                        { MacAddress: systemInfo.MacAddress }
-                ];
-            }
-        }
-
-        function getEmbyServerUrl(baseUrl, handler) {
-            return baseUrl + "/emby/" + handler;
-        }
-
-        function getFetchPromise(request) {
-
-            var headers = request.headers || {};
-
-            if (request.dataType === 'json') {
-                headers.accept = 'application/json';
-            }
-
-            var fetchRequest = {
-                headers: headers,
-                method: request.type,
-                credentials: 'same-origin'
-            };
-
-            var contentType = request.contentType;
-
-            if (request.data) {
-
-                if (typeof request.data === 'string') {
-                    fetchRequest.body = request.data;
-                } else {
-                    fetchRequest.body = paramsToString(request.data);
-
-                    contentType = contentType || 'application/x-www-form-urlencoded; charset=UTF-8';
-                }
-            }
-
-            if (contentType) {
-
-                headers['Content-Type'] = contentType;
-            }
-
-            if (!request.timeout) {
-                return fetch(request.url, fetchRequest);
-            }
-
-            return fetchWithTimeout(request.url, fetchRequest, request.timeout);
-        }
-
-        function fetchWithTimeout(url, options, timeoutMs) {
-
-            console.log('fetchWithTimeout: timeoutMs: ' + timeoutMs + ', url: ' + url);
-
-            return new Promise(function (resolve, reject) {
-
-                var timeout = setTimeout(reject, timeoutMs);
-
-                options = options || {};
-                options.credentials = 'same-origin';
-
-                fetch(url, options).then(function (response) {
-                    clearTimeout(timeout);
-
-                    console.log('fetchWithTimeout: succeeded connecting to url: ' + url);
-
-                    resolve(response);
-                }, function (error) {
-
-                    clearTimeout(timeout);
-
-                    console.log('fetchWithTimeout: timed out connecting to url: ' + url);
-
-                    reject();
-                });
-            });
-        }
-
-        function paramsToString(params) {
-
-            var values = [];
-
-            for (var key in params) {
-
-                var value = params[key];
-
-                if (value !== null && value !== undefined && value !== '') {
-                    values.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
-                }
-            }
-            return values.join('&');
-        }
-
-        function ajax(request) {
-
-            if (!request) {
-                throw new Error("Request cannot be null");
-            }
-
-            request.headers = request.headers || {};
-
-            console.log('ConnectionManager requesting url: ' + request.url);
-
-            return getFetchPromise(request).then(function (response) {
-
-                console.log('ConnectionManager response status: ' + response.status + ', url: ' + request.url);
-
-                if (response.status < 400) {
-
-                    if (request.dataType === 'json' || request.headers.accept === 'application/json') {
-                        return response.json();
-                    } else {
-                        return response;
-                    }
-                } else {
-                    return Promise.reject(response);
-                }
-
-            }, function (err) {
-
-                console.log('ConnectionManager request failed to url: ' + request.url);
-                throw err;
-            });
-        }
-
-        function tryConnect(url, timeout) {
-
-            url = getEmbyServerUrl(url, "system/info/public");
-
-            console.log('tryConnect url: ' + url);
-
-            return ajax({
-
-                type: "GET",
-                url: url,
-                dataType: "json",
-
-                timeout: timeout || defaultTimeout
-
-            });
-        }
 
         var connectUser;
         self.connectUser = function () {
@@ -843,8 +844,8 @@
                 var foundServers = responses[1];
 
                 var servers = credentials.Servers.slice(0);
-                mergeServers(servers, foundServers);
-                mergeServers(servers, connectServers);
+                mergeServers(credentialProvider, servers, foundServers);
+                mergeServers(credentialProvider, servers, connectServers);
 
                 servers = filterServers(servers, connectServers);
 
@@ -1068,7 +1069,7 @@
             if (index >= tests.length) {
 
                 console.log('Tested all connection modes. Failing server connection.');
-                resolveFailure(resolve);
+                resolveFailure(self, resolve);
                 return;
             }
 
@@ -1256,7 +1257,7 @@
 
                 function onFail() {
                     console.log('connectToAddress ' + address + ' failed');
-                    resolveFailure(resolve);
+                    resolveFailure(self, resolve);
                 }
 
                 tryConnect(address, defaultTimeout).then(function (publicInfo) {
