@@ -27,7 +27,7 @@
 
     function MultiServerSync() {
 
-    };
+    }
 
     MultiServerSync.prototype.sync = function (connectionManager, options) {
 

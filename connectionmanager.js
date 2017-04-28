@@ -205,27 +205,23 @@
         });
     }
 
+    function getConnectUrl(handler) {
+        return 'https://connect.emby.media/service/' + handler;
+    }
+
     var ConnectionManager = function (credentialProvider, appName, appVersion, deviceName, deviceId, capabilities, devicePixelRatio) {
 
         console.log('Begin ConnectionManager constructor');
 
         var self = this;
-        var apiClients = [];
+        this._apiClients = [];
 
         var connectUser;
         self.connectUser = function () {
             return connectUser;
         };
 
-        var minServerVersion = '3.1.5';
-        self.minServerVersion = function (val) {
-
-            if (val) {
-                minServerVersion = val;
-            }
-
-            return minServerVersion;
-        };
+        self.minServerVersion = '3.1.5';
 
         self.appVersion = function () {
             return appVersion;
@@ -250,17 +246,6 @@
         self.connectToken = function () {
 
             return credentialProvider.credentials().ConnectAccessToken;
-        };
-
-        self.getApiClients = function () {
-
-            var servers = self.getSavedServers();
-
-            servers.map(function (s) {
-                self.getOrCreateApiClient(s.Id);
-            });
-
-            return apiClients;
         };
 
         self.getServerInfo = function (id) {
@@ -308,7 +293,7 @@
 
         self.addApiClient = function (apiClient) {
 
-            apiClients.push(apiClient);
+            self._apiClients.push(apiClient);
 
             var existingServers = credentialProvider.credentials().Servers.filter(function (s) {
 
@@ -381,7 +366,7 @@
 
                 apiClient = new apiClientFactory(url, appName, appVersion, deviceName, deviceId, devicePixelRatio);
 
-                apiClients.push(apiClient);
+                self._apiClients.push(apiClient);
 
                 apiClient.serverInfo(server);
 
@@ -511,10 +496,6 @@
             } else {
                 return Promise.resolve();
             }
-        }
-
-        function getConnectUrl(handler) {
-            return 'https://connect.emby.media/service/' + handler;
         }
 
         function getConnectUser(userId, accessToken) {
@@ -712,9 +693,9 @@
             console.log('begin connectionManager loguot');
             var promises = [];
 
-            for (var i = 0, length = apiClients.length; i < length; i++) {
+            for (var i = 0, length = self._apiClients.length; i < length; i++) {
 
-                var apiClient = apiClients[i];
+                var apiClient = self._apiClients[i];
 
                 if (apiClient.accessToken()) {
                     promises.push(logoutOfServer(apiClient));
@@ -1379,27 +1360,6 @@
             });
         };
 
-        self.getApiClient = function (item) {
-
-            if (!item) {
-                throw new Error('item or serverId cannot be null');
-            }
-
-            // Accept string + object
-            if (item.ServerId) {
-                item = item.ServerId;
-            }
-
-            return apiClients.filter(function (a) {
-
-                var serverInfo = a.serverInfo();
-
-                // We have to keep this hack in here because of the addApiClient method
-                return !serverInfo || serverInfo.Id === item;
-
-            })[0];
-        };
-
         self.getUserInvitations = function () {
 
             var connectToken = self.connectToken();
@@ -1714,6 +1674,47 @@
         };
 
         return self;
+    };
+
+    ConnectionManager.prototype.getApiClients = function () {
+
+        var servers = this.getSavedServers();
+
+        for (var i = 0, length = servers.length; i < length; i++) {
+            this.getOrCreateApiClient(servers[i].Id);
+        }
+
+        return this._apiClients;
+    };
+
+    ConnectionManager.prototype.getApiClient = function (item) {
+
+        if (!item) {
+            throw new Error('item or serverId cannot be null');
+        }
+
+        // Accept string + object
+        if (item.ServerId) {
+            item = item.ServerId;
+        }
+
+        return this._apiClients.filter(function (a) {
+
+            var serverInfo = a.serverInfo();
+
+            // We have to keep this hack in here because of the addApiClient method
+            return !serverInfo || serverInfo.Id === item;
+
+        })[0];
+    };
+
+    ConnectionManager.prototype.minServerVersion = function (val) {
+
+        if (val) {
+            this._minServerVersion = val;
+        }
+
+        return this._minServerVersion;
     };
 
     return {

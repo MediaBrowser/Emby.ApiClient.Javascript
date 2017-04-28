@@ -1,7 +1,7 @@
 ﻿define(['events', 'appStorage'], function (events, appStorage) {
     'use strict';
 
-    function ensure (instance, data) {
+    function ensure(instance, data) {
 
         if (!instance._credentials) {
 
@@ -28,7 +28,7 @@
     function Credentials(key) {
 
         this.key = key || 'servercredentials3';
-    };
+    }
 
     Credentials.prototype.clear = function () {
         this._credentials = null;
