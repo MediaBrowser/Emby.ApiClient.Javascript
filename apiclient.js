@@ -2669,7 +2669,7 @@
                 });
             });
         };
-    };
+    }
 
     /**
      * Updates a user's password
