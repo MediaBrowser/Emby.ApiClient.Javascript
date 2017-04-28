@@ -1,13 +1,33 @@
 ﻿define(['events'], function (events) {
     'use strict';
 
+    function redetectBitrate(instance) {
+        stopBitrateDetection(instance);
+
+        if (instance.accessToken() && instance.enableAutomaticBitrateDetection !== false) {
+            setTimeout(redetectBitrateInternal.bind(instance), 6000);
+        }
+    }
+
+    function redetectBitrateInternal() {
+        if (this.accessToken()) {
+            this.detectBitrate();
+        }
+    }
+
+    function stopBitrateDetection(instance) {
+        if (instance.detectTimeout) {
+            clearTimeout(instance.detectTimeout);
+        }
+    }
+
     /**
      * Creates a new api client instance
      * @param {String} serverAddress
      * @param {String} clientName s
      * @param {String} applicationVersion 
      */
-    return function (serverAddress, clientName, applicationVersion, deviceName, deviceId, devicePixelRatio) {
+    function ApiClient(serverAddress, clientName, applicationVersion, deviceName, deviceId, devicePixelRatio) {
 
         if (!serverAddress) {
             throw new Error("Must supply a serverAddress");
@@ -24,25 +44,6 @@
         var serverInfo = {};
         var lastDetectedBitrate;
         var lastDetectedBitrateTime;
-
-        var detectTimeout;
-        function redetectBitrate() {
-            stopBitrateDetection();
-
-            if (self.accessToken() && self.enableAutomaticBitrateDetection !== false) {
-                setTimeout(redetectBitrateInternal, 6000);
-            }
-        }
-
-        function redetectBitrateInternal() {
-            self.detectBitrate();
-        }
-
-        function stopBitrateDetection() {
-            if (detectTimeout) {
-                clearTimeout(detectTimeout);
-            }
-        }
 
         /**
          * Gets the server address.
@@ -66,7 +67,7 @@
                     events.trigger(this, 'serveraddresschanged');
                 }
 
-                redetectBitrate();
+                redetectBitrate(self);
             }
 
             return serverAddress;
@@ -158,7 +159,7 @@
 
             serverInfo.AccessToken = accessKey;
             serverInfo.UserId = userId;
-            redetectBitrate();
+            redetectBitrate(self);
         };
 
         self.encodeName = function (name) {
@@ -847,7 +848,7 @@
 
         self.logout = function () {
 
-            stopBitrateDetection();
+            stopBitrateDetection(self);
             self.closeWebSocket();
 
             var done = function () {
@@ -2660,7 +2661,7 @@
                             self.onAuthenticated(self, result);
                         }
 
-                        redetectBitrate();
+                        redetectBitrate(self);
 
                         resolve(result);
 
@@ -2668,1076 +2669,1042 @@
                 });
             });
         };
+    };
 
-        /**
-         * Updates a user's password
-         * @param {String} userId
-         * @param {String} currentPassword
-         * @param {String} newPassword
-         */
-        self.updateUserPassword = function (userId, currentPassword, newPassword) {
+    /**
+     * Updates a user's password
+     * @param {String} userId
+     * @param {String} currentPassword
+     * @param {String} newPassword
+     */
+    ApiClient.prototype.updateUserPassword = function (userId, currentPassword, newPassword) {
 
-            return new Promise(function (resolve, reject) {
-
-                if (!userId) {
-                    reject();
-                    return;
-                }
-
-                var url = self.getUrl("Users/" + userId + "/Password");
-
-                require(["cryptojs-sha1"], function () {
-
-                    self.ajax({
-                        type: "POST",
-                        url: url,
-                        data: {
-                            currentPassword: CryptoJS.SHA1(currentPassword).toString(),
-                            newPassword: CryptoJS.SHA1(newPassword).toString()
-                        }
-                    }).then(resolve, reject);
-                });
-            });
-        };
-
-        /**
-         * Updates a user's easy password
-         * @param {String} userId
-         * @param {String} newPassword
-         */
-        self.updateEasyPassword = function (userId, newPassword) {
-
-            return new Promise(function (resolve, reject) {
-
-                if (!userId) {
-                    reject();
-                    return;
-                }
-
-                var url = self.getUrl("Users/" + userId + "/EasyPassword");
-
-                require(["cryptojs-sha1"], function () {
-
-                    self.ajax({
-                        type: "POST",
-                        url: url,
-                        data: {
-                            newPassword: CryptoJS.SHA1(newPassword).toString()
-                        }
-                    }).then(resolve, reject);
-                });
-            });
-        };
-
-        /**
-        * Resets a user's password
-        * @param {String} userId
-        */
-        self.resetUserPassword = function (userId) {
+        return new Promise(function (resolve, reject) {
 
             if (!userId) {
-                throw new Error("null userId");
+                reject();
+                return;
             }
 
             var url = self.getUrl("Users/" + userId + "/Password");
+            var instance = this;
 
-            var postData = {
+            require(["cryptojs-sha1"], function () {
 
-            };
-
-            postData.resetPassword = true;
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: postData
+                instance.ajax({
+                    type: "POST",
+                    url: url,
+                    data: {
+                        currentPassword: CryptoJS.SHA1(currentPassword).toString(),
+                        newPassword: CryptoJS.SHA1(newPassword).toString()
+                    }
+                }).then(resolve, reject);
             });
-        };
+        });
+    };
 
-        self.resetEasyPassword = function (userId) {
+    /**
+     * Updates a user's easy password
+     * @param {String} userId
+     * @param {String} newPassword
+     */
+    ApiClient.prototype.updateEasyPassword = function (userId, newPassword) {
+
+        return new Promise(function (resolve, reject) {
 
             if (!userId) {
-                throw new Error("null userId");
+                reject();
+                return;
             }
 
-            var url = self.getUrl("Users/" + userId + "/EasyPassword");
+            var url = this.getUrl("Users/" + userId + "/EasyPassword");
+            var instance = this;
 
-            var postData = {
+            require(["cryptojs-sha1"], function () {
 
-            };
-
-            postData.resetPassword = true;
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: postData
+                instance.ajax({
+                    type: "POST",
+                    url: url,
+                    data: {
+                        newPassword: CryptoJS.SHA1(newPassword).toString()
+                    }
+                }).then(resolve, reject);
             });
-        };
-
-        /**
-         * Updates the server's configuration
-         * @param {Object} configuration
-         */
-        self.updateServerConfiguration = function (configuration) {
-
-            if (!configuration) {
-                throw new Error("null configuration");
-            }
-
-            var url = self.getUrl("System/Configuration");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(configuration),
-                contentType: "application/json"
-            });
-        };
-
-        self.updateNamedConfiguration = function (name, configuration) {
-
-            if (!configuration) {
-                throw new Error("null configuration");
-            }
-
-            var url = self.getUrl("System/Configuration/" + name);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(configuration),
-                contentType: "application/json"
-            });
-        };
-
-        self.updateItem = function (item) {
-
-            if (!item) {
-                throw new Error("null item");
-            }
-
-            var url = self.getUrl("Items/" + item.Id);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(item),
-                contentType: "application/json"
-            });
-        };
-
-        /**
-         * Updates plugin security info
-         */
-        self.updatePluginSecurityInfo = function (info) {
-
-            var url = self.getUrl("Plugins/SecurityInfo");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(info),
-                contentType: "application/json"
-            });
-        };
-
-        /**
-         * Creates a user
-         * @param {Object} user
-         */
-        self.createUser = function (name) {
-
-            var url = self.getUrl("Users/New");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: {
-                    Name: name
-                },
-                dataType: "json"
-            });
-        };
-
-        /**
-         * Updates a user
-         * @param {Object} user
-         */
-        self.updateUser = function (user) {
-
-            if (!user) {
-                throw new Error("null user");
-            }
-
-            var url = self.getUrl("Users/" + user.Id);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(user),
-                contentType: "application/json"
-            });
-        };
-
-        self.updateUserPolicy = function (userId, policy) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-            if (!policy) {
-                throw new Error("null policy");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Policy");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(policy),
-                contentType: "application/json"
-            });
-        };
-
-        self.updateUserConfiguration = function (userId, configuration) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-            if (!configuration) {
-                throw new Error("null configuration");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Configuration");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(configuration),
-                contentType: "application/json"
-            });
-        };
-
-        /**
-         * Updates the Triggers for a ScheduledTask
-         * @param {String} id
-         * @param {Object} triggers
-         */
-        self.updateScheduledTaskTriggers = function (id, triggers) {
-
-            if (!id) {
-                throw new Error("null id");
-            }
-
-            if (!triggers) {
-                throw new Error("null triggers");
-            }
-
-            var url = self.getUrl("ScheduledTasks/" + id + "/Triggers");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(triggers),
-                contentType: "application/json"
-            });
-        };
-
-        /**
-         * Updates a plugin's configuration
-         * @param {String} Id
-         * @param {Object} configuration
-         */
-        self.updatePluginConfiguration = function (id, configuration) {
-
-            if (!id) {
-                throw new Error("null Id");
-            }
-
-            if (!configuration) {
-                throw new Error("null configuration");
-            }
-
-            var url = self.getUrl("Plugins/" + id + "/Configuration");
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                data: JSON.stringify(configuration),
-                contentType: "application/json"
-            });
-        };
-
-        self.getAncestorItems = function (itemId, userId) {
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("Items/" + itemId + "/Ancestors", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets items based on a query, typically for children of a folder
-         * @param {String} userId
-         * @param {Object} options
-         * Options accepts the following properties:
-         * itemId - Localize the search to a specific folder (root if omitted)
-         * startIndex - Use for paging
-         * limit - Use to limit results to a certain number of items
-         * filter - Specify one or more ItemFilters, comma delimeted (see server-side enum)
-         * sortBy - Specify an ItemSortBy (comma-delimeted list see server-side enum)
-         * sortOrder - ascending/descending
-         * fields - additional fields to include aside from basic info. This is a comma delimited list. See server-side enum ItemFields.
-         * index - the name of the dynamic, localized index function
-         * dynamicSortBy - the name of the dynamic localized sort function
-         * recursive - Whether or not the query should be recursive
-         * searchTerm - search term to use as a filter
-         */
-        self.getItems = function (userId, options) {
-
-            var url;
-
-            if ((typeof userId).toString().toLowerCase() === 'string') {
-                url = self.getUrl("Users/" + userId + "/Items", options);
-            } else {
-
-                url = self.getUrl("Items", options);
-            }
-
-            return self.getJSON(url);
-        };
-
-        self.getMovieRecommendations = function (options) {
-
-            return self.getJSON(self.getUrl('Movies/Recommendations', options));
-        };
-
-        self.getUpcomingEpisodes = function (options) {
-
-            return self.getJSON(self.getUrl('Shows/Upcoming', options));
-        };
-
-        self.getChannels = function (query) {
-
-            return self.getJSON(self.getUrl("Channels", query || {}));
-        };
-
-        self.getLatestChannelItems = function (query) {
-
-            return self.getJSON(self.getUrl("Channels/Items/Latest", query));
-        };
-
-        self.getUserViews = function (options, userId) {
-
-            options = options || {};
-
-            var url = self.getUrl("Users/" + (userId || self.getCurrentUserId()) + "/Views", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-            Gets artists from an item
-        */
-        self.getArtists = function (userId, options) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            options = options || {};
-            options.userId = userId;
-
-            var url = self.getUrl("Artists", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-            Gets artists from an item
-        */
-        self.getAlbumArtists = function (userId, options) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            options = options || {};
-            options.userId = userId;
-
-            var url = self.getUrl("Artists/AlbumArtists", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-            Gets genres from an item
-        */
-        self.getGenres = function (userId, options) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            options = options || {};
-            options.userId = userId;
-
-            var url = self.getUrl("Genres", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getMusicGenres = function (userId, options) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            options = options || {};
-            options.userId = userId;
-
-            var url = self.getUrl("MusicGenres", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getGameGenres = function (userId, options) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            options = options || {};
-            options.userId = userId;
-
-            var url = self.getUrl("GameGenres", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-            Gets people from an item
-        */
-        self.getPeople = function (userId, options) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            options = options || {};
-            options.userId = userId;
-
-            var url = self.getUrl("Persons", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-            Gets studios from an item
-        */
-        self.getStudios = function (userId, options) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            options = options || {};
-            options.userId = userId;
-
-            var url = self.getUrl("Studios", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets local trailers for an item
-         */
-        self.getLocalTrailers = function (userId, itemId) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Items/" + itemId + "/LocalTrailers");
-
-            return self.getJSON(url);
-        };
-
-        self.getGameSystems = function () {
-
-            var options = {};
-
-            var userId = self.getCurrentUserId();
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("Games/SystemSummaries", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getAdditionalVideoParts = function (userId, itemId) {
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("Videos/" + itemId + "/AdditionalParts", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getThemeMedia = function (userId, itemId, inherit) {
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            options.InheritFromParent = inherit || false;
-
-            var url = self.getUrl("Items/" + itemId + "/ThemeMedia", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getSearchHints = function (options) {
-
-            var url = self.getUrl("Search/Hints", options);
-
-            return self.getJSON(url).then(function (result) {
-                var serverId = self.serverId();
-                result.SearchHints.forEach(function (i) {
-                    i.ServerId = serverId;
-                });
-                return result;
-            });
-        };
-
-        /**
-         * Gets special features for an item
-         */
-        self.getSpecialFeatures = function (userId, itemId) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Items/" + itemId + "/SpecialFeatures");
-
-            return self.getJSON(url);
-        };
-
-        self.getDateParamValue = function (date) {
-
-            function formatDigit(i) {
-                return i < 10 ? "0" + i : i;
-            }
-
-            var d = date;
-
-            return "" + d.getFullYear() + formatDigit(d.getMonth() + 1) + formatDigit(d.getDate()) + formatDigit(d.getHours()) + formatDigit(d.getMinutes()) + formatDigit(d.getSeconds());
-        };
-
-        self.markPlayed = function (userId, itemId, date) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var options = {};
-
-            if (date) {
-                options.DatePlayed = self.getDateParamValue(date);
-            }
-
-            var url = self.getUrl("Users/" + userId + "/PlayedItems/" + itemId, options);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                dataType: "json"
-            });
-        };
-
-        self.markUnplayed = function (userId, itemId) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/PlayedItems/" + itemId);
-
-            return self.ajax({
-                type: "DELETE",
-                url: url,
-                dataType: "json"
-            });
-        };
-
-        /**
-         * Updates a user's favorite status for an item.
-         * @param {String} userId
-         * @param {String} itemId
-         * @param {Boolean} isFavorite
-         */
-        self.updateFavoriteStatus = function (userId, itemId, isFavorite) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/FavoriteItems/" + itemId);
-
-            var method = isFavorite ? "POST" : "DELETE";
-
-            return self.ajax({
-                type: method,
-                url: url,
-                dataType: "json"
-            });
-        };
-
-        /**
-         * Updates a user's personal rating for an item
-         * @param {String} userId
-         * @param {String} itemId
-         * @param {Boolean} likes
-         */
-        self.updateUserItemRating = function (userId, itemId, likes) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Items/" + itemId + "/Rating", {
-                likes: likes
-            });
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-                dataType: "json"
-            });
-        };
-
-        self.getItemCounts = function (userId) {
-
-            var options = {};
-
-            if (userId) {
-                options.userId = userId;
-            }
-
-            var url = self.getUrl("Items/Counts", options);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Clears a user's personal rating for an item
-         * @param {String} userId
-         * @param {String} itemId
-         */
-        self.clearUserItemRating = function (userId, itemId) {
-
-            if (!userId) {
-                throw new Error("null userId");
-            }
-
-            if (!itemId) {
-                throw new Error("null itemId");
-            }
-
-            var url = self.getUrl("Users/" + userId + "/Items/" + itemId + "/Rating");
-
-            return self.ajax({
-                type: "DELETE",
-                url: url,
-                dataType: "json"
-            });
-        };
-
-        /**
-         * Reports the user has started playing something
-         * @param {String} userId
-         * @param {String} itemId
-         */
-        self.reportPlaybackStart = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            stopBitrateDetection();
-
-            var url = self.getUrl("Sessions/Playing");
-
-            return self.ajax({
-                type: "POST",
-                data: JSON.stringify(options),
-                contentType: "application/json",
-                url: url
-            });
-        };
-
-        /**
-         * Reports progress viewing an item
-         * @param {String} userId
-         * @param {String} itemId
-         */
-        self.reportPlaybackProgress = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            if (self.isWebSocketOpen()) {
-
-                try {
-                    self.sendWebSocketMessage("ReportPlaybackProgress", JSON.stringify(options));
-                    return Promise.resolve();
-                } catch (err) {
-
-                    // Log and send via http
-                    console.log('Error sending playback progress report: ' + err);
-                }
-            }
-
-            var url = self.getUrl("Sessions/Playing/Progress");
-
-            return self.ajax({
-                type: "POST",
-                data: JSON.stringify(options),
-                contentType: "application/json",
-                url: url
-            });
-        };
-
-        self.reportOfflineActions = function (actions) {
-
-            if (!actions) {
-                throw new Error("null actions");
-            }
-
-            var url = self.getUrl("Sync/OfflineActions");
-
-            return self.ajax({
-                type: "POST",
-                data: JSON.stringify(actions),
-                contentType: "application/json",
-                url: url
-            });
-        };
-
-        self.syncData = function (data) {
-
-            if (!data) {
-                throw new Error("null data");
-            }
-
-            var url = self.getUrl("Sync/Data");
-
-            return self.ajax({
-                type: "POST",
-                data: JSON.stringify(data),
-                contentType: "application/json",
-                url: url,
-                dataType: "json"
-            });
-        };
-
-        self.getReadySyncItems = function (deviceId) {
-
-            if (!deviceId) {
-                throw new Error("null deviceId");
-            }
-
-            var url = self.getUrl("Sync/Items/Ready", {
-                TargetId: deviceId
-            });
-
-            return self.getJSON(url);
-        };
-
-        self.reportSyncJobItemTransferred = function (syncJobItemId) {
-
-            if (!syncJobItemId) {
-                throw new Error("null syncJobItemId");
-            }
-
-            var url = self.getUrl("Sync/JobItems/" + syncJobItemId + "/Transferred");
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        self.cancelSyncItems = function (itemIds, targetId) {
-
-            if (!itemIds) {
-                throw new Error("null itemIds");
-            }
-
-            var url = self.getUrl("Sync/" + (targetId || self.deviceId()) + "/Items", {
-                ItemIds: itemIds.join(',')
-            });
-
-            return self.ajax({
-                type: "DELETE",
-                url: url
-            });
-        };
-
-        /**
-         * Reports a user has stopped playing an item
-         * @param {String} userId
-         * @param {String} itemId
-         */
-        self.reportPlaybackStopped = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            redetectBitrate();
-
-            var url = self.getUrl("Sessions/Playing/Stopped");
-
-            return self.ajax({
-                type: "POST",
-                data: JSON.stringify(options),
-                contentType: "application/json",
-                url: url
-            });
-        };
-
-        self.sendPlayCommand = function (sessionId, options) {
-
-            if (!sessionId) {
-                throw new Error("null sessionId");
-            }
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            var url = self.getUrl("Sessions/" + sessionId + "/Playing", options);
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        self.sendCommand = function (sessionId, command) {
-
-            if (!sessionId) {
-                throw new Error("null sessionId");
-            }
-
-            if (!command) {
-                throw new Error("null command");
-            }
-
-            var url = self.getUrl("Sessions/" + sessionId + "/Command");
-
-            var ajaxOptions = {
-                type: "POST",
-                url: url
-            };
-
-            ajaxOptions.data = JSON.stringify(command);
-            ajaxOptions.contentType = "application/json";
-
-            return self.ajax(ajaxOptions);
-        };
-
-        self.sendMessageCommand = function (sessionId, options) {
-
-            if (!sessionId) {
-                throw new Error("null sessionId");
-            }
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            var url = self.getUrl("Sessions/" + sessionId + "/Message", options);
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        self.sendPlayStateCommand = function (sessionId, command, options) {
-
-            if (!sessionId) {
-                throw new Error("null sessionId");
-            }
-
-            if (!command) {
-                throw new Error("null command");
-            }
-
-            var url = self.getUrl("Sessions/" + sessionId + "/Playing/" + command, options || {});
-
-            return self.ajax({
-                type: "POST",
-                url: url
-            });
-        };
-
-        self.createPackageReview = function (review) {
-
-            var url = self.getUrl("Packages/Reviews/" + review.id, review);
-
-            return self.ajax({
-                type: "POST",
-                url: url,
-            });
-        };
-
-        self.getPackageReviews = function (packageId, minRating, maxRating, limit) {
-
-            if (!packageId) {
-                throw new Error("null packageId");
-            }
-
-            var options = {};
-
-            if (minRating) {
-                options.MinRating = minRating;
-            }
-            if (maxRating) {
-                options.MaxRating = maxRating;
-            }
-            if (limit) {
-                options.Limit = limit;
-            }
-
-            var url = self.getUrl("Packages/" + packageId + "/Reviews", options);
-
-            return self.getJSON(url);
-        };
-
-        self.getSmartMatchInfos = function (options) {
-
-            options = options || {};
-
-            var url = self.getUrl("Library/FileOrganizations/SmartMatches", options);
-
-            return self.ajax({
-                type: "GET",
-                url: url,
-                dataType: "json"
-            });
-        };
-
-        self.deleteSmartMatchEntries = function (entries) {
-
-            var url = self.getUrl("Library/FileOrganizations/SmartMatches/Delete");
-
-            var postData = {
-                Entries: entries
-            };
-
-            return self.ajax({
-
-                type: "POST",
-                url: url,
-                data: JSON.stringify(postData),
-                contentType: "application/json"
-            });
-        };
-
-        self.createPin = function () {
-
-            return self.ajax({
-                type: "POST",
-                url: self.getUrl('Auth/Pin'),
-                data: {
-                    deviceId: self.deviceId(),
-                    appName: self.appName()
-                },
-                dataType: "json"
-            });
-        };
-
-        self.getLatestItems = function (options) {
-
-            options = options || {};
-            return self.getJSON(self.getUrl('Users/' + self.getCurrentUserId() + '/Items/Latest', options));
-        };
-
-        function exchangePin(pinInfo) {
-
-            return self.ajax({
-                type: 'POST',
-                url: self.getUrl('Auth/Pin/Exchange'),
-                data: {
-                    deviceId: pinInfo.DeviceId,
-                    pin: pinInfo.Pin
-                },
-                dataType: 'json'
-            });
+        });
+    };
+
+    /**
+    * Resets a user's password
+    * @param {String} userId
+    */
+    ApiClient.prototype.resetUserPassword = function (userId) {
+
+        if (!userId) {
+            throw new Error("null userId");
         }
 
-        self.exchangePin = function (pinInfo) {
+        var url = this.getUrl("Users/" + userId + "/Password");
 
-            return exchangePin(pinInfo).then(function (result) {
+        var postData = {
 
-                if (self.onAuthenticated) {
-                    self.onAuthenticated(self, result);
-                }
-
-                return result;
-            });
         };
+
+        postData.resetPassword = true;
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: postData
+        });
     };
+
+    ApiClient.prototype.resetEasyPassword = function (userId) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/EasyPassword");
+
+        var postData = {
+
+        };
+
+        postData.resetPassword = true;
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: postData
+        });
+    };
+
+    /**
+     * Updates the server's configuration
+     * @param {Object} configuration
+     */
+    ApiClient.prototype.updateServerConfiguration = function (configuration) {
+
+        if (!configuration) {
+            throw new Error("null configuration");
+        }
+
+        var url = this.getUrl("System/Configuration");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(configuration),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.updateNamedConfiguration = function (name, configuration) {
+
+        if (!configuration) {
+            throw new Error("null configuration");
+        }
+
+        var url = this.getUrl("System/Configuration/" + name);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(configuration),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.updateItem = function (item) {
+
+        if (!item) {
+            throw new Error("null item");
+        }
+
+        var url = this.getUrl("Items/" + item.Id);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(item),
+            contentType: "application/json"
+        });
+    };
+
+    /**
+     * Updates plugin security info
+     */
+    ApiClient.prototype.updatePluginSecurityInfo = function (info) {
+
+        var url = this.getUrl("Plugins/SecurityInfo");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(info),
+            contentType: "application/json"
+        });
+    };
+
+    /**
+     * Creates a user
+     * @param {Object} user
+     */
+    ApiClient.prototype.createUser = function (name) {
+
+        var url = this.getUrl("Users/New");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: {
+                Name: name
+            },
+            dataType: "json"
+        });
+    };
+
+    /**
+     * Updates a user
+     * @param {Object} user
+     */
+    ApiClient.prototype.updateUser = function (user) {
+
+        if (!user) {
+            throw new Error("null user");
+        }
+
+        var url = this.getUrl("Users/" + user.Id);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(user),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.updateUserPolicy = function (userId, policy) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+        if (!policy) {
+            throw new Error("null policy");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Policy");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(policy),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.updateUserConfiguration = function (userId, configuration) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+        if (!configuration) {
+            throw new Error("null configuration");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Configuration");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(configuration),
+            contentType: "application/json"
+        });
+    };
+
+    /**
+     * Updates the Triggers for a ScheduledTask
+     * @param {String} id
+     * @param {Object} triggers
+     */
+    ApiClient.prototype.updateScheduledTaskTriggers = function (id, triggers) {
+
+        if (!id) {
+            throw new Error("null id");
+        }
+
+        if (!triggers) {
+            throw new Error("null triggers");
+        }
+
+        var url = this.getUrl("ScheduledTasks/" + id + "/Triggers");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(triggers),
+            contentType: "application/json"
+        });
+    };
+
+    /**
+     * Updates a plugin's configuration
+     * @param {String} Id
+     * @param {Object} configuration
+     */
+    ApiClient.prototype.updatePluginConfiguration = function (id, configuration) {
+
+        if (!id) {
+            throw new Error("null Id");
+        }
+
+        if (!configuration) {
+            throw new Error("null configuration");
+        }
+
+        var url = this.getUrl("Plugins/" + id + "/Configuration");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: JSON.stringify(configuration),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.getAncestorItems = function (itemId, userId) {
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("Items/" + itemId + "/Ancestors", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets items based on a query, typically for children of a folder
+     * @param {String} userId
+     * @param {Object} options
+     * Options accepts the following properties:
+     * itemId - Localize the search to a specific folder (root if omitted)
+     * startIndex - Use for paging
+     * limit - Use to limit results to a certain number of items
+     * filter - Specify one or more ItemFilters, comma delimeted (see server-side enum)
+     * sortBy - Specify an ItemSortBy (comma-delimeted list see server-side enum)
+     * sortOrder - ascending/descending
+     * fields - additional fields to include aside from basic info. This is a comma delimited list. See server-side enum ItemFields.
+     * index - the name of the dynamic, localized index function
+     * dynamicSortBy - the name of the dynamic localized sort function
+     * recursive - Whether or not the query should be recursive
+     * searchTerm - search term to use as a filter
+     */
+    ApiClient.prototype.getItems = function (userId, options) {
+
+        var url;
+
+        if ((typeof userId).toString().toLowerCase() === 'string') {
+            url = this.getUrl("Users/" + userId + "/Items", options);
+        } else {
+
+            url = this.getUrl("Items", options);
+        }
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getMovieRecommendations = function (options) {
+
+        return this.getJSON(this.getUrl('Movies/Recommendations', options));
+    };
+
+    ApiClient.prototype.getUpcomingEpisodes = function (options) {
+
+        return this.getJSON(this.getUrl('Shows/Upcoming', options));
+    };
+
+    ApiClient.prototype.getChannels = function (query) {
+
+        return this.getJSON(this.getUrl("Channels", query || {}));
+    };
+
+    ApiClient.prototype.getLatestChannelItems = function (query) {
+
+        return this.getJSON(this.getUrl("Channels/Items/Latest", query));
+    };
+
+    ApiClient.prototype.getUserViews = function (options, userId) {
+
+        options = options || {};
+
+        var url = this.getUrl("Users/" + (userId || this.getCurrentUserId()) + "/Views", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+        Gets artists from an item
+    */
+    ApiClient.prototype.getArtists = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        var url = this.getUrl("Artists", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+        Gets artists from an item
+    */
+    ApiClient.prototype.getAlbumArtists = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        var url = this.getUrl("Artists/AlbumArtists", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+        Gets genres from an item
+    */
+    ApiClient.prototype.getGenres = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        var url = this.getUrl("Genres", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getMusicGenres = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        var url = this.getUrl("MusicGenres", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getGameGenres = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        var url = this.getUrl("GameGenres", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+        Gets people from an item
+    */
+    ApiClient.prototype.getPeople = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        var url = this.getUrl("Persons", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+        Gets studios from an item
+    */
+    ApiClient.prototype.getStudios = function (userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        var url = this.getUrl("Studios", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Gets local trailers for an item
+     */
+    ApiClient.prototype.getLocalTrailers = function (userId, itemId) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Items/" + itemId + "/LocalTrailers");
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getGameSystems = function () {
+
+        var options = {};
+
+        var userId = this.getCurrentUserId();
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("Games/SystemSummaries", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getAdditionalVideoParts = function (userId, itemId) {
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("Videos/" + itemId + "/AdditionalParts", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getThemeMedia = function (userId, itemId, inherit) {
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        options.InheritFromParent = inherit || false;
+
+        var url = this.getUrl("Items/" + itemId + "/ThemeMedia", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getSearchHints = function (options) {
+
+        var url = this.getUrl("Search/Hints", options);
+
+        return this.getJSON(url).then(function (result) {
+            var serverId = this.serverId();
+            result.SearchHints.forEach(function (i) {
+                i.ServerId = serverId;
+            });
+            return result;
+        });
+    };
+
+    /**
+     * Gets special features for an item
+     */
+    ApiClient.prototype.getSpecialFeatures = function (userId, itemId) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Items/" + itemId + "/SpecialFeatures");
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getDateParamValue = function (date) {
+
+        function formatDigit(i) {
+            return i < 10 ? "0" + i : i;
+        }
+
+        var d = date;
+
+        return "" + d.getFullYear() + formatDigit(d.getMonth() + 1) + formatDigit(d.getDate()) + formatDigit(d.getHours()) + formatDigit(d.getMinutes()) + formatDigit(d.getSeconds());
+    };
+
+    ApiClient.prototype.markPlayed = function (userId, itemId, date) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var options = {};
+
+        if (date) {
+            options.DatePlayed = this.getDateParamValue(date);
+        }
+
+        var url = this.getUrl("Users/" + userId + "/PlayedItems/" + itemId, options);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            dataType: "json"
+        });
+    };
+
+    ApiClient.prototype.markUnplayed = function (userId, itemId) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/PlayedItems/" + itemId);
+
+        return this.ajax({
+            type: "DELETE",
+            url: url,
+            dataType: "json"
+        });
+    };
+
+    /**
+     * Updates a user's favorite status for an item.
+     * @param {String} userId
+     * @param {String} itemId
+     * @param {Boolean} isFavorite
+     */
+    ApiClient.prototype.updateFavoriteStatus = function (userId, itemId, isFavorite) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/FavoriteItems/" + itemId);
+
+        var method = isFavorite ? "POST" : "DELETE";
+
+        return this.ajax({
+            type: method,
+            url: url,
+            dataType: "json"
+        });
+    };
+
+    /**
+     * Updates a user's personal rating for an item
+     * @param {String} userId
+     * @param {String} itemId
+     * @param {Boolean} likes
+     */
+    ApiClient.prototype.updateUserItemRating = function (userId, itemId, likes) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Items/" + itemId + "/Rating", {
+            likes: likes
+        });
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            dataType: "json"
+        });
+    };
+
+    ApiClient.prototype.getItemCounts = function (userId) {
+
+        var options = {};
+
+        if (userId) {
+            options.userId = userId;
+        }
+
+        var url = this.getUrl("Items/Counts", options);
+
+        return this.getJSON(url);
+    };
+
+    /**
+     * Clears a user's personal rating for an item
+     * @param {String} userId
+     * @param {String} itemId
+     */
+    ApiClient.prototype.clearUserItemRating = function (userId, itemId) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!itemId) {
+            throw new Error("null itemId");
+        }
+
+        var url = this.getUrl("Users/" + userId + "/Items/" + itemId + "/Rating");
+
+        return this.ajax({
+            type: "DELETE",
+            url: url,
+            dataType: "json"
+        });
+    };
+
+    /**
+     * Reports the user has started playing something
+     * @param {String} userId
+     * @param {String} itemId
+     */
+    ApiClient.prototype.reportPlaybackStart = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        stopBitrateDetection(this);
+
+        var url = this.getUrl("Sessions/Playing");
+
+        return this.ajax({
+            type: "POST",
+            data: JSON.stringify(options),
+            contentType: "application/json",
+            url: url
+        });
+    };
+
+    /**
+     * Reports progress viewing an item
+     * @param {String} userId
+     * @param {String} itemId
+     */
+    ApiClient.prototype.reportPlaybackProgress = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        if (this.isWebSocketOpen()) {
+
+            try {
+                this.sendWebSocketMessage("ReportPlaybackProgress", JSON.stringify(options));
+                return Promise.resolve();
+            } catch (err) {
+
+                // Log and send via http
+                console.log('Error sending playback progress report: ' + err);
+            }
+        }
+
+        var url = this.getUrl("Sessions/Playing/Progress");
+
+        return this.ajax({
+            type: "POST",
+            data: JSON.stringify(options),
+            contentType: "application/json",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.reportOfflineActions = function (actions) {
+
+        if (!actions) {
+            throw new Error("null actions");
+        }
+
+        var url = this.getUrl("Sync/OfflineActions");
+
+        return this.ajax({
+            type: "POST",
+            data: JSON.stringify(actions),
+            contentType: "application/json",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.syncData = function (data) {
+
+        if (!data) {
+            throw new Error("null data");
+        }
+
+        var url = this.getUrl("Sync/Data");
+
+        return this.ajax({
+            type: "POST",
+            data: JSON.stringify(data),
+            contentType: "application/json",
+            url: url,
+            dataType: "json"
+        });
+    };
+
+    ApiClient.prototype.getReadySyncItems = function (deviceId) {
+
+        if (!deviceId) {
+            throw new Error("null deviceId");
+        }
+
+        var url = this.getUrl("Sync/Items/Ready", {
+            TargetId: deviceId
+        });
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.reportSyncJobItemTransferred = function (syncJobItemId) {
+
+        if (!syncJobItemId) {
+            throw new Error("null syncJobItemId");
+        }
+
+        var url = this.getUrl("Sync/JobItems/" + syncJobItemId + "/Transferred");
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.cancelSyncItems = function (itemIds, targetId) {
+
+        if (!itemIds) {
+            throw new Error("null itemIds");
+        }
+
+        var url = this.getUrl("Sync/" + (targetId || this.deviceId()) + "/Items", {
+            ItemIds: itemIds.join(',')
+        });
+
+        return this.ajax({
+            type: "DELETE",
+            url: url
+        });
+    };
+
+    /**
+     * Reports a user has stopped playing an item
+     * @param {String} userId
+     * @param {String} itemId
+     */
+    ApiClient.prototype.reportPlaybackStopped = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        redetectBitrate(this);
+
+        var url = this.getUrl("Sessions/Playing/Stopped");
+
+        return this.ajax({
+            type: "POST",
+            data: JSON.stringify(options),
+            contentType: "application/json",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.sendPlayCommand = function (sessionId, options) {
+
+        if (!sessionId) {
+            throw new Error("null sessionId");
+        }
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        var url = this.getUrl("Sessions/" + sessionId + "/Playing", options);
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.sendCommand = function (sessionId, command) {
+
+        if (!sessionId) {
+            throw new Error("null sessionId");
+        }
+
+        if (!command) {
+            throw new Error("null command");
+        }
+
+        var url = this.getUrl("Sessions/" + sessionId + "/Command");
+
+        var ajaxOptions = {
+            type: "POST",
+            url: url
+        };
+
+        ajaxOptions.data = JSON.stringify(command);
+        ajaxOptions.contentType = "application/json";
+
+        return this.ajax(ajaxOptions);
+    };
+
+    ApiClient.prototype.sendMessageCommand = function (sessionId, options) {
+
+        if (!sessionId) {
+            throw new Error("null sessionId");
+        }
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        var url = this.getUrl("Sessions/" + sessionId + "/Message", options);
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.sendPlayStateCommand = function (sessionId, command, options) {
+
+        if (!sessionId) {
+            throw new Error("null sessionId");
+        }
+
+        if (!command) {
+            throw new Error("null command");
+        }
+
+        var url = this.getUrl("Sessions/" + sessionId + "/Playing/" + command, options || {});
+
+        return this.ajax({
+            type: "POST",
+            url: url
+        });
+    };
+
+    ApiClient.prototype.createPackageReview = function (review) {
+
+        var url = this.getUrl("Packages/Reviews/" + review.id, review);
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+        });
+    };
+
+    ApiClient.prototype.getPackageReviews = function (packageId, minRating, maxRating, limit) {
+
+        if (!packageId) {
+            throw new Error("null packageId");
+        }
+
+        var options = {};
+
+        if (minRating) {
+            options.MinRating = minRating;
+        }
+        if (maxRating) {
+            options.MaxRating = maxRating;
+        }
+        if (limit) {
+            options.Limit = limit;
+        }
+
+        var url = this.getUrl("Packages/" + packageId + "/Reviews", options);
+
+        return this.getJSON(url);
+    };
+
+    ApiClient.prototype.getSmartMatchInfos = function (options) {
+
+        options = options || {};
+
+        var url = this.getUrl("Library/FileOrganizations/SmartMatches", options);
+
+        return this.ajax({
+            type: "GET",
+            url: url,
+            dataType: "json"
+        });
+    };
+
+    ApiClient.prototype.deleteSmartMatchEntries = function (entries) {
+
+        var url = this.getUrl("Library/FileOrganizations/SmartMatches/Delete");
+
+        var postData = {
+            Entries: entries
+        };
+
+        return this.ajax({
+
+            type: "POST",
+            url: url,
+            data: JSON.stringify(postData),
+            contentType: "application/json"
+        });
+    };
+
+    ApiClient.prototype.getLatestItems = function (options) {
+
+        options = options || {};
+        return this.getJSON(this.getUrl('Users/' + this.getCurrentUserId() + '/Items/Latest', options));
+    };
+
+    return ApiClient;
 });
