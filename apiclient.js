@@ -2327,13 +2327,7 @@
                     url: url,
                     data: data,
                     contentType: "image/" + file.name.substring(file.name.lastIndexOf('.') + 1)
-                }).then(function (result) {
-
-                    resolve(result);
-
-                }, function () {
-                    reject();
-                });
+                }).then(resolve, reject);
             };
 
             // Read in the image file as a data URL.
@@ -3237,9 +3231,9 @@
     ApiClient.prototype.getSearchHints = function (options) {
 
         var url = this.getUrl("Search/Hints", options);
+        var serverId = this.serverId();
 
         return this.getJSON(url).then(function (result) {
-            var serverId = this.serverId();
             result.SearchHints.forEach(function (i) {
                 i.ServerId = serverId;
             });
