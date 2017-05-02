@@ -3415,6 +3415,7 @@
             throw new Error("null options");
         }
 
+        this.lastPlaybackProgressReport = 0;
         stopBitrateDetection(this);
 
         var url = this.getUrl("Sessions/Playing");
@@ -3438,17 +3439,26 @@
             throw new Error("null options");
         }
 
-        if (this.isWebSocketOpen()) {
-
-            try {
-                this.sendWebSocketMessage("ReportPlaybackProgress", JSON.stringify(options));
-                return Promise.resolve();
-            } catch (err) {
-
-                // Log and send via http
-                console.log('Error sending playback progress report: ' + err);
+        var now = new Date().getTime();
+        if ((options.EventName || 'timeupdate') === 'timeupdate') {
+            if ((now - (this.lastPlaybackProgressReport || 0)) <= 10000) {
+                return;
             }
         }
+
+        this.lastPlaybackProgressReport = now;
+
+        //if (this.isWebSocketOpen()) {
+
+        //    try {
+        //        this.sendWebSocketMessage("ReportPlaybackProgress", JSON.stringify(options));
+        //        return Promise.resolve();
+        //    } catch (err) {
+
+        //        // Log and send via http
+        //        console.log('Error sending playback progress report: ' + err);
+        //    }
+        //}
 
         var url = this.getUrl("Sessions/Playing/Progress");
 
@@ -3547,6 +3557,7 @@
             throw new Error("null options");
         }
 
+        this.lastPlaybackProgressReport = 0;
         redetectBitrate(this);
 
         var url = this.getUrl("Sessions/Playing/Stopped");
