@@ -130,6 +130,7 @@
             });
         }
 
+        var instance = this;
         return localassetmanager.getLocalItem(this.serverId(), itemId).then(function (item) {
 
             if (item) {
@@ -153,11 +154,11 @@
                         return Promise.resolve(res);
                     }
 
-                    return ApiClient.prototype.getPlaybackInfo.call(this, itemId, options, deviceProfile);
+                    return ApiClient.prototype.getPlaybackInfo.call(instance, itemId, options, deviceProfile);
                 });
             }
 
-            return ApiClient.prototype.getPlaybackInfo.call(this, itemId, options, deviceProfile);
+            return ApiClient.prototype.getPlaybackInfo.call(instance, itemId, options, deviceProfile);
         });
     };
 
