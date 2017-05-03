@@ -1,8 +1,51 @@
-﻿define(['apiclientcore', 'localassetmanager', 'events', 'appStorage'], function (apiclientcorefactory, localassetmanager, events, appStorage) {
+﻿define(['apiclientcore', 'localassetmanager', 'events', 'appStorage'], function (ApiClient, localassetmanager, events, appStorage) {
     'use strict';
 
     var localPrefix = 'local:';
     var localViewPrefix = 'localview:';
+
+    function isLocalId(str) {
+        return startsWith(str, localPrefix);
+    }
+
+    function isLocalViewId(str) {
+        return startsWith(str, localViewPrefix);
+    }
+
+    function stripLocalPrefix(str) {
+        var res = stripStart(str, localPrefix);
+        res = stripStart(res, localViewPrefix);
+
+        return res;
+    }
+
+    function startsWith(str, find) {
+
+        if (str && find && str.length > find.length) {
+            if (str.indexOf(find) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function stripStart(str, find) {
+        if (startsWith(str, find)) {
+            return str.substr(find.length);
+        }
+
+        return str;
+    }
+
+    function createEmptyList() {
+        var result = {
+            Items: [],
+            TotalRecordCount: 0
+        };
+
+        return result;
+    }
 
     /**
      * Creates a new api client instance
@@ -10,11 +53,14 @@
      * @param {String} clientName s
      * @param {String} applicationVersion 
      */
-    return function (serverAddress, clientName, applicationVersion, deviceName, deviceId, devicePixelRatio) {
+    function ApiClientEx(serverAddress, clientName, applicationVersion, deviceName, deviceId, devicePixelRatio) {
 
-        var apiclientcore = new apiclientcorefactory(serverAddress, clientName, applicationVersion, deviceName, deviceId, devicePixelRatio);
+        ApiClient.call(this, serverAddress, clientName, applicationVersion, deviceName, deviceId, devicePixelRatio);
 
-        var self = Object.assign(this, apiclientcore);
+        var apiclientcore = new ApiClient(serverAddress, clientName, applicationVersion, deviceName, deviceId, devicePixelRatio);
+
+        var self = Object.assign(this, ApiClient.prototype);
+        self = Object.assign(self, apiclientcore);
 
         events.on(apiclientcore, 'websocketmessage', onWebSocketMessage);
 
@@ -408,146 +454,6 @@
             });
         }
 
-        function reportPlaybackStart(options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            if (isLocalId(options.ItemId)) {
-                return Promise.resolve();
-            }
-
-            return apiclientcore.reportPlaybackStart(options);
-        }
-
-        function reportPlaybackProgress(options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            if (isLocalId(options.ItemId)) {
-                return Promise.resolve();
-            }
-
-            return apiclientcore.reportPlaybackProgress(options);
-        }
-
-        function reportPlaybackStopped(options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            if (isLocalId(options.ItemId)) {
-
-                var serverInfo = apiclientcore.serverInfo();
-
-                var action =
-                {
-                    Date: new Date().getTime(),
-                    ItemId: stripLocalPrefix(options.ItemId),
-                    PositionTicks: options.PositionTicks,
-                    ServerId: serverInfo.Id,
-                    Type: 0, // UserActionType.PlayedItem
-                    UserId: apiclientcore.getCurrentUserId()
-                };
-
-                return localassetmanager.recordUserAction(action);
-            }
-
-            return apiclientcore.reportPlaybackStopped(options);
-        }
-
-        function getIntros(itemId) {
-
-            if (isLocalId(itemId)) {
-                return Promise.resolve({
-                    Items: [],
-                    TotalRecordCount: 0
-                });
-            }
-
-            return apiclientcore.getIntros(itemId);
-        }
-
-        function getInstantMixFromItem(itemId, options) {
-
-            if (isLocalId(itemId)) {
-                return Promise.resolve({
-                    Items: [],
-                    TotalRecordCount: 0
-                });
-            }
-
-            return apiclientcore.getInstantMixFromItem(itemId, options);
-        }
-
-        function getItemDownloadUrl(itemId) {
-
-
-            if (isLocalId(itemId)) {
-
-                var serverInfo = apiclientcore.serverInfo();
-
-                if (serverInfo) {
-
-                    return localassetmanager.getLocalItem(serverInfo.Id, stripLocalPrefix(itemId)).then(function (item) {
-
-                        return Promise.resolve(item.LocalPath);
-                    });
-                }
-            }
-
-            return apiclientcore.getItemDownloadUrl(itemId);
-        }
-
-        // **************** Helper functions
-
-        function isLocalId(str) {
-            return startsWith(str, localPrefix);
-        }
-
-        function isLocalViewId(str) {
-            return startsWith(str, localViewPrefix);
-        }
-
-        function stripLocalPrefix(str) {
-            var res = stripStart(str, localPrefix);
-            res = stripStart(res, localViewPrefix);
-
-            return res;
-        }
-
-        function startsWith(str, find) {
-
-            if (str && find && str.length > find.length) {
-                if (str.indexOf(find) === 0) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        function stripStart(str, find) {
-            if (startsWith(str, find)) {
-                return str.substr(find.length);
-            }
-
-            return str;
-        }
-
-        function createEmptyList() {
-            var result = {
-                Items: [],
-                TotalRecordCount: 0
-            };
-
-            return result;
-        }
-
         self.getLatestOfflineItems = function (options) {
 
             // Supported options
@@ -563,7 +469,7 @@
             if (serverInfo) {
 
                 return localassetmanager.getViewItems(serverInfo.Id, null, options).then(function (items) {
-                        
+
                     items.forEach(function (item) {
                         adjustGuidProperties(item);
                     });
@@ -588,12 +494,104 @@
         self.updateFavoriteStatus = updateFavoriteStatus;
         self.getScaledImageUrl = getScaledImageUrl;
         self.getPlaybackInfo = getPlaybackInfo;
-        self.reportPlaybackStart = reportPlaybackStart;
-        self.reportPlaybackProgress = reportPlaybackProgress;
-        self.reportPlaybackStopped = reportPlaybackStopped;
-        self.getIntros = getIntros;
-        self.getInstantMixFromItem = getInstantMixFromItem;
-        self.getItemDownloadUrl = getItemDownloadUrl;
+    }
+
+    Object.assign(ApiClientEx.prototype, ApiClient.prototype);
+
+    ApiClientEx.prototype.reportPlaybackStart = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        if (isLocalId(options.ItemId)) {
+            return Promise.resolve();
+        }
+
+        return ApiClient.prototype.reportPlaybackStart.call(this, options);
+    }
+
+    ApiClientEx.prototype.reportPlaybackProgress = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        if (isLocalId(options.ItemId)) {
+            return Promise.resolve();
+        }
+
+        return ApiClient.prototype.reportPlaybackProgress.call(this, options);
+    }
+
+    ApiClientEx.prototype.reportPlaybackStopped = function (options) {
+
+        if (!options) {
+            throw new Error("null options");
+        }
+
+        if (isLocalId(options.ItemId)) {
+
+            var serverInfo = this.serverInfo();
+
+            var action =
+            {
+                Date: new Date().getTime(),
+                ItemId: stripLocalPrefix(options.ItemId),
+                PositionTicks: options.PositionTicks,
+                ServerId: serverInfo.Id,
+                Type: 0, // UserActionType.PlayedItem
+                UserId: this.getCurrentUserId()
+            };
+
+            return localassetmanager.recordUserAction(action);
+        }
+
+        return ApiClient.prototype.reportPlaybackStopped.call(this, options);
+    }
+
+    ApiClientEx.prototype.getIntros = function (itemId) {
+
+        if (isLocalId(itemId)) {
+            return Promise.resolve({
+                Items: [],
+                TotalRecordCount: 0
+            });
+        }
+
+        return ApiClient.prototype.getIntros.call(this, itemId);
+    }
+
+    ApiClientEx.prototype.getInstantMixFromItem = function (itemId, options) {
+
+        if (isLocalId(itemId)) {
+            return Promise.resolve({
+                Items: [],
+                TotalRecordCount: 0
+            });
+        }
+
+        return ApiClient.prototype.getInstantMixFromItem.call(this, itemId, options);
+    }
+
+    ApiClientEx.prototype.getItemDownloadUrl = function (itemId) {
+
+        if (isLocalId(itemId)) {
+
+            var serverInfo = this.serverInfo();
+
+            if (serverInfo) {
+
+                return localassetmanager.getLocalItem(serverInfo.Id, stripLocalPrefix(itemId)).then(function (item) {
+
+                    return Promise.resolve(item.LocalPath);
+                });
+            }
+        }
+
+        return ApiClient.prototype.getItemDownloadUrl.call(this, itemId);
     };
+
+    return ApiClientEx;
 
 });
