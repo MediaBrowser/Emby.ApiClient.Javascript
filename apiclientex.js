@@ -234,11 +234,11 @@
         return ApiClient.prototype.getItems.call(this, userId, options);
     };
 
-    ApiClientEx.prototype.getUserViews = function (userId) {
+    ApiClientEx.prototype.getUserViews = function (options, userId) {
 
         var instance = this;
 
-        return ApiClient.prototype.getUserViews.call(instance, userId).then(function (result) {
+        return ApiClient.prototype.getUserViews.call(instance, options, userId).then(function (result) {
 
             var serverInfo = instance.serverInfo();
             if (serverInfo) {
@@ -319,6 +319,8 @@
 
     ApiClientEx.prototype.getCurrentUser = function () {
 
+        var instance = this;
+
         return ApiClient.prototype.getCurrentUser.call(this).then(function (user) {
 
             appStorage.setItem('user-' + user.Id, JSON.stringify(user));
@@ -326,9 +328,9 @@
 
         }, function (error) {
 
-            var userId = this.getCurrentUserId();
+            var userId = instance.getCurrentUserId();
 
-            if (userId && this.accessToken()) {
+            if (userId && instance.accessToken()) {
                 var json = appStorage.getItem('user-' + userId);
 
                 if (json) {
@@ -355,7 +357,7 @@
 
         if (isLocalId(itemId)) {
             options.ParentId = itemId;
-            return getItems(this.getCurrentUserId(), options);
+            return this.getItems(this.getCurrentUserId(), options);
         }
 
         return ApiClient.prototype.getSeasons.call(this, itemId, options);
@@ -365,19 +367,19 @@
 
         if (isLocalId(options.SeasonId)) {
             options.ParentId = options.SeasonId;
-            return getItems(this.getCurrentUserId(), options);
+            return this.getItems(this.getCurrentUserId(), options);
         }
 
         if (isLocalId(options.seasonId)) {
             options.ParentId = options.seasonId;
-            return getItems(this.getCurrentUserId(), options);
+            return this.getItems(this.getCurrentUserId(), options);
         }
 
         // get episodes by recursion
         if (isLocalId(itemId)) {
             options.ParentId = itemId;
             options.Recursive = true;
-            return getItems(this.getCurrentUserId(), options).then(function (items) {
+            return this.getItems(this.getCurrentUserId(), options).then(function (items) {
                 var items2 = items.Items.filter(function (item) {
 
                     return item.Type.toLowerCase() === 'episode';
