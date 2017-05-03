@@ -832,19 +832,27 @@
             return Promise.resolve(this.lastDetectedBitrate);
         }
 
-        return detectBitrateInternal(this, [
-        {
-            bytes: 500000,
-            threshold: 500000
-        },
-        {
-            bytes: 1000000,
-            threshold: 20000000
-        },
-        {
-            bytes: 3000000,
-            threshold: 50000000
-        }], 0);
+        return this.getEndpointInfo().then(function (info) {
+
+            if (info.IsInNetwork) {
+
+                return 140000000;
+            }
+
+            return detectBitrateInternal(this, [
+            {
+                bytes: 500000,
+                threshold: 500000
+            },
+            {
+                bytes: 1000000,
+                threshold: 20000000
+            },
+            {
+                bytes: 3000000,
+                threshold: 50000000
+            }], 0);
+        });
     };
 
     /**
@@ -3708,6 +3716,11 @@
             data: JSON.stringify(postData),
             contentType: "application/json"
         });
+    };
+
+    ApiClient.prototype.getEndpointInfo = function () {
+
+        return this.getJSON(this.getUrl('System/Endpoint'));
     };
 
     ApiClient.prototype.getLatestItems = function (options) {
