@@ -832,11 +832,15 @@
             return Promise.resolve(this.lastDetectedBitrate);
         }
 
+        var instance = this;
         return this.getEndpointInfo().then(function (info) {
 
             if (info.IsInNetwork) {
 
-                return 140000000;
+                var result = 140000000;
+                instance.lastDetectedBitrate = result;
+                instance.lastDetectedBitrateTime = new Date().getTime();
+                return result;
             }
 
             return detectBitrateInternal(this, [
