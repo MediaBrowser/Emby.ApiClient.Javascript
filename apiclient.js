@@ -3451,26 +3451,20 @@
             throw new Error("null options");
         }
 
-        var now = new Date().getTime();
         if ((options.EventName || 'timeupdate') === 'timeupdate') {
+
+            var now = new Date().getTime();
             if ((now - (this.lastPlaybackProgressReport || 0)) <= 10000) {
                 return;
             }
+
+            this.lastPlaybackProgressReport = now;
+
+        } else {
+
+            // allow the next timeupdate
+            this.lastPlaybackProgressReport = 0;
         }
-
-        this.lastPlaybackProgressReport = now;
-
-        //if (this.isWebSocketOpen()) {
-
-        //    try {
-        //        this.sendWebSocketMessage("ReportPlaybackProgress", JSON.stringify(options));
-        //        return Promise.resolve();
-        //    } catch (err) {
-
-        //        // Log and send via http
-        //        console.log('Error sending playback progress report: ' + err);
-        //    }
-        //}
 
         var url = this.getUrl("Sessions/Playing/Progress");
 
