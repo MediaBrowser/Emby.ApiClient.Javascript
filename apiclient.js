@@ -170,12 +170,9 @@
         if (values.length) {
             
             var auth = 'MediaBrowser ' + values.join(', ');
-            headers.Authorization = auth;
+            //headers.Authorization = auth;
+            headers['X-Emby-Authorization'] = auth;
         }
-
-        //if (accessToken) {
-        //    headers['X-MediaBrowser-Token'] = accessToken;
-        //}
     };
 
     ApiClient.prototype.appVersion = function () {
