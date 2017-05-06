@@ -170,7 +170,7 @@
         if (values.length) {
             
             var auth = 'MediaBrowser ' + values.join(', ');
-            headers["Authorization"] = auth;
+            headers.Authorization = auth;
         }
 
         //if (accessToken) {
