@@ -221,7 +221,7 @@
             return connectUser;
         };
 
-        self._minServerVersion = '3.1.5';
+        self._minServerVersion = '3.2.1';
 
         self.appVersion = function () {
             return appVersion;
