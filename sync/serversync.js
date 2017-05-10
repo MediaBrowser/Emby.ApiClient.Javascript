@@ -34,9 +34,9 @@
 
         return new Promise(function (resolve, reject) {
 
-            require(['contentuploader'], function (contentuploader) {
+            require(['contentuploader'], function (ContentUploader) {
 
-                uploader = new ContentUploader(connectionManager);
+                var uploader = new ContentUploader(connectionManager);
                 uploader.uploadImages(server).then(resolve, reject);
             });
         });
