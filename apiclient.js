@@ -854,7 +854,7 @@
                 return result;
             }
 
-            return detectBitrateInternal(this, [
+            return detectBitrateInternal(instance, [
             {
                 bytes: 500000,
                 threshold: 500000
