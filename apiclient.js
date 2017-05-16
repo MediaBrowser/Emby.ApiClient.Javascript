@@ -2538,7 +2538,7 @@
 
     function normalizeImageOptions(instance, options) {
 
-        var ratio = this._devicePixelRatio || 1;
+        var ratio = instance._devicePixelRatio || 1;
 
         if (ratio) {
 
