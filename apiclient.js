@@ -133,6 +133,7 @@
         this._deviceName = deviceName;
         this._appName = appName;
         this._appVersion = appVersion;
+        this._devicePixelRatio = devicePixelRatio;
     }
 
     ApiClient.prototype.appName = function () {
@@ -2537,7 +2538,7 @@
 
     function normalizeImageOptions(instance, options) {
 
-        var ratio = devicePixelRatio || 1;
+        var ratio = this._devicePixelRatio || 1;
 
         if (ratio) {
 
