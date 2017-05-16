@@ -36,8 +36,8 @@
 
             require(['contentuploader'], function (ContentUploader) {
 
-                var uploader = new ContentUploader(connectionManager);
-                uploader.uploadImages(server).then(resolve, reject);
+                var uploader = new ContentUploader();
+                uploader.uploadImages(connectionManager, server).then(resolve, reject);
             });
         });
     }
