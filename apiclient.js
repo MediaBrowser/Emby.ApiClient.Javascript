@@ -169,7 +169,7 @@
         }
 
         if (values.length) {
-            
+
             var auth = 'MediaBrowser ' + values.join(', ');
             //headers.Authorization = auth;
             headers['X-Emby-Authorization'] = auth;
@@ -1394,7 +1394,13 @@
 
         var url = this.getUrl("System/Info");
 
-        return this.getJSON(url);
+        var instance = this;
+
+        return this.getJSON(url).then(function (info) {
+
+            instance.setSystemInfo(info);
+            return Promise.resolve(info);
+        });
     };
 
     /**
@@ -1404,7 +1410,13 @@
 
         var url = this.getUrl("System/Info/Public");
 
-        return this.getJSON(url, false);
+        var instance = this;
+
+        return this.getJSON(url).then(function (info) {
+
+            instance.setSystemInfo(info);
+            return Promise.resolve(info);
+        });
     };
 
     ApiClient.prototype.getInstantMixFromItem = function (itemId, options) {
@@ -3738,6 +3750,48 @@
 
         options = options || {};
         return this.getJSON(this.getUrl('Users/' + this.getCurrentUserId() + '/Items/Latest', options));
+    };
+
+    function compareVersions(a, b) {
+
+        // -1 a is smaller
+        // 1 a is larger
+        // 0 equal
+        a = a.split('.');
+        b = b.split('.');
+
+        for (var i = 0, length = Math.max(a.length, b.length) ; i < length; i++) {
+            var aVal = parseInt(a[i] || '0');
+            var bVal = parseInt(b[i] || '0');
+
+            if (aVal < bVal) {
+                return -1;
+            }
+
+            if (aVal > bVal) {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
+    ApiClient.prototype.setSystemInfo = function (info) {
+        this._serverVersion = info.Version;
+    };
+
+    ApiClient.prototype.serverVersion = function () {
+        return this._serverVersion;
+    };
+
+    ApiClient.prototype.isMinServerVersion = function (version) {
+        var serverVersion = this.serverVersion();
+
+        if (serverVersion) {
+            return compareVersions(serverVersion, version) >= 0;
+        }
+
+        return false;
     };
 
     return ApiClient;

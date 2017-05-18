@@ -1188,6 +1188,9 @@
             };
 
             result.ApiClient = getOrAddApiClient(server, connectionMode);
+
+            result.ApiClient.setSystemInfo(systemInfo);
+
             result.State = server.AccessToken && options.enableAutoLogin !== false ?
                 ConnectionState.SignedIn :
                 ConnectionState.ServerSignIn;
