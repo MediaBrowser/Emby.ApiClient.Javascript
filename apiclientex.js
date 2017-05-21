@@ -434,6 +434,15 @@
         return ApiClient.prototype.getThemeMedia.call(this, userId, itemId, inherit);
     };
 
+    ApiClientEx.prototype.getSpecialFeatures = function (userId, itemId) {
+
+        if (isLocalId(itemId)) {
+            return Promise.resolve([]);
+        }
+
+        return ApiClient.prototype.getSpecialFeatures.call(this, userId, itemId);
+    };
+
     ApiClientEx.prototype.getSimilarItems = function (itemId, options) {
 
         if (isLocalId(itemId)) {
