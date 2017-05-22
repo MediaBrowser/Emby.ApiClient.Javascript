@@ -2754,7 +2754,7 @@
                 return;
             }
 
-            var url = this.getUrl("Users/" + userId + "/EasyPassword");
+            var url = instance.getUrl("Users/" + userId + "/EasyPassword");
 
             require(["cryptojs-sha1"], function () {
 
