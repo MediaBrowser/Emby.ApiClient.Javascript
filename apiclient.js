@@ -29,11 +29,11 @@
     function onFetchFail(instance, url, response) {
 
         events.trigger(instance, 'requestfail', [
-        {
-            url: url,
-            status: response.status,
-            errorCode: response.headers ? response.headers.get('X-Application-Error-Code') : null
-        }]);
+            {
+                url: url,
+                status: response.status,
+                errorCode: response.headers ? response.headers.get('X-Application-Error-Code') : null
+            }]);
     }
 
     function paramsToString(params) {
@@ -856,18 +856,18 @@
             }
 
             return detectBitrateInternal(instance, [
-            {
-                bytes: 500000,
-                threshold: 500000
-            },
-            {
-                bytes: 1000000,
-                threshold: 20000000
-            },
-            {
-                bytes: 3000000,
-                threshold: 50000000
-            }], 0);
+                {
+                    bytes: 500000,
+                    threshold: 500000
+                },
+                {
+                    bytes: 1000000,
+                    threshold: 20000000
+                },
+                {
+                    bytes: 3000000,
+                    threshold: 50000000
+                }], 0);
         });
     };
 
@@ -3453,6 +3453,7 @@
         }
 
         this.lastPlaybackProgressReport = 0;
+        this.lastPlaybackProgressReportTicks = null;
         stopBitrateDetection(this);
 
         var url = this.getUrl("Sessions/Playing");
@@ -3476,11 +3477,25 @@
             throw new Error("null options");
         }
 
+        var newPositionTicks = options.PositionTicks;
+
         if ((options.EventName || 'timeupdate') === 'timeupdate') {
 
             var now = new Date().getTime();
-            if ((now - (this.lastPlaybackProgressReport || 0)) <= 10000) {
-                return;
+            var msSinceLastReport = now - (this.lastPlaybackProgressReport || 0);
+
+            if (msSinceLastReport <= 10000) {
+
+                if (!newPositionTicks) {
+                    return Promise.resolve();
+                }
+
+                var expectedReportTicks = (msSinceLastReport * 10000) + (this.lastPlaybackProgressReportTicks || 0);
+
+                if (Math.abs((newPositionTicks || 0) - expectedReportTicks) < (5000 * 10000)) {
+
+                    return Promise.resolve();
+                }
             }
 
             this.lastPlaybackProgressReport = now;
@@ -3491,6 +3506,7 @@
             this.lastPlaybackProgressReport = 0;
         }
 
+        this.lastPlaybackProgressReportTicks = newPositionTicks;
         var url = this.getUrl("Sessions/Playing/Progress");
 
         return this.ajax({
@@ -3589,6 +3605,7 @@
         }
 
         this.lastPlaybackProgressReport = 0;
+        this.lastPlaybackProgressReportTicks = null;
         redetectBitrate(this);
 
         var url = this.getUrl("Sessions/Playing/Stopped");
@@ -3760,7 +3777,7 @@
         a = a.split('.');
         b = b.split('.');
 
-        for (var i = 0, length = Math.max(a.length, b.length) ; i < length; i++) {
+        for (var i = 0, length = Math.max(a.length, b.length); i < length; i++) {
             var aVal = parseInt(a[i] || '0');
             var bVal = parseInt(b[i] || '0');
 
