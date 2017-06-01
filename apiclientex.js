@@ -12,6 +12,10 @@
         return startsWith(str, localViewPrefix);
     }
 
+    function isTopLevelLocalViewId(str) {
+        return str === 'localview';
+    }
+
     function stripLocalPrefix(str) {
         var res = stripStart(str, localPrefix);
         res = stripStart(res, localViewPrefix);
@@ -89,7 +93,8 @@
                     Name: instance.downloadsTitleText || 'Downloads',
                     ServerId: serverId,
                     Id: 'localview',
-                    Type: 'localview'
+                    Type: 'localview',
+                    IsFolder: true
                 };
             }
 
@@ -272,6 +277,15 @@
 
         var serverInfo;
 
+        if (isTopLevelLocalViewId(itemId)) {
+
+            serverInfo = this.serverInfo();
+
+            if (serverInfo) {
+                return getLocalView(this, serverInfo.Id, userId);
+            }
+        }
+
         if (isLocalViewId(itemId)) {
 
             serverInfo = this.serverInfo();
@@ -427,7 +441,7 @@
 
     ApiClientEx.prototype.getThemeMedia = function (userId, itemId, inherit) {
 
-        if (isLocalViewId(itemId) || isLocalId(itemId)) {
+        if (isLocalViewId(itemId) || isLocalId(itemId) || isTopLevelLocalViewId(itemId)) {
             return Promise.reject();
         }
 
