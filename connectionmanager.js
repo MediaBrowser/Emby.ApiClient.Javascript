@@ -794,8 +794,11 @@
                 });
 
             }, function () {
-                return [];
 
+                return credentials.Servers.slice(0).filter(function (s) {
+
+                    return s.ExchangeToken;
+                });
             });
         }
 
