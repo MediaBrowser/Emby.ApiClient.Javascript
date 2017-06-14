@@ -834,8 +834,33 @@
             }
 
         }, function () {
-            return normalizeReturnBitrateinstance, (currentBitrate);
+            return normalizeReturnBitrateinstance(instance, currentBitrate);
         });
+    }
+
+    function detectBitrateWithEndpointInfo(instance, endpointInfo) {
+
+        if (endpointInfo.IsInNetwork) {
+
+            var result = 140000000;
+            instance.lastDetectedBitrate = result;
+            instance.lastDetectedBitrateTime = new Date().getTime();
+            return result;
+        }
+
+        return detectBitrateInternal(instance, [
+            {
+                bytes: 500000,
+                threshold: 500000
+            },
+            {
+                bytes: 1000000,
+                threshold: 20000000
+            },
+            {
+                bytes: 3000000,
+                threshold: 50000000
+            }], 0);
     }
 
     ApiClient.prototype.detectBitrate = function (force) {
@@ -845,29 +870,13 @@
         }
 
         var instance = this;
+
         return this.getEndpointInfo().then(function (info) {
 
-            if (info.IsInNetwork) {
+            return detectBitrateWithEndpointInfo(instance, info);
+        }, function (info) {
 
-                var result = 140000000;
-                instance.lastDetectedBitrate = result;
-                instance.lastDetectedBitrateTime = new Date().getTime();
-                return result;
-            }
-
-            return detectBitrateInternal(instance, [
-                {
-                    bytes: 500000,
-                    threshold: 500000
-                },
-                {
-                    bytes: 1000000,
-                    threshold: 20000000
-                },
-                {
-                    bytes: 3000000,
-                    threshold: 50000000
-                }], 0);
+            return detectBitrateWithEndpointInfo(instance, {});
         });
     };
 
