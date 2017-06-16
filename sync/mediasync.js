@@ -329,6 +329,7 @@
             downloadedItem.UserData = {};
             downloadedItem.SpecialFeatureCount = null;
             downloadedItem.BackdropImageTags = null;
+            downloadedItem.ParentBackdropImageTags = null;
 
             return localassetmanager.createLocalItem(downloadedItem, serverInfo, null).then(function (localItem) {
 
