@@ -277,42 +277,24 @@
         var libraryItem = localItem.Item;
 
         var itemType = (libraryItem.Type || '').toLowerCase();
-        var logoImageTag = (libraryItem.ImageTags || {}).Logo;
 
-        switch (itemType) {
-            case 'episode':
-                if (libraryItem.SeriesId) {
-                    p = p.then(function () {
-                        return downloadItem(apiClient, libraryItem, libraryItem.SeriesId, serverInfo).then(function (seriesItem) {
-                            libraryItem.SeriesLogoImageTag = (seriesItem.Item.ImageTags || {}).Logo;
-                            return Promise.resolve();
-                        });
-                    });
-                }
-                if (libraryItem.SeasonId) {
-                    p = p.then(function () {
-                        return downloadItem(apiClient, libraryItem, libraryItem.SeasonId, serverInfo).then(function (seasonItem) {
-                            libraryItem.SeasonPrimaryImageTag = (seasonItem.Item.ImageTags || {}).Primary;
-                            return Promise.resolve();
-                        });
-                    });
-                }
-                break;
-
-            case 'audio':
-            case 'photo':
-                if (libraryItem.AlbumId) {
-                    p = p.then(function () {
-                        return downloadItem(apiClient, libraryItem, libraryItem.AlbumId, serverInfo);
-                    });
-                }
-                break;
-
-            case 'video':
-            case 'movie':
-            case 'musicvideo':
-                // no parent item download for now
-                break;
+        if (libraryItem.SeriesId) {
+            p = p.then(function () {
+                return downloadItem(apiClient, libraryItem, libraryItem.SeriesId, serverInfo);
+            });
+        }
+        if (libraryItem.SeasonId) {
+            p = p.then(function () {
+                return downloadItem(apiClient, libraryItem, libraryItem.SeasonId, serverInfo).then(function (seasonItem) {
+                    libraryItem.SeasonPrimaryImageTag = (seasonItem.Item.ImageTags || {}).Primary;
+                    return Promise.resolve();
+                });
+            });
+        }
+        if (libraryItem.AlbumId) {
+            p = p.then(function () {
+                return downloadItem(apiClient, libraryItem, libraryItem.AlbumId, serverInfo);
+            });
         }
 
         return p;
@@ -330,6 +312,8 @@
             downloadedItem.SpecialFeatureCount = null;
             downloadedItem.BackdropImageTags = null;
             downloadedItem.ParentBackdropImageTags = null;
+            downloadedItem.ParentArtImageTag = null;
+            downloadedItem.ParentLogoImageTag = null;
 
             return localassetmanager.createLocalItem(downloadedItem, serverInfo, null).then(function (localItem) {
 
@@ -443,12 +427,6 @@
             });
         }
 
-        if (libraryItem.SeriesId && libraryItem.SeriesLogoImageTag) {
-            p = p.then(function () {
-                return downloadImage(localItem, apiClient, serverId, libraryItem.SeriesId, libraryItem.SeriesLogoImageTag, 'Logo');
-            });
-        }
-
         if (libraryItem.SeasonId && libraryItem.SeasonPrimaryImageTag) {
             p = p.then(function () {
                 return downloadImage(localItem, apiClient, serverId, libraryItem.SeasonId, libraryItem.SeasonPrimaryImageTag, 'Primary');
@@ -459,6 +437,18 @@
         if (libraryItem.AlbumId && libraryItem.AlbumPrimaryImageTag) {
             p = p.then(function () {
                 return downloadImage(localItem, apiClient, serverId, libraryItem.AlbumId, libraryItem.AlbumPrimaryImageTag, 'Primary');
+            });
+        }
+
+        if (libraryItem.ParentThumbItemId && libraryItem.ParentThumbImageTag) {
+            p = p.then(function () {
+                return downloadImage(localItem, apiClient, serverId, libraryItem.ParentThumbItemId, libraryItem.ParentThumbImageTag, 'Thumb');
+            });
+        }
+
+        if (libraryItem.ParentPrimaryImageItemId && libraryItem.ParentPrimaryImageTag) {
+            p = p.then(function () {
+                return downloadImage(localItem, apiClient, serverId, libraryItem.ParentPrimaryImageItemId, libraryItem.ParentPrimaryImageTag, 'Primary');
             });
         }
 
