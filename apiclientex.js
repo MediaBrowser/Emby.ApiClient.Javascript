@@ -76,7 +76,7 @@
         downloadedItem.ParentPrimaryImageItemId = convertGuidToLocal(downloadedItem.ParentPrimaryImageItemId);
         downloadedItem.PrimaryImageItemId = convertGuidToLocal(downloadedItem.PrimaryImageItemId);
         downloadedItem.ParentLogoItemId = convertGuidToLocal(downloadedItem.ParentLogoItemId);
-        downloadedItem.ParentBackdropItemID = convertGuidToLocal(downloadedItem.ParentBackdropItemID);
+        downloadedItem.ParentBackdropItemId = convertGuidToLocal(downloadedItem.ParentBackdropItemId);
 
         downloadedItem.ParentBackdropImageTags = null;
     }
