@@ -569,10 +569,6 @@
         return transfermanager.getDownloadItemCount();
     }
 
-    function translateFilePath(path) {
-        return Promise.resolve(path);
-    }
-
     // Helpers ***********************************************************
 
     function getDirectoryPath(item, server) {
@@ -743,7 +739,6 @@
         hasImage: hasImage,
         downloadImage: downloadImage,
         getImageUrl: getImageUrl,
-        translateFilePath: translateFilePath,
         getSubtitleSaveFileName: getSubtitleSaveFileName,
         getServerItems: getServerItems,
         getItemFileSize: getItemFileSize,
