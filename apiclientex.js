@@ -117,6 +117,10 @@
 
     ApiClientEx.prototype.getPlaybackInfo = function (itemId, options, deviceProfile) {
 
+        var onFailure = function () {
+            return ApiClient.prototype.getPlaybackInfo.call(instance, itemId, options, deviceProfile);
+        };
+
         if (isLocalId(itemId)) {
             return localassetmanager.getLocalItem(this.serverId(), stripLocalPrefix(itemId)).then(function (item) {
 
@@ -132,7 +136,8 @@
                 return {
                     MediaSources: mediaSources
                 };
-            });
+
+            }, onFailure);
         }
 
         var instance = this;
@@ -160,11 +165,13 @@
                     }
 
                     return ApiClient.prototype.getPlaybackInfo.call(instance, itemId, options, deviceProfile);
-                });
+
+                }, onFailure);
             }
 
             return ApiClient.prototype.getPlaybackInfo.call(instance, itemId, options, deviceProfile);
-        });
+
+        }, onFailure);
     };
 
     ApiClientEx.prototype.getItems = function (userId, options) {
