@@ -251,7 +251,13 @@
 
         var instance = this;
 
-        return ApiClient.prototype.getUserViews.call(instance, options, userId).then(function (result) {
+        var basePromise = ApiClient.prototype.getUserViews.call(instance, options, userId);
+
+        if (!options.enableLocalView) {
+            return basePromise;
+        }
+
+        return basePromise.then(function (result) {
 
             var serverInfo = instance.serverInfo();
             if (serverInfo) {
