@@ -247,37 +247,6 @@
         return ApiClient.prototype.getItems.call(this, userId, options);
     };
 
-    ApiClientEx.prototype.getUserViews = function (options, userId) {
-
-        var instance = this;
-
-        var basePromise = ApiClient.prototype.getUserViews.call(instance, options, userId);
-
-        if (!options.enableLocalView) {
-            return basePromise;
-        }
-
-        return basePromise.then(function (result) {
-
-            var serverInfo = instance.serverInfo();
-            if (serverInfo) {
-
-                return getLocalView(instance, serverInfo.Id, userId).then(function (localView) {
-
-                    if (localView) {
-
-                        result.Items.push(localView);
-                        result.TotalRecordCount++;
-                    }
-
-                    return Promise.resolve(result);
-                });
-            }
-
-            return Promise.resolve(result);
-        });
-    };
-
     ApiClientEx.prototype.getItem = function (userId, itemId) {
 
         if (!itemId) {
