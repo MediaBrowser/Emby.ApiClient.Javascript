@@ -183,10 +183,7 @@
 
         var typeFilterTop = getTypeFilterForTopLevelView(parentId);
 
-        var typeFilter = options.MediaType;
-        if (!typeFilter) {
-            typeFilter = typeFilterTop;
-        }
+        var typeFilter = typeFilterTop;
 
         parentId = stripStart(parentId, 'localview:');
         parentId = stripStart(parentId, 'local:');
@@ -201,16 +198,22 @@
                     return false;
                 }
 
-                if (options.MediaType) {
-                    return item.Item.MediaType === options.MediaType;
+                if (options.MediaType && item.Item.MediaType !== options.MediaType) {
+                    return false;
                 }
 
                 if (typeFilter) {
                     var type = (item.Item.Type || '').toLowerCase();
-                    return typeFilter === type;
+                    if (typeFilter !== type) {
+                        return false;
+                    }
                 }
 
-                return item.Item.ParentId === parentId;
+                if (parentId && item.Item.ParentId !== parentId) {
+                    return false;
+                }
+
+                return true;
 
             }).map(function (item2) {
 
@@ -239,7 +242,6 @@
                 }).map(function (item2) {
 
                     return item2.Item.Id;
-
                 });
 
                 resultItemIds = resultItemIds.concat(resultItemIds2);
