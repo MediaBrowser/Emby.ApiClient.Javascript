@@ -251,6 +251,8 @@
 
         var instance = this;
 
+        options = options || {};
+
         var basePromise = ApiClient.prototype.getUserViews.call(instance, options, userId);
 
         if (!options.enableLocalView) {
