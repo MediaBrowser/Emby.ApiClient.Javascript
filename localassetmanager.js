@@ -155,44 +155,59 @@
 
         switch (parentId) {
             case 'localview:MusicView':
-                typeFilter = 'audio';
+                typeFilter = 'Audio';
                 break;
             case 'localview:PhotosView':
-                typeFilter = 'photo';
+                typeFilter = 'Photo';
                 break;
             case 'localview:TVView':
-                typeFilter = 'episode';
+                typeFilter = 'Episode';
                 break;
             case 'localview:VideosView':
-                typeFilter = 'video';
+                typeFilter = 'Video';
                 break;
             case 'localview:MoviesView':
-                typeFilter = 'movie';
+                typeFilter = 'Movie';
                 break;
             case 'localview:MusicVideosView':
-                typeFilter = 'musicvideo';
+                typeFilter = 'MusicVideo';
                 break;
         }
 
         return typeFilter;
     }
 
+    function normalizeId(id) {
+
+        if (id) {
+            id = stripStart(id, 'localview:');
+            id = stripStart(id, 'local:');
+            return id;
+        }
+
+        return null;
+    }
+
     function getViewItems(serverId, userId, options) {
 
         var parentId = options.ParentId;
 
-        var typeFilterTop = getTypeFilterForTopLevelView(parentId);
+        var typeFilter = getTypeFilterForTopLevelView(parentId);
 
-        var typeFilter = typeFilterTop;
+        parentId = normalizeId(parentId);
+        var seasonId = normalizeId(options.SeasonId || options.seasonId);
+        var seriesId = normalizeId(options.SeriesId || options.seriesId);
 
-        parentId = stripStart(parentId, 'localview:');
-        parentId = stripStart(parentId, 'local:');
+        var includeItemTypes = options.IncludeItemTypes ? options.IncludeItemTypes.split(',') : [];
+        if (typeFilter) {
+            includeItemTypes.push(typeFilter);
+        }
 
         return getServerItems(serverId).then(function (items) {
 
             //debugPrintItems(items);
 
-            var resultItemIds = items.filter(function (item) {
+            var resultItems = items.filter(function (item) {
 
                 if (item.SyncStatus && item.SyncStatus !== 'synced') {
                     return false;
@@ -202,68 +217,38 @@
                     return false;
                 }
 
-                if (typeFilter) {
-                    var type = (item.Item.Type || '').toLowerCase();
-                    if (typeFilter !== type) {
+                if (seriesId && item.Item.SeriesId !== seriesId) {
+                    return false;
+                }
+
+                if (seasonId && item.Item.SeasonId !== seasonId) {
+                    return false;
+                }
+
+                if (options.Filters === 'IsNotFolder' && item.Item.IsFolder) {
+                    return false;
+                } else if (options.Filters === 'IsFolder' && !item.Item.IsFolder) {
+                    return false;
+                }
+
+                if (includeItemTypes.length) {
+                    if (includeItemTypes.indexOf(item.Item.Type || '') === -1) {
                         return false;
                     }
                 }
 
-                if (parentId && item.Item.ParentId !== parentId) {
-                    return false;
+                if (options.Recursive) {
+
+                } else {
+                    if (parentId && item.Item.ParentId !== parentId) {
+                        return false;
+                    }
                 }
 
                 return true;
 
             }).map(function (item2) {
-
-                switch (typeFilterTop) {
-                    case 'audio':
-                    case 'photo':
-                        return item2.Item.AlbumId;
-                    case 'episode':
-                        return item2.Item.SeriesId;
-                }
-
-                return item2.Item.Id;
-
-            }).filter(filterDistinct);
-
-            if (options.Recursive) {
-
-                // Recurse only one level for now
-                var resultItemIds2 = items.filter(function (item) {
-
-                    if (item.SyncStatus && item.SyncStatus !== 'synced') {
-                        return false;
-                    }
-
-                    return resultItemIds.indexOf(item.Item.ParentId) >= 0;
-                }).map(function (item2) {
-
-                    return item2.Item.Id;
-                });
-
-                resultItemIds = resultItemIds.concat(resultItemIds2);
-            }
-
-            var resultItems = [];
-
-            items.forEach(function (item) {
-                var found = false;
-
-                if (options.Filters === 'IsNotFolder' && item.Item.IsFolder) {
-                    // Ignore item
-                } else if (options.Filters === 'IsFolder' && !item.Item.IsFolder) {
-                    // Ignore item
-                } else {
-
-                    resultItemIds.forEach(function (id) {
-                        if (item.Item.Id === id) {
-                            resultItems.push(item.Item);
-                        }
-                    });
-                }
+                return item2.Item;
             });
 
             if (options.SortBy === 'DateCreated') {
