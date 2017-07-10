@@ -190,7 +190,7 @@
                 return Promise.resolve(result);
             });
 
-        } else if (serverInfo && options && (isLocalId(options.ParentId) || isLocalViewId(options.ParentId))) {
+        } else if (serverInfo && options && (isLocalId(options.ParentId) || isLocalId(options.SeriesId) || isLocalId(options.SeasonId) || isLocalViewId(options.ParentId))) {
 
             return localassetmanager.getViewItems(serverInfo.Id, userId, options).then(function (items) {
 
@@ -386,7 +386,8 @@
     ApiClientEx.prototype.getSeasons = function (itemId, options) {
 
         if (isLocalId(itemId)) {
-            options.ParentId = itemId;
+            options.SeriesId = itemId;
+            options.IncludeItemTypes = 'Season';
             return this.getItems(this.getCurrentUserId(), options);
         }
 
@@ -395,33 +396,17 @@
 
     ApiClientEx.prototype.getEpisodes = function (itemId, options) {
 
-        if (isLocalId(options.SeasonId)) {
-            options.ParentId = options.SeasonId;
-            return this.getItems(this.getCurrentUserId(), options);
-        }
-
-        if (isLocalId(options.seasonId)) {
-            options.ParentId = options.seasonId;
+        if (isLocalId(options.SeasonId) || isLocalId(options.seasonId)) {
+            options.SeriesId = itemId;
+            options.IncludeItemTypes = 'Episode';
             return this.getItems(this.getCurrentUserId(), options);
         }
 
         // get episodes by recursion
         if (isLocalId(itemId)) {
-            options.ParentId = itemId;
-            options.Recursive = true;
-            return this.getItems(this.getCurrentUserId(), options).then(function (items) {
-                var items2 = items.Items.filter(function (item) {
-
-                    return item.Type.toLowerCase() === 'episode';
-                });
-
-                var result = {
-                    Items: items2,
-                    TotalRecordCount: items2.length
-                };
-
-                return Promise.resolve(result);
-            });
+            options.SeriesId = itemId;
+            options.IncludeItemTypes = 'Episode';
+            return this.getItems(this.getCurrentUserId(), options);
         }
 
         return ApiClient.prototype.getEpisodes.call(this, itemId, options);
