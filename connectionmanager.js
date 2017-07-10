@@ -209,6 +209,56 @@
         return 'https://connect.emby.media/service/' + handler;
     }
 
+    function replaceAll(originalString, strReplace, strWith) {
+        var reg = new RegExp(strReplace, 'ig');
+        return originalString.replace(reg, strWith);
+    }
+
+    function normalizeAddress(address) {
+
+        // attempt to correct bad input
+        address = address.trim();
+
+        if (address.toLowerCase().indexOf('http') !== 0) {
+            address = "http://" + address;
+        }
+
+        // Seeing failures in iOS when protocol isn't lowercase
+        address = replaceAll(address, 'Http:', 'http:');
+        address = replaceAll(address, 'Https:', 'https:');
+
+        return address;
+    }
+
+    function stringEqualsIgnoreCase(str1, str2) {
+
+        return (str1 || '').toLowerCase() === (str2 || '').toLowerCase();
+    }
+
+    function compareVersions(a, b) {
+
+        // -1 a is smaller
+        // 1 a is larger
+        // 0 equal
+        a = a.split('.');
+        b = b.split('.');
+
+        for (var i = 0, length = Math.max(a.length, b.length) ; i < length; i++) {
+            var aVal = parseInt(a[i] || '0');
+            var bVal = parseInt(b[i] || '0');
+
+            if (aVal < bVal) {
+                return -1;
+            }
+
+            if (aVal > bVal) {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
     var ConnectionManager = function (credentialProvider, appName, appVersion, deviceName, deviceId, capabilities, devicePixelRatio) {
 
         console.log('Begin ConnectionManager constructor');
@@ -679,15 +729,6 @@
             });
         };
 
-        self.isLoggedIntoConnect = function () {
-
-            // Make sure it returns true or false
-            if (!self.connectToken() || !self.connectUserId()) {
-                return false;
-            }
-            return true;
-        };
-
         self.logout = function () {
 
             console.log('begin connectionManager loguot');
@@ -912,21 +953,6 @@
             return null;
         }
 
-        self.connect = function (options) {
-
-            console.log('Begin connect');
-
-            return self.getAvailableServers().then(function (servers) {
-
-                return self.connectToServers(servers, options);
-            });
-        };
-
-        self.getOffineResult = function () {
-
-            // TODO: Implement
-        };
-
         self.connectToServers = function (servers, options) {
 
             console.log('Begin connectToServers, with ' + servers.length + ' servers');
@@ -1018,35 +1044,6 @@
                 testNextConnectionMode(tests, 0, server, options, resolve);
             });
         };
-
-        function stringEqualsIgnoreCase(str1, str2) {
-
-            return (str1 || '').toLowerCase() === (str2 || '').toLowerCase();
-        }
-
-        function compareVersions(a, b) {
-
-            // -1 a is smaller
-            // 1 a is larger
-            // 0 equal
-            a = a.split('.');
-            b = b.split('.');
-
-            for (var i = 0, length = Math.max(a.length, b.length) ; i < length; i++) {
-                var aVal = parseInt(a[i] || '0');
-                var bVal = parseInt(b[i] || '0');
-
-                if (aVal < bVal) {
-                    return -1;
-                }
-
-                if (aVal > bVal) {
-                    return 1;
-                }
-            }
-
-            return 0;
-        }
 
         function testNextConnectionMode(tests, index, server, options, resolve) {
 
@@ -1208,27 +1205,6 @@
             resolve(result);
 
             events.trigger(self, 'connected', [result]);
-        }
-
-        function replaceAll(originalString, strReplace, strWith) {
-            var reg = new RegExp(strReplace, 'ig');
-            return originalString.replace(reg, strWith);
-        }
-
-        function normalizeAddress(address) {
-
-            // attempt to correct bad input
-            address = address.trim();
-
-            if (address.toLowerCase().indexOf('http') !== 0) {
-                address = "http://" + address;
-            }
-
-            // Seeing failures in iOS when protocol isn't lowercase
-            address = replaceAll(address, 'Http:', 'http:');
-            address = replaceAll(address, 'Https:', 'https:');
-
-            return address;
         }
 
         self.connectToAddress = function (address, options) {
@@ -1680,6 +1656,27 @@
         };
 
         return self;
+    };
+
+    ConnectionManager.prototype.connect = function (options) {
+
+        console.log('Begin connect');
+
+        var instance = this;
+
+        return instance.getAvailableServers().then(function (servers) {
+
+            return instance.connectToServers(servers, options);
+        });
+    };
+
+    ConnectionManager.prototype.isLoggedIntoConnect = function () {
+
+        // Make sure it returns true or false
+        if (!this.connectToken() || !this.connectUserId()) {
+            return false;
+        }
+        return true;
     };
 
     ConnectionManager.prototype.getApiClients = function () {
