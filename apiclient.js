@@ -834,7 +834,7 @@
             }
 
         }, function () {
-            return normalizeReturnBitrateinstance(instance, currentBitrate);
+            return normalizeReturnBitrate(instance, currentBitrate);
         });
     }
 

@@ -200,6 +200,7 @@
 
         var includeItemTypes = options.IncludeItemTypes ? options.IncludeItemTypes.split(',') : [];
         if (typeFilter) {
+            parentId = null;
             includeItemTypes.push(typeFilter);
         }
 
