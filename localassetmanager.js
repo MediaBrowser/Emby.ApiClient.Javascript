@@ -482,7 +482,10 @@
     function downloadFile(url, localItem) {
 
         var folder = filerepository.getLocalPath();
-        var imageUrl = getImageUrl(localItem.Item.ServerId, localItem.Item.Id, 'Primary', 0);
+        var imageUrl = getImageUrl(localItem.Item.ServerId, localItem.Item.Id, {
+            type: 'Primary',
+            index: 0
+        });
         return transfermanager.downloadFile(url, folder, localItem, imageUrl);
     }
 
@@ -492,7 +495,10 @@
         return transfermanager.downloadSubtitles(url, folder, fileName);
     }
 
-    function getImageUrl(serverId, itemId, imageType, index) {
+    function getImageUrl(serverId, itemId, imageOptions) {
+
+        var imageType = imageOptions.type;
+        var index = imageOptions.index;
 
         var pathArray = getImagePath(serverId, itemId, imageType, index);
         var relPath = pathArray.join('/');

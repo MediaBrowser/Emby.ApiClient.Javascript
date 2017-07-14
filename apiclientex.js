@@ -482,7 +482,7 @@
             var serverInfo = this.serverInfo();
             var id = stripLocalPrefix(itemId);
 
-            return localassetmanager.getImageUrl(serverInfo.Id, id, options.type, 0);
+            return localassetmanager.getImageUrl(serverInfo.Id, id, options);
         }
 
         return ApiClient.prototype.getScaledImageUrl.call(this, itemId, options);
