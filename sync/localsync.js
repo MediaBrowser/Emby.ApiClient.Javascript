@@ -32,14 +32,6 @@
                 });
 
             });
-        },
-
-        getSyncStatus: function () {
-
-            if (syncPromise != null) {
-                return 'Syncing';
-            }
-            return 'Idle';
         }
     };
 
