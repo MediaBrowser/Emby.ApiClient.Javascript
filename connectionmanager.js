@@ -338,7 +338,7 @@
 
             var server = servers[0];
 
-            return getOrAddApiClient(server, server.LastConnectionMode);
+            return self._getOrAddApiClient(server, server.LastConnectionMode);
         };
 
         self.addApiClient = function (apiClient) {
@@ -406,7 +406,7 @@
             events.trigger(self, 'connectusersignedin', [user]);
         }
 
-        function getOrAddApiClient(server, connectionMode) {
+        self._getOrAddApiClient = function (server, connectionMode) {
 
             var apiClient = self.getApiClient(server.Id);
 
@@ -429,7 +429,7 @@
 
             console.log('returning instance from getOrAddApiClient');
             return apiClient;
-        }
+        };
 
         self.getOrCreateApiClient = function (serverId) {
 
@@ -445,7 +445,7 @@
 
             var server = servers[0];
 
-            return getOrAddApiClient(server, server.LastConnectionMode);
+            return self._getOrAddApiClient(server, server.LastConnectionMode);
         };
 
         function onAuthenticated(apiClient, result, options, saveCredentials) {
@@ -514,7 +514,7 @@
             }
 
             // Ensure this is created so that listeners of the event can get the apiClient instance
-            getOrAddApiClient(server, connectionMode);
+            self._getOrAddApiClient(server, connectionMode);
 
             // This allows the app to have a single hook that fires before any other
             var promise = self.onLocalUserSignedIn ? self.onLocalUserSignedIn.call(self, user) : Promise.resolve();
@@ -1187,7 +1187,7 @@
                 Servers: []
             };
 
-            result.ApiClient = getOrAddApiClient(server, connectionMode);
+            result.ApiClient = self._getOrAddApiClient(server, connectionMode);
 
             result.ApiClient.setSystemInfo(systemInfo);
 
@@ -1685,7 +1685,7 @@
 
         for (var i = 0, length = servers.length; i < length; i++) {
             var server = servers[i];
-            getOrAddApiClient(server, server.LastConnectionMode);
+            this._getOrAddApiClient(server, server.LastConnectionMode);
         }
 
         return this._apiClients;
