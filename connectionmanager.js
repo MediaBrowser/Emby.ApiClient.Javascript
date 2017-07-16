@@ -1684,7 +1684,8 @@
         var servers = this.getSavedServers();
 
         for (var i = 0, length = servers.length; i < length; i++) {
-            this.getOrCreateApiClient(servers[i].Id);
+            var server = servers[i];
+            getOrAddApiClient(server, server.LastConnectionMode);
         }
 
         return this._apiClients;
