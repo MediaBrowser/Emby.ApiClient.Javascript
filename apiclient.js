@@ -1,4 +1,4 @@
-﻿define(['events'], function (events) {
+﻿define(['events', 'appStorage'], function (events, appStorage) {
     'use strict';
 
     function redetectBitrate(instance) {
@@ -262,6 +262,8 @@
 
         return getFetchPromise(request).then(function (response) {
 
+            instance.lastFetch = new Date().getTime();
+
             if (response.status < 400) {
 
                 if (request.dataType === 'json' || request.headers.accept === 'application/json') {
@@ -335,6 +337,8 @@
 
             var instance = this;
             return getFetchPromise(request).then(function (response) {
+
+                instance.lastFetch = new Date().getTime();
 
                 if (response.status < 400) {
 
@@ -415,7 +419,7 @@
 
             console.log("Reconnect attempt failed to " + url);
 
-            if (currentRetryCount < 5) {
+            if (currentRetryCount < 4) {
 
                 var newConnectionMode = switchConnectionMode(instance, connectionMode);
 
@@ -488,10 +492,21 @@
         return this.fetch(request, includeAuthorization);
     };
 
+    function getCachedUser(userId) {
+
+        var json = appStorage.getItem('user-' + userId);
+
+        if (json) {
+            return JSON.parse(json);
+        }
+
+        return null;
+    }
+
     /**
      * Gets or sets the current user id.
      */
-    ApiClient.prototype.getCurrentUser = function () {
+    ApiClient.prototype.getCurrentUser = function (enableCache) {
 
         if (this._currentUser) {
             return Promise.resolve(this._currentUser);
@@ -504,10 +519,38 @@
         }
 
         var instance = this;
-        return this.getUser(userId).then(function (user) {
+        var user;
+
+        var serverPromise = this.getUser(userId).then(function (user) {
+            appStorage.setItem('user-' + user.Id, JSON.stringify(user));
+
             instance._currentUser = user;
             return user;
+
+        }, function (response) {
+
+            // if timed out, look for cached value
+            if (!response.status) {
+
+                if (userId && instance.accessToken()) {
+                    user = getCachedUser(userId);
+                    if (user) {
+                        return Promise.resolve(user);
+                    }
+                }
+            }
+
+            throw response;
         });
+
+        if (!this.lastFetch && enableCache !== false) {
+            user = getCachedUser(userId);
+            if (user) {
+                return Promise.resolve(user);
+            }
+        }
+
+        return serverPromise;
     };
 
     ApiClient.prototype.isLoggedIn = function () {
@@ -3786,7 +3829,7 @@
         a = a.split('.');
         b = b.split('.');
 
-        for (var i = 0, length = Math.max(a.length, b.length); i < length; i++) {
+        for (var i = 0, length = Math.max(a.length, b.length) ; i < length; i++) {
             var aVal = parseInt(a[i] || '0');
             var bVal = parseInt(b[i] || '0');
 

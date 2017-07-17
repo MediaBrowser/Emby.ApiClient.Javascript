@@ -1,4 +1,4 @@
-﻿define(['apiclientcore', 'localassetmanager', 'appStorage'], function (ApiClient, localassetmanager, appStorage) {
+﻿define(['apiclientcore', 'localassetmanager'], function (ApiClient, localassetmanager) {
     'use strict';
 
     var localPrefix = 'local:';
@@ -345,31 +345,6 @@
         userId = userId || serverInfo.UserId;
 
         return localassetmanager.getViews(serverInfo.Id, userId);
-    };
-
-    ApiClientEx.prototype.getCurrentUser = function () {
-
-        var instance = this;
-
-        return ApiClient.prototype.getCurrentUser.call(this).then(function (user) {
-
-            appStorage.setItem('user-' + user.Id, JSON.stringify(user));
-            return user;
-
-        }, function (error) {
-
-            var userId = instance.getCurrentUserId();
-
-            if (userId && instance.accessToken()) {
-                var json = appStorage.getItem('user-' + userId);
-
-                if (json) {
-                    return Promise.resolve(JSON.parse(json));
-                }
-            }
-
-            return Promise.reject(error);
-        });
     };
 
     ApiClientEx.prototype.getNextUpEpisodes = function (options) {
