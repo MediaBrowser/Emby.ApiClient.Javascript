@@ -155,13 +155,13 @@
 
         switch (parentId) {
             case 'localview:MusicView':
-                typeFilter = 'Audio';
+                typeFilter = 'MusicAlbum';
                 break;
             case 'localview:PhotosView':
-                typeFilter = 'Photo';
+                typeFilter = 'PhotoAlbum';
                 break;
             case 'localview:TVView':
-                typeFilter = 'Episode';
+                typeFilter = 'Series';
                 break;
             case 'localview:VideosView':
                 typeFilter = 'Video';
@@ -629,6 +629,8 @@
         parts.push('Metadata');
         parts.push(serverId);
         parts.push('images');
+
+        index = index || 0;
         // Store without extension. This allows mixed image types since the browser will
         // detect the type from the content
         parts.push(itemId + '_' + imageType + '_' + index.toString()); // + '.jpg');
