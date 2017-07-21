@@ -277,6 +277,10 @@
             return appVersion;
         };
 
+        self.appName = function () {
+            return appName;
+        };
+
         self.capabilities = function () {
             return capabilities;
         };
@@ -1006,21 +1010,6 @@
             });
         };
 
-        function beginWakeServer(server) {
-
-            console.log('beginWakeServer');
-
-            require(['wakeonlan'], function (wakeonlan) {
-                var infos = server.WakeOnLanInfos || [];
-
-                for (var i = 0, length = infos.length; i < length; i++) {
-
-                    wakeonlan.send(infos[i]);
-                }
-                console.log('beginWakeServer complete');
-            });
-        }
-
         self.connectToServer = function (server, options) {
 
             console.log('begin connectToServer');
@@ -1035,8 +1024,6 @@
                 if (tests.indexOf(ConnectionMode.Manual) === -1) { tests.push(ConnectionMode.Manual); }
                 if (tests.indexOf(ConnectionMode.Local) === -1) { tests.push(ConnectionMode.Local); }
                 if (tests.indexOf(ConnectionMode.Remote) === -1) { tests.push(ConnectionMode.Remote); }
-
-                //beginWakeServer(server);
 
                 options = options || {};
 
@@ -1209,35 +1196,34 @@
 
         self.connectToAddress = function (address, options) {
 
-            return new Promise(function (resolve, reject) {
+            if (!address) {
+                return Promise.reject();
+            }
 
-                if (!address) {
-                    reject();
-                    return;
-                }
+            address = normalizeAddress(address);
+            var instance = this;
 
-                address = normalizeAddress(address);
+            function onFail() {
+                console.log('connectToAddress ' + address + ' failed');
+                return Promise.resolve({
+                    State: ConnectionState.Unavailable,
+                    ConnectUser: instance.connectUser()
+                });
+            }
 
-                function onFail() {
-                    console.log('connectToAddress ' + address + ' failed');
-                    resolveFailure(self, resolve);
-                }
+            return tryConnect(address, defaultTimeout).then(function (publicInfo) {
 
-                tryConnect(address, defaultTimeout).then(function (publicInfo) {
+                console.log('connectToAddress ' + address + ' succeeded');
 
-                    console.log('connectToAddress ' + address + ' succeeded');
+                var server = {
+                    ManualAddress: address,
+                    LastConnectionMode: ConnectionMode.Manual
+                };
+                updateServerInfo(server, publicInfo);
 
-                    var server = {
-                        ManualAddress: address,
-                        LastConnectionMode: ConnectionMode.Manual
-                    };
-                    updateServerInfo(server, publicInfo);
+                return self.connectToServer(server, options).catch(onFail);
 
-                    self.connectToServer(server, options).then(resolve, onFail);
-
-                }, onFail);
-
-            });
+            }, onFail);
         };
 
         self.loginToConnect = function (username, password) {
@@ -1654,8 +1640,6 @@
                 return ensureConnectUser(credentials);
             });
         };
-
-        return self;
     };
 
     ConnectionManager.prototype.connect = function (options) {
