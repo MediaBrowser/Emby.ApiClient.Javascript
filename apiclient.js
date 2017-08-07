@@ -620,13 +620,16 @@
 
                 }).then(function (result) {
 
+                    var afterOnAuthenticated = function() {
+                        redetectBitrate(instance);
+                        resolve(result);
+                    };
+
                     if (instance.onAuthenticated) {
-                        instance.onAuthenticated(instance, result);
+                        instance.onAuthenticated(instance, result).then(afterOnAuthenticated);
+                    } else {
+                        afterOnAuthenticated();
                     }
-
-                    redetectBitrate(instance);
-
-                    resolve(result);
 
                 }, reject);
             });

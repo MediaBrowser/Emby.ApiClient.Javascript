@@ -364,7 +364,7 @@
             apiClient.serverInfo(existingServer);
 
             apiClient.onAuthenticated = function (instance, result) {
-                onAuthenticated(instance, result, {}, true);
+                return onAuthenticated(instance, result, {}, true);
             };
 
             if (!existingServers.length) {
@@ -425,7 +425,7 @@
                 apiClient.serverInfo(server);
 
                 apiClient.onAuthenticated = function (instance, result) {
-                    onAuthenticated(instance, result, {}, true);
+                    return onAuthenticated(instance, result, {}, true);
                 };
 
                 events.trigger(self, 'apiclientcreated', [apiClient]);
@@ -481,7 +481,7 @@
             apiClient.serverInfo(server);
             afterConnected(apiClient, options);
 
-            onLocalUserSignIn(server, server.LastConnectionMode, result.User);
+            return onLocalUserSignIn(server, server.LastConnectionMode, result.User);
         }
 
         function saveUserInfoIntoCredentials(server, user) {
@@ -523,7 +523,7 @@
             // This allows the app to have a single hook that fires before any other
             var promise = self.onLocalUserSignedIn ? self.onLocalUserSignedIn.call(self, user) : Promise.resolve();
 
-            promise.then(function () {
+            return promise.then(function () {
                 events.trigger(self, 'localusersignedin', [user]);
             });
         }
