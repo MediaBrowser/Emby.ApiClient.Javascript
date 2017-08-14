@@ -492,7 +492,7 @@
                     var libraryItem = item.Item;
                     libraryItem.UserData = libraryItem.UserData || {};
                     libraryItem.UserData.PlaybackPositionTicks = options.PositionTicks;
-                    libraryItem.UserData.PlayedPercentage = libraryItem.RunTimeTicks ? Math.min((options.PositionTicks || 0) / libraryItem.RunTimeTicks, 100) : 0;
+                    libraryItem.UserData.PlayedPercentage = Math.min(libraryItem.RunTimeTicks ? (100 * ((options.PositionTicks || 0) / libraryItem.RunTimeTicks)) : 0, 100);
 
                     return localassetmanager.addOrUpdateLocalItem(item);
                 });
