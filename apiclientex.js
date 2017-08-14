@@ -492,10 +492,13 @@
                     var libraryItem = item.Item;
                     libraryItem.UserData = libraryItem.UserData || {};
                     libraryItem.UserData.PlaybackPositionTicks = options.PositionTicks;
+                    libraryItem.UserData.PlayedPercentage = libraryItem.RunTimeTicks ? Math.min((options.PositionTicks || 0) / libraryItem.RunTimeTicks, 100) : 0;
 
                     return localassetmanager.addOrUpdateLocalItem(item);
                 });
             }
+
+            return Promise.resolve();
         }
 
         return ApiClient.prototype.reportPlaybackProgress.call(this, options);
