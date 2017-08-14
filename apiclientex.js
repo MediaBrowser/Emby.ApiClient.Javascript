@@ -483,7 +483,19 @@
         }
 
         if (isLocalId(options.ItemId)) {
-            return Promise.resolve();
+            var serverInfo = this.serverInfo();
+
+            if (serverInfo) {
+
+                return localassetmanager.getLocalItem(serverInfo.Id, stripLocalPrefix(options.ItemId)).then(function (item) {
+
+                    var libraryItem = item.Item;
+                    libraryItem.UserData = libraryItem.UserData || {};
+                    libraryItem.UserData.PlaybackPositionTicks = options.PositionTicks;
+
+                    return localassetmanager.addOrUpdateLocalItem(item);
+                });
+            }
         }
 
         return ApiClient.prototype.reportPlaybackProgress.call(this, options);
@@ -500,14 +512,14 @@
             var serverInfo = this.serverInfo();
 
             var action =
-            {
-                Date: new Date().getTime(),
-                ItemId: stripLocalPrefix(options.ItemId),
-                PositionTicks: options.PositionTicks,
-                ServerId: serverInfo.Id,
-                Type: 0, // UserActionType.PlayedItem
-                UserId: this.getCurrentUserId()
-            };
+                {
+                    Date: new Date().getTime(),
+                    ItemId: stripLocalPrefix(options.ItemId),
+                    PositionTicks: options.PositionTicks,
+                    ServerId: serverInfo.Id,
+                    Type: 0, // UserActionType.PlayedItem
+                    UserId: this.getCurrentUserId()
+                };
 
             return localassetmanager.recordUserAction(action);
         }
