@@ -244,7 +244,6 @@
             libraryItem.People = [];
             libraryItem.Chapters = [];
             libraryItem.Studios = [];
-            libraryItem.UserData = {};
             libraryItem.SpecialFeatureCount = null;
             libraryItem.LocalTrailerCount = null;
             libraryItem.RemoteTrailers = [];
@@ -308,7 +307,6 @@
             downloadedItem.CanDownload = false;
             downloadedItem.SupportsSync = false;
             downloadedItem.People = [];
-            downloadedItem.UserData = {};
             downloadedItem.SpecialFeatureCount = null;
             downloadedItem.BackdropImageTags = null;
             downloadedItem.ParentBackdropImageTags = null;
