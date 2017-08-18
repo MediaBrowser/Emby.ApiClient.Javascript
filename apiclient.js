@@ -1548,6 +1548,23 @@
     };
 
     /**
+     * Gets premiere status info
+     */
+    ApiClient.prototype.getPremiereStatus = function (key) {
+
+        var postData = "key="+key+"&serverId="+this.serverId();
+
+        return this.fetch({
+            url: "https://mb3admin.com/admin/service/registration/getStatus",
+            type: 'POST',
+            data: postData,
+            contentType: "application/x-www-form-urlencoded",
+            dataType: "json"
+        }, false);
+        
+    };
+
+    /**
      * Gets plugin security info
      */
     ApiClient.prototype.getPluginSecurityInfo = function () {
