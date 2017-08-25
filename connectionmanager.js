@@ -475,23 +475,12 @@
             }
 
             credentialProvider.addOrUpdateServer(credentials.Servers, server);
-            saveUserInfoIntoCredentials(server, result.User);
             credentialProvider.credentials(credentials);
 
             apiClient.serverInfo(server);
             afterConnected(apiClient, options);
 
             return onLocalUserSignIn(server, server.LastConnectionMode, result.User);
-        }
-
-        function saveUserInfoIntoCredentials(server, user) {
-
-            var info = {
-                Id: user.Id,
-                IsSignedInOffline: true
-            };
-
-            credentialProvider.addOrUpdateUser(server, info);
         }
 
         function afterConnected(apiClient, options) {
@@ -762,13 +751,6 @@
                     server.UserId = null;
                     server.AccessToken = null;
                     server.ExchangeToken = null;
-
-                    var serverUsers = server.Users || [];
-
-                    for (var k = 0, numUsers = serverUsers.length; k < numUsers; k++) {
-
-                        serverUsers[k].IsSignedInOffline = false;
-                    }
                 }
 
                 if (credentials.ConnectAccessToken) {
@@ -1669,7 +1651,9 @@
 
         for (var i = 0, length = servers.length; i < length; i++) {
             var server = servers[i];
-            this._getOrAddApiClient(server, server.LastConnectionMode);
+            if (server.Id) {
+                this._getOrAddApiClient(server, server.LastConnectionMode);
+            }
         }
 
         return this._apiClients;
