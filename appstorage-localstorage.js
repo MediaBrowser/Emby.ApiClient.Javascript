@@ -1,12 +1,16 @@
 ﻿define([], function () {
     'use strict';
 
+    function onCachePutFail(e) {
+        console.log(e);
+    }
+
     function updateCache(instance) {
 
         var cache = instance.cache;
 
         if (cache) {
-            cache.put('data', new Response(JSON.stringify(instance.localData)));
+            cache.put('data', new Response(JSON.stringify(instance.localData))).catch(onCachePutFail);
         }
     }
 
