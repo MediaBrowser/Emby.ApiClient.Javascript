@@ -620,7 +620,7 @@
 
                 }).then(function (result) {
 
-                    var afterOnAuthenticated = function() {
+                    var afterOnAuthenticated = function () {
                         redetectBitrate(instance);
                         resolve(result);
                     };
@@ -637,6 +637,7 @@
     };
 
     ApiClient.prototype.ensureWebSocket = function () {
+
         if (this.isWebSocketOpenOrConnecting() || !this.isWebSocketSupported()) {
             return;
         }
@@ -647,6 +648,60 @@
             console.log("Error opening web socket: " + err);
         }
     };
+
+    function onWebSocketMessage(msg) {
+
+        var instance = this;
+        msg = JSON.parse(msg.data);
+        onWebSocketMessageInternal(instance, msg);
+    }
+
+    function onWebSocketMessageInternal(instance, msg) {
+
+        if (msg.MessageType === "UserDeleted") {
+            instance._currentUser = null;
+        }
+        else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated") {
+
+            var user = msg.Data;
+            if (user.Id === instance.getCurrentUserId()) {
+
+                instance._currentUser = null;
+            }
+        }
+
+        events.trigger(instance, 'websocketmessage', [msg]);
+    }
+
+    function onWebSocketOpen() {
+
+        var instance = this;
+        console.log('web socket connection opened');
+        events.trigger(instance, 'websocketopen');
+    }
+
+    function onWebSocketError() {
+
+        var instance = this;
+        events.trigger(instance, 'websocketerror');
+    }
+
+    function setSocketOnClose(apiClient, socket) {
+
+        socket.onclose = function () {
+
+            console.log('web socket closed');
+
+            if (apiClient._webSocket === socket) {
+                console.log('nulling out web socket');
+                apiClient._webSocket = null;
+            }
+
+            setTimeout(function () {
+                events.trigger(apiClient, 'websocketclose');
+            }, 0);
+        };
+    }
 
     ApiClient.prototype.openWebSocket = function () {
 
@@ -665,57 +720,26 @@
         url += "?api_key=" + accessToken;
         url += "&deviceId=" + this.deviceId();
 
+        console.log('opening web socket with url: ' + url);
+
         var webSocket = new WebSocket(url);
 
-        var instance = this;
-
-        webSocket.onmessage = function (msg) {
-
-            msg = JSON.parse(msg.data);
-            onWebSocketMessage(instance, msg);
-        };
-
-        webSocket.onopen = function () {
-
-            console.log('web socket connection opened');
-            setTimeout(function () {
-                events.trigger(instance, 'websocketopen');
-            }, 0);
-        };
-        webSocket.onerror = function () {
-            events.trigger(instance, 'websocketerror');
-        };
-        webSocket.onclose = function () {
-            setTimeout(function () {
-                events.trigger(instance, 'websocketclose');
-            }, 0);
-        };
+        webSocket.onmessage = onWebSocketMessage.bind(this);
+        webSocket.onopen = onWebSocketOpen.bind(this);
+        webSocket.onerror = onWebSocketError.bind(this);
+        setSocketOnClose(this, webSocket);
 
         this._webSocket = webSocket;
     };
 
     ApiClient.prototype.closeWebSocket = function () {
-        if (this._webSocket && this._webSocket.readyState === WebSocket.OPEN) {
-            this._webSocket.close();
+
+        var socket = this._webSocket;
+
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.close();
         }
     };
-
-    function onWebSocketMessage(instance, msg) {
-
-        if (msg.MessageType === "UserDeleted") {
-            instance._currentUser = null;
-        }
-        else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated") {
-
-            var user = msg.Data;
-            if (user.Id === instance.getCurrentUserId()) {
-
-                instance._currentUser = null;
-            }
-        }
-
-        events.trigger(instance, 'websocketmessage', [msg]);
-    }
 
     ApiClient.prototype.sendWebSocketMessage = function (name, data) {
 
@@ -733,11 +757,23 @@
     };
 
     ApiClient.prototype.isWebSocketOpen = function () {
-        return this._webSocket && this._webSocket.readyState === WebSocket.OPEN;
+
+        var socket = this._webSocket;
+
+        if (socket) {
+            return socket.readyState === WebSocket.OPEN;
+        }
+        return false;
     };
 
     ApiClient.prototype.isWebSocketOpenOrConnecting = function () {
-        return this._webSocket && (this._webSocket.readyState === WebSocket.OPEN || this._webSocket.readyState === WebSocket.CONNECTING);
+
+        var socket = this._webSocket;
+
+        if (socket) {
+            return socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING;
+        }
+        return false;
     };
 
     ApiClient.prototype.get = function (url) {
