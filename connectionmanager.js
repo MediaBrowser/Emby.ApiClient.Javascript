@@ -80,7 +80,7 @@
         }
         if (systemInfo.MacAddress) {
             server.WakeOnLanInfos = [
-                    { MacAddress: systemInfo.MacAddress }
+                { MacAddress: systemInfo.MacAddress }
             ];
         }
     }
@@ -243,7 +243,7 @@
         a = a.split('.');
         b = b.split('.');
 
-        for (var i = 0, length = Math.max(a.length, b.length) ; i < length; i++) {
+        for (var i = 0, length = Math.max(a.length, b.length); i < length; i++) {
             var aVal = parseInt(a[i] || '0');
             var bVal = parseInt(b[i] || '0');
 
@@ -1438,7 +1438,7 @@
             });
         };
 
-        self.getRegistrationInfo = function (feature, apiClient) {
+        self.getRegistrationInfo = function (feature, apiClient, options) {
 
             var params = {
                 serverId: apiClient.serverInfo().Id,
@@ -1449,7 +1449,15 @@
                 embyUserName: ''
             };
 
+            options = options || {};
+            var viewOnly = options.viewOnly;
+
             var cacheKey = 'regInfo-' + params.serverId;
+
+            if (viewOnly) {
+                cacheKey += '-viewonly';
+            }
+
             var regInfo = JSON.parse(appStorage.getItem(cacheKey) || '{}');
 
             var timeSinceLastValidation = (new Date().getTime() - (regInfo.lastValidDate || 0));
