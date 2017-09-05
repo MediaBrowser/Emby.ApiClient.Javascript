@@ -560,6 +560,7 @@
             }
 
             subtitleStream.Path = subtitlePath;
+            subtitleStream.DeliveryMethod = 'External';
             return localassetmanager.addOrUpdateLocalItem(localItem);
         });
     }
