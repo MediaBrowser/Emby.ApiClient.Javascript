@@ -392,14 +392,7 @@
     }
 
     function addOrUpdateLocalItem(localItem) {
-        console.log('addOrUpdateLocalItem Start');
-        return itemrepository.set(localItem.ServerId, localItem.Id, localItem).then(function (res) {
-            console.log('addOrUpdateLocalItem Success');
-            return Promise.resolve(true);
-        }, function (error) {
-            console.log('addOrUpdateLocalItem Error');
-            return Promise.resolve(false);
-        });
+        return itemrepository.set(localItem.ServerId, localItem.Id, localItem);
     }
 
     function createLocalItem(libraryItem, serverInfo, jobItem) {
