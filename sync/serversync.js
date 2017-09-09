@@ -1,15 +1,16 @@
 ﻿define([], function () {
     'use strict';
 
-    function performSync(connectionManager, server, options) {
+    function performSync(connectionManager, apiClient, options) {
 
-        console.log("ServerSync.performSync to server: " + server.Id);
+        var serverId = apiClient.serverId();
+        console.log("ServerSync.performSync to server: " + serverId);
 
         options = options || {};
 
         var uploadPhotos = options.uploadPhotos !== false;
 
-        if (options.cameraUploadServers && options.cameraUploadServers.indexOf(server.Id) === -1) {
+        if (options.cameraUploadServers && options.cameraUploadServers.indexOf(serverId) === -1) {
             uploadPhotos = false;
         }
 
@@ -18,39 +19,37 @@
         return pr.then(function () {
 
             if (uploadPhotos) {
-                return uploadContent(connectionManager, server, options);
+                return uploadContent(connectionManager, apiClient, options);
             }
 
             return Promise.resolve();
 
         }).then(function () {
 
-            return syncMedia(connectionManager, server, options);
+            return syncMedia(connectionManager, apiClient, options);
         });
     }
 
 
-    function uploadContent(connectionManager, server, options) {
+    function uploadContent(connectionManager, apiClient, options) {
 
         return new Promise(function (resolve, reject) {
 
             require(['contentuploader'], function (ContentUploader) {
 
                 var uploader = new ContentUploader();
-                uploader.uploadImages(connectionManager, server).then(resolve, reject);
+                uploader.uploadImages(connectionManager, apiClient).then(resolve, reject);
             });
         });
     }
 
-    function syncMedia(connectionManager, server, options) {
+    function syncMedia(connectionManager, apiClient, options) {
 
         return new Promise(function (resolve, reject) {
 
             require(['mediasync'], function (MediaSync) {
 
-                var apiClient = connectionManager.getApiClient(server.Id);
-
-                new MediaSync().sync(apiClient, server, options).then(resolve, reject);
+                new MediaSync().sync(apiClient, options).then(resolve, reject);
             });
         });
     }
@@ -59,35 +58,17 @@
 
     }
 
-    ServerSync.prototype.sync = function (connectionManager, server, options) {
+    ServerSync.prototype.sync = function (connectionManager, apiClient, options) {
 
-        if (!server.AccessToken && !server.ExchangeToken) {
+        var serverId = apiClient.serverId();
 
-            console.log('Skipping sync to server ' + server.Id + ' because there is no saved authentication information.');
+        if (!apiClient.accessToken()) {
+
+            console.log('Skipping sync to server ' + serverId + ' because there is no saved authentication information.');
             return Promise.resolve();
         }
 
-        var connectionOptions = {
-            updateDateLastAccessed: false,
-            enableWebSocket: false,
-            reportCapabilities: false,
-            enableAutomaticBitrateDetection: false
-        };
-
-        return connectionManager.connectToServer(server, connectionOptions).then(function (result) {
-
-            if (result.State === MediaBrowser.ConnectionState.SignedIn) {
-                return performSync(connectionManager, server, options);
-            } else {
-                console.log('Unable to connect to server id: ' + server.Id);
-                return Promise.reject();
-            }
-
-        }, function (err) {
-
-            console.log('Unable to connect to server id: ' + server.Id);
-            throw err;
-        });
+        return performSync(connectionManager, apiClient, options);
     };
 
     return ServerSync;

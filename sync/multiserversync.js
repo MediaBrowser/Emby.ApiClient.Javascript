@@ -1,9 +1,9 @@
 ﻿define(['serversync'], function (ServerSync) {
     'use strict';
 
-    function syncNext(connectionManager, servers, index, options, resolve, reject) {
+    function syncNext(connectionManager, apiClients, index, options, resolve, reject) {
 
-        var length = servers.length;
+        var length = apiClients.length;
 
         if (index >= length) {
 
@@ -11,17 +11,17 @@
             return;
         }
 
-        var server = servers[index];
+        var apiClient = apiClients[index];
 
-        console.log("Creating ServerSync to server: " + server.Id);
+        console.log("Creating ServerSync to server: " + apiClient.serverId());
 
-        new ServerSync().sync(connectionManager, server, options).then(function () {
+        new ServerSync().sync(connectionManager, apiClient, options).then(function () {
 
-            syncNext(connectionManager, servers, index + 1, options, resolve, reject);
+            syncNext(connectionManager, apiClients, index + 1, options, resolve, reject);
 
         }, function () {
 
-            syncNext(connectionManager, servers, index + 1, options, resolve, reject);
+            syncNext(connectionManager, apiClients, index + 1, options, resolve, reject);
         });
     }
 
@@ -33,9 +33,9 @@
 
         return new Promise(function (resolve, reject) {
 
-            var servers = connectionManager.getSavedServers();
+            var apiClients = connectionManager.getApiClients();
 
-            syncNext(connectionManager, servers, 0, options, resolve, reject);
+            syncNext(connectionManager, apiClients, 0, options, resolve, reject);
         });
     };
 

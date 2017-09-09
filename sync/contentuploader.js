@@ -22,7 +22,7 @@
         return CryptoJS.SHA1(file + "1").toString();
     }
 
-    function uploadNext(files, index, server, apiClient, resolve, reject) {
+    function uploadNext(files, index, apiClient, resolve, reject) {
 
         var length = files.length;
 
@@ -34,9 +34,9 @@
 
         uploadFile(files[index], apiClient).then(function () {
 
-            uploadNext(files, index + 1, server, apiClient, resolve, reject);
+            uploadNext(files, index + 1, apiClient, resolve, reject);
         }, function () {
-            uploadNext(files, index + 1, server, apiClient, resolve, reject);
+            uploadNext(files, index + 1, apiClient, resolve, reject);
         });
     }
 
@@ -67,15 +67,13 @@
 
     }
 
-    ContentUploader.prototype.uploadImages = function (connectionManager, server) {
+    ContentUploader.prototype.uploadImages = function (connectionManager, apiClient) {
 
         return cameraRoll.getFiles().then(function (photos) {
 
             if (!photos.length) {
                 return Promise.resolve();
             }
-
-            var apiClient = connectionManager.getApiClient(server.Id);
 
             return apiClient.getContentUploadHistory().then(function (uploadHistory) {
 
@@ -85,7 +83,7 @@
 
                 return new Promise(function (resolve, reject) {
 
-                    uploadNext(photos, 0, server, apiClient, resolve, reject);
+                    uploadNext(photos, 0, apiClient, resolve, reject);
                 });
 
             }, function () {
