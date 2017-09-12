@@ -395,9 +395,9 @@
         return itemrepository.set(localItem.ServerId, localItem.Id, localItem);
     }
 
-    function createLocalItem(libraryItem, apiClient, jobItem) {
+    function createLocalItem(libraryItem, serverInfo, jobItem) {
 
-        var path = getDirectoryPath(libraryItem, apiClient.serverName());
+        var path = getDirectoryPath(libraryItem, serverInfo);
         var localFolder = filerepository.getFullLocalPath(path);
 
         var localPath;
@@ -419,7 +419,7 @@
 
             Item: libraryItem,
             ItemId: libraryItem.Id,
-            ServerId: apiClient.serverId(),
+            ServerId: serverInfo.Id,
             LocalPath: localPath,
             LocalFolder: localFolder,
             SyncDate: Date.now(),
@@ -558,10 +558,10 @@
 
     // Helpers ***********************************************************
 
-    function getDirectoryPath(item, serverName) {
+    function getDirectoryPath(item, server) {
 
         var parts = [];
-        parts.push(serverName);
+        parts.push(server.Name);
 
         var itemtype = item.Type.toLowerCase();
 
