@@ -608,7 +608,8 @@
                 var postData = {
                     Password: CryptoJS.SHA1(password || "").toString(),
                     PasswordMd5: CryptoJS.MD5(password || "").toString(),
-                    Username: name
+                    Username: name,
+                    Pw: password
                 };
 
                 instance.ajax({
@@ -2821,8 +2822,10 @@
                     type: "POST",
                     url: url,
                     data: {
-                        currentPassword: CryptoJS.SHA1(currentPassword).toString(),
-                        newPassword: CryptoJS.SHA1(newPassword).toString()
+                        CurrentPassword: CryptoJS.SHA1(currentPassword).toString(),
+                        NewPassword: CryptoJS.SHA1(newPassword).toString(),
+                        CurrentPw: currentPassword,
+                        NewPw: newPassword
                     }
                 }).then(resolve, reject);
             });
@@ -2853,7 +2856,8 @@
                     type: "POST",
                     url: url,
                     data: {
-                        newPassword: CryptoJS.SHA1(newPassword).toString()
+                        newPassword: CryptoJS.SHA1(newPassword).toString(),
+                        NewPw: newPassword
                     }
                 }).then(resolve, reject);
             });

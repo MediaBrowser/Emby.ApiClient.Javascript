@@ -271,7 +271,7 @@
             return connectUser;
         };
 
-        self._minServerVersion = '3.2.20';
+        self._minServerVersion = '3.2.22';
 
         self.appVersion = function () {
             return appVersion;
@@ -1069,8 +1069,8 @@
                 }
                 else if (result.Id !== server.Id) {
 
-                    // http request succeeded, but it's a different server than what was expected
-                    testNextConnectionMode(tests, index + 1, server, options, resolve);
+                    console.log('http request succeeded, but found a different server Id than what was expected');
+                    resolveFailure(self, resolve);
 
                 } else {
                     console.log('calling onSuccessfulConnection with connection mode ' + mode + ' with server ' + server.Name);
