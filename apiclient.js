@@ -503,9 +503,9 @@
         return this.fetch(request, includeAuthorization);
     };
 
-    function getCachedUser(userId) {
+    function getCachedUser(instance, userId) {
 
-        var serverId = this.serverId();
+        var serverId = instance.serverId();
         if (!serverId) {
             return null;
         }
@@ -550,7 +550,7 @@
             if (!response.status) {
 
                 if (userId && instance.accessToken()) {
-                    user = getCachedUser(userId);
+                    user = getCachedUser(instance, userId);
                     if (user) {
                         return Promise.resolve(user);
                     }
@@ -561,7 +561,7 @@
         });
 
         if (!this.lastFetch && enableCache !== false) {
-            user = getCachedUser(userId);
+            user = getCachedUser(instance, userId);
             if (user) {
                 return Promise.resolve(user);
             }
