@@ -3168,6 +3168,13 @@
         return this.getJSON(url);
     };
 
+    ApiClient.prototype.getResumableItems = function (userId, options) {
+
+        var url = this.getUrl("Users/" + userId + "/Items/Resume", options);
+
+        return this.getJSON(url);
+    };
+
     ApiClient.prototype.getMovieRecommendations = function (options) {
 
         return this.getJSON(this.getUrl('Movies/Recommendations', options));
