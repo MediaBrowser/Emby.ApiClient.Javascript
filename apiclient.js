@@ -3170,9 +3170,20 @@
 
     ApiClient.prototype.getResumableItems = function (userId, options) {
 
-        var url = this.getUrl("Users/" + userId + "/Items/Resume", options);
+        if (this.isMinServerVersion('3.2.33')) {
+            return this.getJSON(this.getUrl("Users/" + userId + "/Items/Resume", options));
+        }
 
-        return this.getJSON(url);
+        return this.getItems(userId, Object.assign({
+
+            SortBy: "DatePlayed",
+            SortOrder: "Descending",
+            Filters: "IsResumable",
+            Recursive: true,
+            CollapseBoxSetItems: false,
+            ExcludeLocationTypes: "Virtual"
+
+        }, options));
     };
 
     ApiClient.prototype.getMovieRecommendations = function (options) {
