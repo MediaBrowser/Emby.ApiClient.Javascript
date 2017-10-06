@@ -1,18 +1,25 @@
-﻿define(['filerepository'], function (filerepository) {
+﻿define([], function () {
     'use strict';
 
-    function downloadFile(url, folderName, localPath) {
+    function createDownload(url, folderName, fileName, monitorCompletion, imageUrl) {
 
-        return Promise.resolve();
+        return Promise.reject();
     }
 
-    function downloadSubtitles(url, folderName, localItem) {
+    function downloadFile(url, folderName, localItem, imageUrl) {
 
-        return Promise.resolve('');
+        var fileName = localItem.LocalPath;
+
+        return createDownload(url, folderName, fileName, true, imageUrl);
     }
 
-    function downloadImage(url, folderName, serverId, itemId, imageTag) {
-        return Promise.resolve(false);
+    function downloadSubtitles(url, folderName, fileName) {
+
+        return createDownload(url, folderName, fileName, false);
+    }
+
+    function downloadImage(url, folderName, fileName) {
+        return createDownload(url, folderName, fileName, false);
     }
 
     return {
