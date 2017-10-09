@@ -26,7 +26,7 @@
         return Promise.resolve();
     }
 
-    function getItemDownloadCount() {
+    function getDownloadItemCount() {
         return Promise.resolve(0);
     }
 
@@ -35,6 +35,6 @@
         downloadSubtitles: downloadSubtitles,
         downloadImage: downloadImage,
         resyncTransfers: resyncTransfers,
-        getItemDownloadCount: getItemDownloadCount
+        getDownloadItemCount: getDownloadItemCount
     };
 });
