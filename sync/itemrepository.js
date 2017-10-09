@@ -133,7 +133,7 @@
 
                 request.onsuccess = function (event) {
                     // Do something with the request.result!
-                    resolve(request.result.name);
+                    resolve(request.result);
                 };
             });
         });
