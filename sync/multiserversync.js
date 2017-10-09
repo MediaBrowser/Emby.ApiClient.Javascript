@@ -31,6 +31,8 @@
 
     MultiServerSync.prototype.sync = function (connectionManager, options) {
 
+        console.log('MultiServerSync.sync starting...');
+
         return new Promise(function (resolve, reject) {
 
             var servers = connectionManager.getSavedServers();
