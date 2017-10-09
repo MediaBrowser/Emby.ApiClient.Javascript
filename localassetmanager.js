@@ -64,7 +64,7 @@
             var list = [];
             var item;
 
-            if (types.indexOf('audio') > -1) {
+            if (types.indexOf('Audio') > -1) {
 
                 item = {
                     Name: 'Music',
@@ -78,7 +78,7 @@
                 list.push(item);
             }
 
-            if (types.indexOf('photo') > -1) {
+            if (types.indexOf('Photo') > -1) {
 
                 item = {
                     Name: 'Photos',
@@ -92,7 +92,7 @@
                 list.push(item);
             }
 
-            if (types.indexOf('episode') > -1) {
+            if (types.indexOf('Episode') > -1) {
 
                 item = {
                     Name: 'TV',
@@ -106,7 +106,7 @@
                 list.push(item);
             }
 
-            if (types.indexOf('movie') > -1) {
+            if (types.indexOf('Movie') > -1) {
 
                 item = {
                     Name: 'Movies',
@@ -120,7 +120,7 @@
                 list.push(item);
             }
 
-            if (types.indexOf('video') > -1) {
+            if (types.indexOf('Video') > -1) {
 
                 item = {
                     Name: 'Videos',
@@ -134,7 +134,7 @@
                 list.push(item);
             }
 
-            if (types.indexOf('musicvideo') > -1) {
+            if (types.indexOf('MusicVideo') > -1) {
 
                 item = {
                     Name: 'Music Videos',

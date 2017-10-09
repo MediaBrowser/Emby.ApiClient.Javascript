@@ -1,112 +1,186 @@
-﻿define(['idb'], function () {
+﻿define([], function () {
     'use strict';
+
+    // In the following line, you should include the prefixes of implementations you want to test.
+    var indexedDB = self.indexedDB || self.mozIndexedDB || self.webkitIndexedDB || self.msIndexedDB;
+    // DON'T use "var indexedDB = ..." if you're not in a function.
+    // Moreover, you may need references to some window.IDB* objects:
+    var IDBTransaction = window.IDBTransaction || window.webkitIDBTransaction || window.msIDBTransaction || { READ_WRITE: "readwrite" }; // This line should only be needed if it is needed to support the object's constants for older browsers
+    var IDBKeyRange = self.IDBKeyRange || self.webkitIDBKeyRange || self.msIDBKeyRange;
+    // (Mozilla has never prefixed these objects, so we don't need window.mozIDB*)
 
     // Database version
     var dbVersion = 1;
 
-    var promisesMap = new Map();
+    var databases = {};
+
+    function ServerDatabase(dbName, readyCallback) {
+
+        var instance = this;
+        var request = indexedDB.open(dbName, dbVersion);
+
+        request.onerror = function (event) {
+            // Handle errors.
+        };
+
+        request.onupgradeneeded = function (event) {
+            var db = event.target.result;
+
+            // Create an objectStore to hold information about our customers. We're
+            // going to use "ssn" as our key path because it's guaranteed to be
+            // unique - or at least that's what I was told during the kickoff meeting.
+            var objectStore = db.createObjectStore(dbName);
+
+            // Use transaction oncomplete to make sure the objectStore creation is 
+            // finished before adding data into it.
+            objectStore.transaction.oncomplete = function (event) {
+                readyCallback(instance);
+            };
+        };
+    }
 
     function getDbName(serverId) {
 
         return "items_" + serverId;
     }
 
-    function getPromise(dbName) {
-
-        if (!promisesMap.has(dbName)) {
-            return idb.open(dbName, dbVersion, upgradeDbFunc).then(function (dbPromise) {
-                promisesMap.set(dbName, dbPromise);
-                return Promise.resolve(dbPromise);
-            });
-        }
-
-        var dbPromise = promisesMap.get(dbName);
-        return Promise.resolve(dbPromise);
-    }
-
-    function getTransaction(serverId, access) {
+    function getDb(serverId, callback) {
 
         var dbName = getDbName(serverId);
-
-        if (!access) {
-            access = 'readonly';
+        var db = databases[dbName];
+        if (db) {
+            callback(db);
         }
 
-        return getPromise(dbName).then(function (db) {
+        new ServerDatabase(dbName, function (db) {
 
-            return db.transaction(dbName, access);
+            databases[dbName] = db;
+            callback(db);
         });
     }
-
-    function getObjectStore(serverId, access) {
-
-        var dbName = getDbName(serverId);
-
-        return getTransaction(serverId, access).then(function (tx) {
-
-            return tx.objectStore(dbName);
-        });
-    }
-
-    function upgradeDbFunc(upgradeDB) {
-
-        // Note: we don't use 'break' in this switch statement,
-        // the fall-through behaviour is what we want.
-        switch (upgradeDB.oldVersion) {
-            case 0:
-                upgradeDB.createObjectStore(upgradeDB.name);
-                //case 1:
-                //    upgradeDB.createObjectStore('stuff', { keyPath: '' });
-        }
-    }
-
-
 
     function getServerItemTypes(serverId, userId) {
 
-        return getObjectStore(serverId).then(function (store) {
+        return getAll(serverId, userId).then(function (all) {
 
-            return store.getAll(null, 10000).then(function (all) {
-                return all.filter(function (item) {
-                    return true; // item.ServerId === serverId && (item.UserIdsWithAccess == null || item.UserIdsWithAccess.contains(userId));
-                }).map(function (item2) {
-                    return (item2.Item.Type || '').toLowerCase();
-                }).filter(filterDistinct);
-            });
+            return all.map(function (item2) {
+
+                return (item2.Item.Type || '');
+
+            }).filter(filterDistinct);
         });
     }
 
-    function getAll(serverId) {
+    function getAll(serverId, userId) {
 
-        return getObjectStore(serverId).then(function (store) {
-            return store.getAll(null, 10000);
+        return new Promise(function (resolve, reject) {
+            getDb(serverId, function (db) {
+
+                var storeName = getDbName(serverId);
+
+                var transaction = db.transaction([storeName], 'readonly');
+                var objectStore = transaction.objectStore(storeName);
+
+                if ('getAll' in objectStore) {
+
+                    // IDBObjectStore.getAll() will return the full set of items in our store.
+                    var request = objectStore.getAll(null, 10000);
+
+                    request.onsuccess = function (event) {
+                        resolve(event.target.result);
+                    };
+
+                    request.onerror = reject;
+
+                } else {
+
+                    // Fallback to the traditional cursor approach if getAll isn't supported.
+                    var results = [];
+                    var request = objectStore.openCursor();
+
+                    request.onsuccess = function (event) {
+                        var cursor = event.target.result;
+                        if (cursor) {
+                            results.push(cursor.value);
+                            cursor.continue();
+                        } else {
+                            resolve(results);
+                        }
+                    };
+
+                    request.onerror = reject;
+                }
+            });
         });
     }
 
     function get(serverId, key) {
-        return getObjectStore(serverId).then(function (store) {
-            return store.get(key);
+
+        return new Promise(function (resolve, reject) {
+            getDb(serverId, function (db) {
+
+                var storeName = getDbName(serverId);
+
+                var transaction = db.transaction([storeName], 'readonly');
+                var objectStore = transaction.objectStore(storeName);
+                var request = objectStore.get(key);
+
+                request.onerror = reject;
+
+                request.onsuccess = function (event) {
+                    // Do something with the request.result!
+                    resolve(request.result.name);
+                };
+            });
         });
     }
 
     function set(serverId, key, val) {
-        return getTransaction(serverId, 'readwrite').then(function (tx) {
-            tx.objectStore(getDbName(serverId)).put(val, key);
-            return tx.complete;
+
+        return new Promise(function (resolve, reject) {
+            getDb(serverId, function (db) {
+
+                var storeName = getDbName(serverId);
+
+                var transaction = db.transaction([storeName], 'readwrite');
+                var objectStore = transaction.objectStore(storeName);
+                var request = objectStore.put(val, key);
+
+                request.onerror = reject;
+                request.onsuccess = resolve;
+            });
         });
     }
 
     function remove(serverId, key) {
-        return getTransaction(serverId, 'readwrite').then(function (tx) {
-            tx.objectStore(getDbName(serverId)).delete(key);
-            return tx.complete;
+        return new Promise(function (resolve, reject) {
+            getDb(serverId, function (db) {
+
+                var storeName = getDbName(serverId);
+
+                var transaction = db.transaction([storeName], 'readwrite');
+                var objectStore = transaction.objectStore(storeName);
+                var request = objectStore.delete(key);
+
+                request.onerror = reject;
+                request.onsuccess = resolve;
+            });
         });
     }
 
     function clear(serverId) {
-        return getTransaction(serverId, 'readwrite').then(function (tx) {
-            tx.objectStore(getDbName(serverId)).clear();
-            return tx.complete;
+        return new Promise(function (resolve, reject) {
+            getDb(serverId, function (db) {
+
+                var storeName = getDbName(serverId);
+
+                var transaction = db.transaction([storeName], 'readwrite');
+                var objectStore = transaction.objectStore(storeName);
+                var request = objectStore.clear();
+
+                request.onerror = reject;
+                request.onsuccess = resolve;
+            });
         });
     }
 
