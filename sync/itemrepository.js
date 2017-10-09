@@ -80,23 +80,22 @@
 
                 var transaction = db.transaction([storeName], 'readonly');
                 var objectStore = transaction.objectStore(storeName);
+                var request;
 
                 if ('getAll' in objectStore) {
 
                     // IDBObjectStore.getAll() will return the full set of items in our store.
-                    var request = objectStore.getAll(null, 10000);
+                    request = objectStore.getAll(null, 10000);
 
                     request.onsuccess = function (event) {
                         resolve(event.target.result);
                     };
 
-                    request.onerror = reject;
-
                 } else {
 
                     // Fallback to the traditional cursor approach if getAll isn't supported.
                     var results = [];
-                    var request = objectStore.openCursor();
+                    request = objectStore.openCursor();
 
                     request.onsuccess = function (event) {
                         var cursor = event.target.result;
@@ -107,9 +106,9 @@
                             resolve(results);
                         }
                     };
-
-                    request.onerror = reject;
                 }
+
+                request.onerror = reject;
             });
         });
     }
