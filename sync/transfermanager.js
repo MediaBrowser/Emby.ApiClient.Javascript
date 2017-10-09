@@ -1,25 +1,18 @@
 ﻿define([], function () {
     'use strict';
 
-    function createDownload(url, folderName, fileName, monitorCompletion, imageUrl) {
+    function downloadFile(url, folder, localItem, imageUrl) {
 
         return Promise.reject();
     }
 
-    function downloadFile(url, folderName, localItem, imageUrl) {
+    function downloadSubtitles(url, folder, fileName) {
 
-        var fileName = localItem.LocalPath;
-
-        return createDownload(url, folderName, fileName, true, imageUrl);
+        return Promise.reject();
     }
 
-    function downloadSubtitles(url, folderName, fileName) {
-
-        return createDownload(url, folderName, fileName, false);
-    }
-
-    function downloadImage(url, folderName, fileName) {
-        return createDownload(url, folderName, fileName, false);
+    function downloadImage(url, folder, fileName) {
+        return Promise.reject();
     }
 
     function resyncTransfers() {

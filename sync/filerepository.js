@@ -7,7 +7,7 @@
         return path;
     }
 
-    
+
     function getFullLocalPath(pathArray) {
 
         // TODO
@@ -38,6 +38,11 @@
         return Promise.resolve(0);
     }
 
+    function getLocalPath() {
+        // returns the sync root path
+        return null;
+    }
+
     return {
         getValidFileName: getValidFileName,
         getFullLocalPath: getFullLocalPath,
@@ -45,6 +50,7 @@
         deleteFile: deleteFile,
         deleteDirectory: deleteDirectory,
         fileExists: fileExists,
-        getItemFileSize: getItemFileSize
+        getItemFileSize: getItemFileSize,
+        getLocalPath: getLocalPath
     };
 });
