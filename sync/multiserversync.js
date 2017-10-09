@@ -7,6 +7,7 @@
 
         if (index >= length) {
 
+            console.log('MultiServerSync.sync complete');
             resolve();
             return;
         }
