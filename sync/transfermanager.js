@@ -26,10 +26,15 @@
         return Promise.resolve();
     }
 
+    function getItemDownloadCount() {
+        return Promise.resolve(0);
+    }
+
     return {
         downloadFile: downloadFile,
         downloadSubtitles: downloadSubtitles,
         downloadImage: downloadImage,
-        resyncTransfers: resyncTransfers
+        resyncTransfers: resyncTransfers,
+        getItemDownloadCount: getItemDownloadCount
     };
 });
