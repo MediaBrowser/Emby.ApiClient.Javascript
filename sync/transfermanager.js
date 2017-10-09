@@ -22,9 +22,14 @@
         return createDownload(url, folderName, fileName, false);
     }
 
+    function resyncTransfers() {
+        return Promise.resolve();
+    }
+
     return {
         downloadFile: downloadFile,
         downloadSubtitles: downloadSubtitles,
-        downloadImage: downloadImage
+        downloadImage: downloadImage,
+        resyncTransfers: resyncTransfers
     };
 });
