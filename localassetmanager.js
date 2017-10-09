@@ -2,6 +2,9 @@
     'use strict';
 
     function getLocalItem(serverId, itemId) {
+
+        console.log('[lcoalassetmanager] Begin getLocalItem');
+
         return itemrepository.get(serverId, itemId);
     }
 
@@ -396,6 +399,8 @@
     }
 
     function createLocalItem(libraryItem, serverInfo, jobItem) {
+
+        console.log('[lcoalassetmanager] Begin createLocalItem');
 
         var path = getDirectoryPath(libraryItem, serverInfo);
         var localFolder = filerepository.getFullLocalPath(path);

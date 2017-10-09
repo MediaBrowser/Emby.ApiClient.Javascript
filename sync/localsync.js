@@ -28,10 +28,10 @@
                         isSyncing = null;
                         resolve();
 
-                    }, function () {
+                    }, function (err) {
 
                         isSyncing = null;
-                        reject();
+                        reject(err);
                     });
                 });
 

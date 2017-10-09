@@ -13,22 +13,13 @@
             uploadPhotos = false;
         }
 
-        var pr = Promise.resolve();
+        var promise = uploadPhotos ? uploadContent(connectionManager, server, options) : Promise.resolve();
 
-        return pr.then(function () {
-
-            if (uploadPhotos) {
-                return uploadContent(connectionManager, server, options);
-            }
-
-            return Promise.resolve();
-
-        }).then(function () {
+        return promise.then(function () {
 
             return syncMedia(connectionManager, server, options);
         });
     }
-
 
     function uploadContent(connectionManager, server, options) {
 
