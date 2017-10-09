@@ -34,6 +34,8 @@
 
     function getServerItems(serverId) {
 
+        console.log('[localassetmanager] Begin getServerItems');
+
         return itemrepository.getAll(serverId);
     }
 

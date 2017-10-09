@@ -16,7 +16,6 @@
 
     function ServerDatabase(dbName, readyCallback) {
 
-        var instance = this;
         var request = indexedDB.open(dbName, dbVersion);
 
         request.onerror = function (event) {
@@ -34,8 +33,13 @@
             // Use transaction oncomplete to make sure the objectStore creation is 
             // finished before adding data into it.
             objectStore.transaction.oncomplete = function (event) {
-                readyCallback(instance);
+                readyCallback(db);
             };
+        };
+
+        request.onsuccess = function (event) {
+            var db = event.target.result;
+            readyCallback(db);
         };
     }
 
@@ -50,6 +54,7 @@
         var db = databases[dbName];
         if (db) {
             callback(db);
+            return;
         }
 
         new ServerDatabase(dbName, function (db) {
