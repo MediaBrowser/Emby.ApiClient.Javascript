@@ -17,7 +17,7 @@
 
     var databaseInstance;
 
-    function getDb(serverId, callback) {
+    function getDb(callback) {
 
         var db = databaseInstance;
         if (db) {
