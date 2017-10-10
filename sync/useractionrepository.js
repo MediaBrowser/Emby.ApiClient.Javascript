@@ -53,8 +53,11 @@
     }
 
     function getByServerId(serverId) {
-        return getAll().filter(function (item) {
-            return item.ServerId === serverId;
+
+        return getAll().then(function (items) {
+            return items.filter(function (item) {
+                return item.ServerId === serverId;
+            });
         });
     }
 
