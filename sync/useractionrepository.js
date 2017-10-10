@@ -170,8 +170,6 @@
         });
     }
 
-    setup();
-
     return {
         get: get,
         set: set,
