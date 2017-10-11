@@ -38,11 +38,6 @@
         return Promise.resolve(0);
     }
 
-    function getLocalPath() {
-        // returns the sync root path
-        return null;
-    }
-
     function getImageUrl(pathParts) {
         return pathParts.join('/');
     }
@@ -55,7 +50,6 @@
         deleteDirectory: deleteDirectory,
         fileExists: fileExists,
         getItemFileSize: getItemFileSize,
-        getLocalPath: getLocalPath,
         getImageUrl: getImageUrl
     };
 });

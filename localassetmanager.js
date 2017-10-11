@@ -459,7 +459,6 @@
         var localFilePath = filerepository.getPathFromArray(localPathArray);
 
         return localFilePath;
-
     }
 
     function getItemFileSize(path) {
@@ -481,18 +480,16 @@
 
     function downloadFile(url, localItem) {
 
-        var folder = filerepository.getLocalPath();
         var imageUrl = getImageUrl(localItem.Item.ServerId, localItem.Item.Id, {
             type: 'Primary',
             index: 0
         });
-        return transfermanager.downloadFile(url, folder, localItem, imageUrl);
+        return transfermanager.downloadFile(url, localItem, imageUrl);
     }
 
     function downloadSubtitles(url, fileName) {
 
-        var folder = filerepository.getLocalPath();
-        return transfermanager.downloadSubtitles(url, folder, fileName);
+        return transfermanager.downloadSubtitles(url, fileName);
     }
 
     function getImageUrl(serverId, itemId, imageOptions) {
@@ -547,8 +544,7 @@
 
         localItem.AdditionalFiles.push(fileInfo);
 
-        var folder = filerepository.getMetadataPath();
-        return transfermanager.downloadImage(url, folder, localFilePath);
+        return transfermanager.downloadImage(url, localFilePath);
     }
 
     function isDownloadFileInQueue(path) {
