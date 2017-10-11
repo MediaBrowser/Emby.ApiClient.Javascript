@@ -43,6 +43,10 @@
         return null;
     }
 
+    function getImageUrl(pathParts) {
+        return pathParts.join('/');
+    }
+
     return {
         getValidFileName: getValidFileName,
         getFullLocalPath: getFullLocalPath,
@@ -51,6 +55,7 @@
         deleteDirectory: deleteDirectory,
         fileExists: fileExists,
         getItemFileSize: getItemFileSize,
-        getLocalPath: getLocalPath
+        getLocalPath: getLocalPath,
+        getImageUrl: getImageUrl
     };
 });

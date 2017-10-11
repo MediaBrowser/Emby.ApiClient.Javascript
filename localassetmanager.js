@@ -501,10 +501,8 @@
         var index = imageOptions.index;
 
         var pathArray = getImagePath(serverId, itemId, imageType, index);
-        var relPath = pathArray.join('/');
 
-        var prefix = 'ms-appdata:///local';
-        return prefix + '/' + relPath;
+        return filerepository.getImageUrl(pathArray);
     }
 
     function hasImage(serverId, itemId, imageType, index) {
