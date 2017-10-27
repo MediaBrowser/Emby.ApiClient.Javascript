@@ -695,9 +695,9 @@
         // NOTE: The code inside isFinite does an assignment (=).
         return (
             isFinite(a = a.valueOf()) &&
-            isFinite(b = b.valueOf()) ?
-            (a > b) - (a < b) :
-            NaN
+                isFinite(b = b.valueOf()) ?
+                (a > b) - (a < b) :
+                NaN
         );
     }
 
@@ -713,6 +713,9 @@
         console.groupEnd();
     }
 
+    function enableRepeatDownloading() {
+        return transfermanager.enableRepeatDownloading;
+    }
 
     return {
 
@@ -739,6 +742,7 @@
         resyncTransfers: resyncTransfers,
         getItemsFromIds: getItemsFromIds,
         removeObsoleteContainerItems: removeObsoleteContainerItems,
-        fileExists: fileExists
+        fileExists: fileExists,
+        enableRepeatDownloading: enableRepeatDownloading
     };
 });

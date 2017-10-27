@@ -231,9 +231,25 @@
 
         return localassetmanager.getLocalItem(serverInfo.Id, libraryItem.Id).then(function (existingItem) {
 
+            var onDownloadParentItemsDone = function (localItem) {
+                return downloadMedia(apiClient, jobItem, localItem, options).then(function () {
+
+                    return getImages(apiClient, jobItem, localItem).then(function () {
+
+                        return getSubtitles(apiClient, jobItem, localItem);
+
+                    });
+                });
+            };
+
             if (existingItem) {
                 if (existingItem.SyncStatus === 'queued' || existingItem.SyncStatus === 'transferring' || existingItem.SyncStatus === 'synced') {
                     console.log('[mediasync] getNewItem: getLocalItem found existing item');
+
+                    if (localassetmanager.enableRepeatDownloading()) {
+                        return onDownloadParentItemsDone(existingItem);
+                    }
+
                     return Promise.resolve();
                 }
             }
@@ -256,14 +272,7 @@
 
                 return downloadParentItems(apiClient, jobItem, localItem, serverInfo, options).then(function () {
 
-                    return downloadMedia(apiClient, jobItem, localItem, options).then(function () {
-
-                        return getImages(apiClient, jobItem, localItem).then(function () {
-
-                            return getSubtitles(apiClient, jobItem, localItem);
-
-                        });
-                    });
+                    return onDownloadParentItemsDone(localItem);
                 });
             });
         });
