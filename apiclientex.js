@@ -490,11 +490,15 @@
                 return localassetmanager.getLocalItem(serverInfo.Id, stripLocalPrefix(options.ItemId)).then(function (item) {
 
                     var libraryItem = item.Item;
-                    libraryItem.UserData = libraryItem.UserData || {};
-                    libraryItem.UserData.PlaybackPositionTicks = options.PositionTicks;
-                    libraryItem.UserData.PlayedPercentage = Math.min(libraryItem.RunTimeTicks ? (100 * ((options.PositionTicks || 0) / libraryItem.RunTimeTicks)) : 0, 100);
 
-                    return localassetmanager.addOrUpdateLocalItem(item);
+                    if (libraryItem.MediaType === 'Video' || libraryItem.Type === 'AudioBook') {
+                        libraryItem.UserData = libraryItem.UserData || {};
+                        libraryItem.UserData.PlaybackPositionTicks = options.PositionTicks;
+                        libraryItem.UserData.PlayedPercentage = Math.min(libraryItem.RunTimeTicks ? (100 * ((options.PositionTicks || 0) / libraryItem.RunTimeTicks)) : 0, 100);
+                        return localassetmanager.addOrUpdateLocalItem(item);
+                    }
+
+                    return Promise.resolve();
                 });
             }
 
