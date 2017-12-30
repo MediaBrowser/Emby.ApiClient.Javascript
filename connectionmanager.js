@@ -374,20 +374,6 @@
             }
 
             events.trigger(self, 'apiclientcreated', [apiClient]);
-
-            if (existingServer.Id) {
-                return;
-            }
-
-            apiClient.getPublicSystemInfo().then(function (systemInfo) {
-
-                var credentials = credentialProvider.credentials();
-                existingServer.Id = systemInfo.Id;
-                apiClient.serverInfo(existingServer);
-
-                credentials.Servers = [existingServer];
-                credentialProvider.credentials(credentials);
-            });
         };
 
         self.clearData = function () {
@@ -1067,7 +1053,7 @@
                     });
 
                 }
-                else if (result.Id !== server.Id) {
+                else if (server.Id && result.Id !== server.Id) {
 
                     console.log('http request succeeded, but found a different server Id than what was expected');
                     resolveFailure(self, resolve);
@@ -1193,19 +1179,12 @@
                 });
             }
 
-            return tryConnect(address, defaultTimeout).then(function (publicInfo) {
+            var server = {
+                ManualAddress: address,
+                LastConnectionMode: ConnectionMode.Manual
+            };
 
-                console.log('connectToAddress ' + address + ' succeeded');
-
-                var server = {
-                    ManualAddress: address,
-                    LastConnectionMode: ConnectionMode.Manual
-                };
-                updateServerInfo(server, publicInfo);
-
-                return self.connectToServer(server, options).catch(onFail);
-
-            }, onFail);
+            return self.connectToServer(server, options).catch(onFail);
         };
 
         self.loginToConnect = function (username, password) {
