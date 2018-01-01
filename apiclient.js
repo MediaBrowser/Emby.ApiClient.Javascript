@@ -679,7 +679,7 @@
         if (msg.MessageType === "UserDeleted") {
             instance._currentUser = null;
         }
-        else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated") {
+        else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated" || msg.MessageType === "UserPolicyUpdated") {
 
             var user = msg.Data;
             if (user.Id === instance.getCurrentUserId()) {
