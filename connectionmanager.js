@@ -3,37 +3,25 @@
 
     var defaultTimeout = 20000;
 
-    var ConnectionState = {
-        Unavailable: 0,
-        ServerSelection: 1,
-        ServerSignIn: 2,
-        SignedIn: 3,
-        ConnectSignIn: 4,
-        ServerUpdateNeeded: 5
-    };
-
     var ConnectionMode = {
         Local: 0,
         Remote: 1,
         Manual: 2
     };
 
-    var ServerInfo = {
+    function getServerAddress(server, mode) {
 
-        getServerAddress: function (server, mode) {
-
-            switch (mode) {
-                case ConnectionMode.Local:
-                    return server.LocalAddress;
-                case ConnectionMode.Manual:
-                    return server.ManualAddress;
-                case ConnectionMode.Remote:
-                    return server.RemoteAddress;
-                default:
-                    return server.ManualAddress || server.LocalAddress || server.RemoteAddress;
-            }
+        switch (mode) {
+            case ConnectionMode.Local:
+                return server.LocalAddress;
+            case ConnectionMode.Manual:
+                return server.ManualAddress;
+            case ConnectionMode.Remote:
+                return server.RemoteAddress;
+            default:
+                return server.ManualAddress || server.LocalAddress || server.RemoteAddress;
         }
-    };
+    }
 
     function paramsToString(params) {
 
@@ -53,7 +41,7 @@
     function resolveFailure(instance, resolve) {
 
         resolve({
-            State: ConnectionState.Unavailable,
+            State: 'Unavailable',
             ConnectUser: instance.connectUser()
         });
     }
@@ -70,8 +58,10 @@
     function updateServerInfo(server, systemInfo) {
 
         server.Name = systemInfo.ServerName;
-        server.Id = systemInfo.Id;
 
+        if (systemInfo.Id) {
+            server.Id = systemInfo.Id;
+        }
         if (systemInfo.LocalAddress) {
             server.LocalAddress = systemInfo.LocalAddress;
         }
@@ -402,7 +392,7 @@
 
             if (!apiClient) {
 
-                var url = ServerInfo.getServerAddress(server, connectionMode);
+                var url = getServerAddress(server, connectionMode);
 
                 apiClient = new apiClientFactory(url, appName, appVersion, deviceName, deviceId, devicePixelRatio);
 
@@ -559,7 +549,7 @@
                 throw new Error("credentials.ConnectUserId cannot be null");
             }
 
-            var url = ServerInfo.getServerAddress(server, connectionMode);
+            var url = getServerAddress(server, connectionMode);
 
             url = getEmbyServerUrl(url, "Connect/Exchange?format=json&ConnectUserId=" + credentials.ConnectUserId);
 
@@ -591,7 +581,7 @@
 
         function validateAuthentication(server, connectionMode) {
 
-            var url = ServerInfo.getServerAddress(server, connectionMode);
+            var url = getServerAddress(server, connectionMode);
 
             return ajax({
 
@@ -942,9 +932,9 @@
 
                 return self.connectToServer(defaultServer, options).then(function (result) {
 
-                    if (result.State === ConnectionState.Unavailable) {
+                    if (result.State === 'Unavailable') {
 
-                        result.State = ConnectionState.ServerSelection;
+                        result.State = 'ServerSelection';
                     }
 
                     console.log('resolving connectToServers with result.State: ' + result.State);
@@ -957,7 +947,7 @@
             if (firstServer) {
                 return self.connectToServer(firstServer, options).then(function (result) {
 
-                    if (result.State === ConnectionState.SignedIn) {
+                    if (result.State === 'SignedIn') {
 
                         return result;
 
@@ -965,7 +955,7 @@
 
                     return {
                         Servers: servers,
-                        State: (!servers.length && !self.connectUser()) ? ConnectionState.ConnectSignIn : ConnectionState.ServerSelection,
+                        State: (!servers.length && !self.connectUser()) ? 'ConnectSignIn' : 'ServerSelection',
                         ConnectUser: self.connectUser()
                     };
                 });
@@ -973,7 +963,7 @@
 
             return Promise.resolve({
                 Servers: servers,
-                State: (!servers.length && !self.connectUser()) ? ConnectionState.ConnectSignIn : ConnectionState.ServerSelection,
+                State: (!servers.length && !self.connectUser()) ? 'ConnectSignIn' : 'ServerSelection',
                 ConnectUser: self.connectUser()
             });
         };
@@ -1010,7 +1000,7 @@
             }
 
             var mode = tests[index];
-            var address = ServerInfo.getServerAddress(server, mode);
+            var address = getServerAddress(server, mode);
             var enableRetry = false;
             var skipTest = false;
             var timeout = defaultTimeout;
@@ -1048,7 +1038,7 @@
 
                     console.log('minServerVersion requirement not met. Server version: ' + result.Version);
                     resolve({
-                        State: ConnectionState.ServerUpdateNeeded,
+                        State: 'ServerUpdateNeeded',
                         Servers: [server]
                     });
 
@@ -1147,13 +1137,13 @@
             result.ApiClient.setSystemInfo(systemInfo);
 
             result.State = server.AccessToken && options.enableAutoLogin !== false ?
-                ConnectionState.SignedIn :
-                ConnectionState.ServerSignIn;
+                'SignedIn' :
+                'ServerSignIn';
 
             result.Servers.push(server);
             result.ApiClient.updateServerInfo(server, connectionMode);
 
-            if (result.State === ConnectionState.SignedIn) {
+            if (result.State === 'SignedIn') {
                 afterConnected(result.ApiClient, options);
             }
 
@@ -1174,7 +1164,7 @@
             function onFail() {
                 console.log('connectToAddress ' + address + ' failed');
                 return Promise.resolve({
-                    State: ConnectionState.Unavailable,
+                    State: 'Unavailable',
                     ConnectUser: instance.connectUser()
                 });
             }
@@ -1676,10 +1666,5 @@
         return this._minServerVersion;
     };
 
-    return {
-        ConnectionState: ConnectionState,
-        ConnectionMode: ConnectionMode,
-        ServerInfo: ServerInfo,
-        ConnectionManager: ConnectionManager
-    };
+    return ConnectionManager;
 });

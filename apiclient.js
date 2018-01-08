@@ -109,6 +109,20 @@
         return fetchWithTimeout(request.url, fetchRequest, request.timeout);
     }
 
+    function getServerAddress(server, mode) {
+
+        switch (mode) {
+            case 'local':
+                return server.LocalAddress;
+            case 'manual':
+                return server.ManualAddress;
+            case 'remote':
+                return server.RemoteAddress;
+            default:
+                return server.ManualAddress || server.LocalAddress || server.RemoteAddress;
+        }
+    }
+
     /**
      * Creates a new api client instance
      * @param {String} serverAddress
@@ -381,19 +395,19 @@
 
         newConnectionMode--;
         if (newConnectionMode < 0) {
-            newConnectionMode = MediaBrowser.ConnectionMode.Manual;
+            newConnectionMode = 'manual';
         }
 
-        if (MediaBrowser.ServerInfo.getServerAddress(currentServerInfo, newConnectionMode)) {
+        if (getServerAddress(currentServerInfo, newConnectionMode)) {
             return newConnectionMode;
         }
 
         newConnectionMode--;
         if (newConnectionMode < 0) {
-            newConnectionMode = MediaBrowser.ConnectionMode.Manual;
+            newConnectionMode = 'manual';
         }
 
-        if (MediaBrowser.ServerInfo.getServerAddress(currentServerInfo, newConnectionMode)) {
+        if (getServerAddress(currentServerInfo, newConnectionMode)) {
             return newConnectionMode;
         }
 
@@ -403,11 +417,11 @@
     function tryReconnectInternal(instance, resolve, reject, connectionMode, currentRetryCount) {
 
         connectionMode = switchConnectionMode(instance, connectionMode);
-        var url = MediaBrowser.ServerInfo.getServerAddress(instance.serverInfo(), connectionMode);
+        var url = getServerAddress(instance.serverInfo(), connectionMode);
 
         console.log("Attempting reconnection to " + url);
 
-        var timeout = connectionMode === MediaBrowser.ConnectionMode.Local ? 7000 : 15000;
+        var timeout = connectionMode === 'local' ? 7000 : 15000;
 
         fetchWithTimeout(url + "/system/info/public", {
 
@@ -679,7 +693,7 @@
         if (msg.MessageType === "UserDeleted") {
             instance._currentUser = null;
         }
-        else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated" || msg.MessageType === "UserPolicyUpdated") {
+        else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated") {
 
             var user = msg.Data;
             if (user.Id === instance.getCurrentUserId()) {
@@ -830,7 +844,7 @@
 
         this.serverInfo(server);
 
-        var serverUrl = MediaBrowser.ServerInfo.getServerAddress(server, connectionMode);
+        var serverUrl = getServerAddress(server, connectionMode);
 
         if (!serverUrl) {
             throw new Error('serverUrl cannot be null. serverInfo: ' + JSON.stringify(server));

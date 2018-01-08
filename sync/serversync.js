@@ -67,7 +67,7 @@
 
         return connectionManager.connectToServer(server, connectionOptions).then(function (result) {
 
-            if (result.State === MediaBrowser.ConnectionState.SignedIn) {
+            if (result.State === 'SignedIn') {
                 return performSync(connectionManager, server, options);
             } else {
                 console.log('Unable to connect to server id: ' + server.Id);
