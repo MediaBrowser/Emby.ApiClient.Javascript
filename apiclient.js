@@ -1643,6 +1643,21 @@
         });
     };
 
+    ApiClient.prototype.getLiveStreamMediaInfo = function (liveStreamId) {
+
+        var postData = {
+            LiveStreamId: liveStreamId
+        };
+
+        return this.ajax({
+            url: this.getUrl('LiveStreams/MediaInfo'),
+            type: 'POST',
+            data: JSON.stringify(postData),
+            contentType: "application/json",
+            dataType: "json"
+        });
+    };
+
     ApiClient.prototype.getIntros = function (itemId) {
 
         return this.getJSON(this.getUrl('Users/' + this.getCurrentUserId() + '/Items/' + itemId + '/Intros'));
