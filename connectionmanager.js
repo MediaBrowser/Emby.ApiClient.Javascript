@@ -671,7 +671,8 @@
                         localUser: localUser,
                         name: connectUser ? connectUser.Name : (localUser ? localUser.Name : null),
                         imageUrl: image.url,
-                        supportsImageParams: image.supportsParams
+                        supportsImageParams: image.supportsParams,
+                        connectUser: connectUser
                     });
                 }
 

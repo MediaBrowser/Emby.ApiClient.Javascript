@@ -112,10 +112,13 @@
     function getServerAddress(server, mode) {
 
         switch (mode) {
+            case 0:
             case 'local':
                 return server.LocalAddress;
+            case 2:
             case 'manual':
                 return server.ManualAddress;
+            case 1:
             case 'remote':
                 return server.RemoteAddress;
             default:
