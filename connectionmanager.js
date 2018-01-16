@@ -347,7 +347,7 @@
 
             });
 
-            var existingServer = existingServers.length ? existingServers[0] : {};
+            var existingServer = existingServers.length ? existingServers[0] : apiClient.serverInfo();
             existingServer.DateLastAccessed = new Date().getTime();
             existingServer.LastConnectionMode = ConnectionMode.Manual;
             existingServer.ManualAddress = apiClient.serverAddress();
