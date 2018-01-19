@@ -924,7 +924,12 @@
             return Promise.reject();
         }
 
-        var result = Math.round(bitrate * 0.8);
+        var result = Math.round(bitrate * 0.7);
+
+        // allow configuration of this
+        if (instance.maxDetectedBitrate) {
+            result = Math.min(result, maxDetectedBitrate);
+        }
 
         instance.lastDetectedBitrate = result;
         instance.lastDetectedBitrateTime = new Date().getTime();
@@ -1614,16 +1619,6 @@
     ApiClient.prototype.getCountries = function () {
 
         var url = this.getUrl("Localization/countries");
-
-        return this.getJSON(url);
-    };
-
-    /**
-     * Gets plugin security info
-     */
-    ApiClient.prototype.getPluginSecurityInfo = function () {
-
-        var url = this.getUrl("Plugins/SecurityInfo");
 
         return this.getJSON(url);
     };
