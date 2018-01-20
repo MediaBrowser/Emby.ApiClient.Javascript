@@ -1408,10 +1408,30 @@
             });
         };
 
+        function getCacheKey(feature, apiClient, options) {
+            options = options || {};
+            var viewOnly = options.viewOnly;
+
+            var cacheKey = 'regInfo-' + apiClient.serverId();
+
+            if (viewOnly) {
+                cacheKey += '-viewonly';
+            }
+
+            return cacheKey;
+        }
+
+        self.resetRegistrationInfo = function (apiClient) {
+
+            var cacheKey = getCacheKey('themes', apiClient, { viewOnly: true });
+
+            appStorage.removeItem(cacheKey);
+        };
+
         self.getRegistrationInfo = function (feature, apiClient, options) {
 
             var params = {
-                serverId: apiClient.serverInfo().Id,
+                serverId: apiClient.serverId(),
                 deviceId: self.deviceId(),
                 deviceName: deviceName,
                 appName: appName,
@@ -1420,13 +1440,8 @@
             };
 
             options = options || {};
-            var viewOnly = options.viewOnly;
 
-            var cacheKey = 'regInfo-' + params.serverId;
-
-            if (viewOnly) {
-                cacheKey += '-viewonly';
-            }
+            var cacheKey = getCacheKey(feature, apiClient, options);
 
             var regInfo = JSON.parse(appStorage.getItem(cacheKey) || '{}');
 

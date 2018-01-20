@@ -928,7 +928,7 @@
 
         // allow configuration of this
         if (instance.maxDetectedBitrate) {
-            result = Math.min(result, maxDetectedBitrate);
+            result = Math.min(result, instance.maxDetectedBitrate);
         }
 
         instance.lastDetectedBitrate = result;
