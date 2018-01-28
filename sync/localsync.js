@@ -1,4 +1,4 @@
-﻿define(['appSettings', 'connectionManager'], function (appSettings, connectionManager) {
+﻿define(['connectionManager'], function (connectionManager) {
     'use strict';
 
     var isSyncing;
@@ -21,7 +21,8 @@
 
                     options = options || {};
 
-                    options.cameraUploadServers = appSettings.cameraUploadServers();
+                    // TODO, get from appSettings
+                    options.cameraUploadServers = [];
 
                     new MultiServerSync().sync(connectionManager, options).then(function () {
 
