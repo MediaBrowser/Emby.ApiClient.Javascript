@@ -688,10 +688,10 @@
 
         var instance = this;
         msg = JSON.parse(msg.data);
-        onWebSocketMessageInternal(instance, msg);
+        onMessageReceivedInternal(instance, msg);
     }
 
-    function onWebSocketMessageInternal(instance, msg) {
+    function onMessageReceivedInternal(instance, msg) {
 
         if (msg.MessageType === "UserDeleted") {
             instance._currentUser = null;
@@ -705,7 +705,7 @@
             }
         }
 
-        events.trigger(instance, 'websocketmessage', [msg]);
+        events.trigger(instance, 'message', [msg]);
     }
 
     function onWebSocketOpen() {
@@ -789,6 +789,18 @@
         msg = JSON.stringify(msg);
 
         this._webSocket.send(msg);
+    };
+
+    ApiClient.prototype.sendMessage = function (name, data) {
+
+        if (this.isWebSocketOpen()) {
+            this.sendWebSocketMessage(name, data);
+        }
+    };
+
+    ApiClient.prototype.isMessageChannelOpen = function () {
+
+        return this.isWebSocketOpen();
     };
 
     ApiClient.prototype.isWebSocketOpen = function () {
@@ -1403,55 +1415,6 @@
         var url = this.getUrl("LiveTv/SeriesTimers", options || {});
 
         return this.getJSON(url);
-    };
-
-    ApiClient.prototype.getFileOrganizationResults = function (options) {
-
-        var url = this.getUrl("Library/FileOrganization", options || {});
-
-        return this.getJSON(url);
-    };
-
-    ApiClient.prototype.deleteOriginalFileFromOrganizationResult = function (id) {
-
-        var url = this.getUrl("Library/FileOrganizations/" + id + "/File");
-
-        return this.ajax({
-            type: "DELETE",
-            url: url
-        });
-    };
-
-    ApiClient.prototype.clearOrganizationLog = function () {
-
-        var url = this.getUrl("Library/FileOrganizations");
-
-        return this.ajax({
-            type: "DELETE",
-            url: url
-        });
-    };
-
-    ApiClient.prototype.performOrganization = function (id) {
-
-        var url = this.getUrl("Library/FileOrganizations/" + id + "/Organize");
-
-        return this.ajax({
-            type: "POST",
-            url: url
-        });
-    };
-
-    ApiClient.prototype.performEpisodeOrganization = function (id, options) {
-
-        var url = this.getUrl("Library/FileOrganizations/" + id + "/Episode/Organize");
-
-        return this.ajax({
-            type: "POST",
-            url: url,
-            data: JSON.stringify(options),
-            contentType: 'application/json'
-        });
     };
 
     ApiClient.prototype.getLiveTvSeriesTimer = function (id) {
@@ -3885,36 +3848,6 @@
         return this.getJSON(url);
     };
 
-    ApiClient.prototype.getSmartMatchInfos = function (options) {
-
-        options = options || {};
-
-        var url = this.getUrl("Library/FileOrganizations/SmartMatches", options);
-
-        return this.ajax({
-            type: "GET",
-            url: url,
-            dataType: "json"
-        });
-    };
-
-    ApiClient.prototype.deleteSmartMatchEntries = function (entries) {
-
-        var url = this.getUrl("Library/FileOrganizations/SmartMatches/Delete");
-
-        var postData = {
-            Entries: entries
-        };
-
-        return this.ajax({
-
-            type: "POST",
-            url: url,
-            data: JSON.stringify(postData),
-            contentType: "application/json"
-        });
-    };
-
     ApiClient.prototype.getSavedEndpointInfo = function () {
 
         return this._endPointInfo;
@@ -3981,6 +3914,11 @@
         }
 
         return false;
+    };
+
+    ApiClient.prototype.handleMessageReceived = function (msg) {
+
+        onMessageReceivedInternal(this, msg);
     };
 
     return ApiClient;
