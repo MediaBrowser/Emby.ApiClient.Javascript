@@ -939,8 +939,12 @@
         var result = Math.round(bitrate * 0.7);
 
         // allow configuration of this
-        if (instance.maxDetectedBitrate) {
-            result = Math.min(result, instance.maxDetectedBitrate);
+        if (instance.getMaxBandwidth) {
+
+            var maxRate = instance.getMaxBandwidth();
+            if (maxRate) {
+                result = Math.min(result, maxRate);
+            }
         }
 
         instance.lastDetectedBitrate = result;
