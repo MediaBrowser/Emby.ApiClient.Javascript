@@ -3878,6 +3878,11 @@
         return this.getJSON(this.getUrl('Users/' + this.getCurrentUserId() + '/Items/Latest', options));
     };
 
+    ApiClient.prototype.getFilters = function (options) {
+
+        return this.getJSON(this.getUrl('Items/Filters2', options));
+    };
+
     function compareVersions(a, b) {
 
         // -1 a is smaller
