@@ -1424,7 +1424,9 @@
         self.resetRegistrationInfo = function (apiClient) {
 
             var cacheKey = getCacheKey('themes', apiClient, { viewOnly: true });
+            appStorage.removeItem(cacheKey);
 
+            cacheKey = getCacheKey('themes', apiClient, { viewOnly: false });
             appStorage.removeItem(cacheKey);
         };
 
