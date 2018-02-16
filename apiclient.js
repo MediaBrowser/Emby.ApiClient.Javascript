@@ -3190,16 +3190,6 @@
         return this.getJSON(this.getUrl('Shows/Upcoming', options));
     };
 
-    ApiClient.prototype.getChannels = function (query) {
-
-        return this.getJSON(this.getUrl("Channels", query || {}));
-    };
-
-    ApiClient.prototype.getLatestChannelItems = function (query) {
-
-        return this.getJSON(this.getUrl("Channels/Items/Latest", query));
-    };
-
     ApiClient.prototype.getUserViews = function (options, userId) {
 
         options = options || {};
