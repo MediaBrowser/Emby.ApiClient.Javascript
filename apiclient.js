@@ -242,6 +242,7 @@
         setSavedEndpointInfo(this, null);
 
         redetectBitrate(this);
+        refreshWakeOnLanInfoIfNeeded(this);
     };
 
     /**
@@ -477,6 +478,7 @@
         this._serverInfo.AccessToken = accessKey;
         this._serverInfo.UserId = userId;
         redetectBitrate(this);
+        refreshWakeOnLanInfoIfNeeded(this);
     };
 
     ApiClient.prototype.serverInfo = function (info) {
@@ -3897,12 +3899,19 @@
             return;
         }
 
-        setTimeout(refreshWakeOnLanInfo.bind(instance), 10000);
+        // Re-using enableAutomaticBitrateDetection because it's set to false during background syncing
+        // We can always have a dedicated option if needed
+        if (instance.accessToken() && instance.enableAutomaticBitrateDetection !== false) {
+            console.log('refreshWakeOnLanInfoIfNeeded');
+            setTimeout(refreshWakeOnLanInfo.bind(instance), 10000);
+        }
     }
 
     function refreshWakeOnLanInfo() {
 
         var instance = this;
+
+        console.log('refreshWakeOnLanInfo');
         instance.getWakeOnLanInfo().then(function (info) {
 
             var serverId = instance.serverId();
