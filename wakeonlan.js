@@ -3,11 +3,16 @@
 
     function send(info) {
 
-        return Promise.resolve();
+        return Promise.reject();
+    }
+
+    function isSupported() {
+        return false;
     }
 
     return {
-        send: send
+        send: send,
+        isSupported: isSupported
     };
 
 });

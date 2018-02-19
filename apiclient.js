@@ -1,4 +1,4 @@
-﻿define(['events', 'appStorage'], function (events, appStorage) {
+﻿define(['events', 'appStorage', 'wakeOnLan'], function (events, appStorage, wakeOnLan) {
     'use strict';
 
     function redetectBitrate(instance) {
@@ -657,6 +657,7 @@
 
                     var afterOnAuthenticated = function () {
                         redetectBitrate(instance);
+                        refreshWakeOnLanInfoIfNeeded(instance);
                         resolve(result);
                     };
 
@@ -3862,6 +3863,11 @@
         });
     };
 
+    ApiClient.prototype.getWakeOnLanInfo = function () {
+
+        return this.getJSON(this.getUrl('System/WakeOnLanInfo'));
+    };
+
     ApiClient.prototype.getLatestItems = function (options) {
 
         options = options || {};
@@ -3871,6 +3877,60 @@
     ApiClient.prototype.getFilters = function (options) {
 
         return this.getJSON(this.getUrl('Items/Filters2', options));
+    };
+
+    function getCachedWakeOnLanInfo(instance) {
+
+        var serverId = instance.serverId();
+        var json = appStorage.getItem('server-' + serverId + '-wakeonlaninfo');
+
+        if (json) {
+            return JSON.parse(json);
+        }
+
+        return [];
+    }
+
+    function refreshWakeOnLanInfoIfNeeded(instance) {
+
+        if (!wakeOnLan.isSupported()) {
+            return;
+        }
+
+        setTimeout(refreshWakeOnLanInfo.bind(instance), 10000);
+    }
+
+    function refreshWakeOnLanInfo() {
+
+        var instance = this;
+        instance.getWakeOnLanInfo().then(function (info) {
+
+            var serverId = instance.serverId();
+            appStorage.setItem('server-' + serverId + '-wakeonlaninfo', JSON.stringify(info));
+            return info;
+
+        }, function (err) {
+            // could be an older server that doesn't have this api
+            return [];
+        });
+    }
+
+    ApiClient.prototype.supportsWakeOnLan = function () {
+
+        if (!wakeOnLan.isSupported()) {
+            return false;
+        }
+
+        return getCachedWakeOnLanInfo(instance).length > 0;
+    };
+
+    ApiClient.prototype.sendWakeOnLan = function () {
+
+        var infos = getCachedWakeOnLanInfo(this);
+
+        // TODO: loop through each one and call wakeOnLan.send(info);
+
+        return Promise.resolve();
     };
 
     function compareVersions(a, b) {
