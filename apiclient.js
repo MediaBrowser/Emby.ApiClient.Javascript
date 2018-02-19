@@ -3930,7 +3930,7 @@
             return false;
         }
 
-        return getCachedWakeOnLanInfo(instance).length > 0;
+        return getCachedWakeOnLanInfo(this).length > 0;
     };
 
     ApiClient.prototype.sendWakeOnLan = function () {
