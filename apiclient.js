@@ -3937,10 +3937,33 @@
 
         var infos = getCachedWakeOnLanInfo(this);
 
-        // TODO: loop through each one and call wakeOnLan.send(info);
+        return new Promise(function (resolve, reject) {
 
-        return Promise.resolve();
+            sendNextWakeOnLan(infos, 0, resolve);
+        });
     };
+
+    function sendNextWakeOnLan(infos, index, resolve) {
+
+        if (index >= infos.length) {
+
+            resolve();
+            return;
+        }
+
+        var info = infos[index];
+
+        console.log('sending wakeonlan to ' + info.MacAddress);
+
+        wakeOnLan.send(info).then(function (result) {
+
+            sendNextWakeOnLan(infos, index + 1, resolve);
+
+        }, function () {
+
+            sendNextWakeOnLan(infos, index + 1, resolve);
+        });
+    }
 
     function compareVersions(a, b) {
 
