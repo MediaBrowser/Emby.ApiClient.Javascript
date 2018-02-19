@@ -3933,7 +3933,7 @@
         return getCachedWakeOnLanInfo(this).length > 0;
     };
 
-    ApiClient.prototype.sendWakeOnLan = function () {
+    ApiClient.prototype.wakeOnLan = function () {
 
         var infos = getCachedWakeOnLanInfo(this);
 
