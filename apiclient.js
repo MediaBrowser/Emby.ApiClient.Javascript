@@ -694,7 +694,20 @@
         onMessageReceivedInternal(instance, msg);
     }
 
+    var messageIdsReceived = {};
+
     function onMessageReceivedInternal(instance, msg) {
+
+        var messageId = msg.MessageId;
+        if (messageId) {
+
+            // message was already received via another protocol
+            if (messageIdsReceived[messageId]) {
+                return;
+            }
+
+            messageIdsReceived[messageId] = true;
+        }
 
         if (msg.MessageType === "UserDeleted") {
             instance._currentUser = null;
