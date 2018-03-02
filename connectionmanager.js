@@ -1443,6 +1443,10 @@
 
             options = options || {};
 
+            if (options.viewOnly) {
+                params.viewOnly = options.viewOnly;
+            }
+
             var cacheKey = getCacheKey(feature, apiClient, options);
 
             var regInfo = JSON.parse(appStorage.getItem(cacheKey) || '{}');
