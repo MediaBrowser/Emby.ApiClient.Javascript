@@ -3799,12 +3799,17 @@
             throw new Error("null options");
         }
 
-        var url = this.getUrl("Sessions/" + sessionId + "/Message", options);
+        var url = this.getUrl("Sessions/" + sessionId + "/Message");
 
-        return this.ajax({
+        var ajaxOptions = {
             type: "POST",
             url: url
-        });
+        };
+
+        ajaxOptions.data = JSON.stringify(options);
+        ajaxOptions.contentType = "application/json";
+
+        return this.ajax(ajaxOptions);
     };
 
     ApiClient.prototype.sendPlayStateCommand = function (sessionId, command, options) {
