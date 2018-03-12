@@ -1,47 +1,39 @@
-﻿define([], function () {
-    'use strict';
+﻿function updateCache(instance) {
+    instance.cache.put('data', new Response(JSON.stringify(instance.localData)));
+}
 
-    function MyStore() {
+export default class MyStore {
+    init() {
 
-    }
-
-    function updateCache(instance) {
-        instance.cache.put('data', new Response(JSON.stringify(instance.localData)));
-    }
-
-    MyStore.prototype.init = function () {
-
-        var instance = this;
-        return caches.open('embydata').then(function (result) {
+        const instance = this;
+        return caches.open('embydata').then(result => {
             instance.cache = result;
             instance.localData = {};
         });
-    };
+    }
 
-    MyStore.prototype.setItem = function (name, value) {
+    setItem(name, value) {
         if (this.localData) {
-            var changed = this.localData[name] !== value;
+            const changed = this.localData[name] !== value;
 
             if (changed) {
                 this.localData[name] = value;
                 updateCache(this);
             }
         }
-    };
+    }
 
-    MyStore.prototype.getItem = function (name) {
+    getItem(name) {
         if (this.localData) {
             return this.localData[name];
         }
-    };
+    }
 
-    MyStore.prototype.removeItem = function (name) {
+    removeItem(name) {
         if (this.localData) {
             this.localData[name] = null;
             delete this.localData[name];
             updateCache(this);
         }
-    };
-
-    return new MyStore();
-});
+    }
+}

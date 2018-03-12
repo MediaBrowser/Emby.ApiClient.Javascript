@@ -1,62 +1,58 @@
-﻿define([], function () {
-    'use strict';
+﻿function getCallbacks(obj, name) {
 
-    function getCallbacks(obj, name) {
-
-        if (!obj) {
-            throw new Error("obj cannot be null!");
-        }
-
-        obj._callbacks = obj._callbacks || {};
-
-        var list = obj._callbacks[name];
-
-        if (!list) {
-            obj._callbacks[name] = [];
-            list = obj._callbacks[name];
-        }
-
-        return list;
+    if (!obj) {
+        throw new Error("obj cannot be null!");
     }
 
-    return {
+    obj._callbacks = obj._callbacks || {};
 
-        on: function (obj, eventName, fn) {
+    let list = obj._callbacks[name];
 
-            var list = getCallbacks(obj, eventName);
+    if (!list) {
+        obj._callbacks[name] = [];
+        list = obj._callbacks[name];
+    }
 
-            list.push(fn);
-        },
+    return list;
+}
 
-        off: function (obj, eventName, fn) {
+export default {
 
-            var list = getCallbacks(obj, eventName);
+    on(obj, eventName, fn) {
 
-            var i = list.indexOf(fn);
-            if (i !== -1) {
-                list.splice(i, 1);
-            }
-        },
+        const list = getCallbacks(obj, eventName);
 
-        trigger: function (obj, eventName) {
+        list.push(fn);
+    },
 
-            var eventObject = {
-                type: eventName
-            };
+    off(obj, eventName, fn) {
 
-            var eventArgs = [];
-            eventArgs.push(eventObject);
+        const list = getCallbacks(obj, eventName);
 
-            var additionalArgs = arguments[2] || [];
-            for (var i = 0, length = additionalArgs.length; i < length; i++) {
-                eventArgs.push(additionalArgs[i]);
-            }
-
-            var callbacks = getCallbacks(obj, eventName).slice(0);
-
-            callbacks.forEach(function (c) {
-                c.apply(obj, eventArgs);
-            });
+        const i = list.indexOf(fn);
+        if (i !== -1) {
+            list.splice(i, 1);
         }
-    };
-});
+    },
+
+    trigger(obj, eventName) {
+
+        const eventObject = {
+            type: eventName
+        };
+
+        const eventArgs = [];
+        eventArgs.push(eventObject);
+
+        const additionalArgs = arguments[2] || [];
+        for (let i = 0, length = additionalArgs.length; i < length; i++) {
+            eventArgs.push(additionalArgs[i]);
+        }
+
+        const callbacks = getCallbacks(obj, eventName).slice(0);
+
+        callbacks.forEach(c => {
+            c.apply(obj, eventArgs);
+        });
+    }
+};

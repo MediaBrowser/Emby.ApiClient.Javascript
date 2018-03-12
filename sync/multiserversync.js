@@ -1,50 +1,40 @@
-﻿define(['serversync'], function (ServerSync) {
-    'use strict';
+﻿import ServerSync from 'serversync';
 
-    function syncNext(connectionManager, servers, index, options, resolve, reject) {
+function syncNext(connectionManager, servers, index, options, resolve, reject) {
+    const length = servers.length;
 
-        var length = servers.length;
+    if (index >= length) {
+        console.log('MultiServerSync.sync complete');
+        resolve();
+        return;
+    }
 
-        if (index >= length) {
+    const server = servers[index];
 
-            console.log('MultiServerSync.sync complete');
-            resolve();
-            return;
+    console.log(`Creating ServerSync to server: ${server.Id}`);
+
+    new ServerSync().sync(connectionManager, server, options).then(
+        () => {
+            console.log(`ServerSync succeeded to server: ${server.Id}`);
+
+            syncNext(connectionManager, servers, index + 1, options, resolve, reject);
+        },
+        err => {
+            console.log(`ServerSync failed to server: ${server.Id}. ${err}`);
+
+            syncNext(connectionManager, servers, index + 1, options, resolve, reject);
         }
+    );
+}
 
-        var server = servers[index];
-
-        console.log("Creating ServerSync to server: " + server.Id);
-
-        new ServerSync().sync(connectionManager, server, options).then(function () {
-
-            console.log("ServerSync succeeded to server: " + server.Id);
-
-            syncNext(connectionManager, servers, index + 1, options, resolve, reject);
-
-        }, function (err) {
-
-            console.log("ServerSync failed to server: " + server.Id + '. ' + err);
-
-            syncNext(connectionManager, servers, index + 1, options, resolve, reject);
-        });
-    }
-
-    function MultiServerSync() {
-
-    }
-
-    MultiServerSync.prototype.sync = function (connectionManager, options) {
-
+export default class MultiServerSync {
+    sync(connectionManager, options) {
         console.log('MultiServerSync.sync starting...');
 
-        return new Promise(function (resolve, reject) {
-
-            var servers = connectionManager.getSavedServers();
+        return new Promise((resolve, reject) => {
+            const servers = connectionManager.getSavedServers();
 
             syncNext(connectionManager, servers, 0, options, resolve, reject);
         });
-    };
-
-    return MultiServerSync;
-});
+    }
+}

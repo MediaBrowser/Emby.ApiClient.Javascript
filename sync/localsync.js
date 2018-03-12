@@ -1,43 +1,34 @@
-﻿define(['connectionManager'], function (connectionManager) {
-    'use strict';
+﻿let isSyncing;
 
-    var isSyncing;
+export default {
 
-    return {
+    sync(connectionManager, options) {
 
-        sync: function (options) {
+        console.log('localSync.sync starting...');
 
-            console.log('localSync.sync starting...');
-
-            if (isSyncing) {
-                return Promise.resolve();
-            }
-
-            isSyncing = true;
-
-            return new Promise(function (resolve, reject) {
-
-                require(['multiserversync'], function (MultiServerSync) {
-
-                    options = options || {};
-
-                    // TODO, get from appSettings
-                    options.cameraUploadServers = [];
-
-                    new MultiServerSync().sync(connectionManager, options).then(function () {
-
-                        isSyncing = null;
-                        resolve();
-
-                    }, function (err) {
-
-                        isSyncing = null;
-                        reject(err);
-                    });
-                });
-
-            });
+        if (isSyncing) {
+            return Promise.resolve();
         }
-    };
 
-});
+        isSyncing = true;
+
+        return import('./multiserversync').then((MultiServerSync) => {
+
+            options = options || {};
+
+            // TODO, get from appSettings
+            options.cameraUploadServers = [];
+
+            return new MultiServerSync().sync(connectionManager, options).then(() => {
+
+                isSyncing = null;
+                return Promise.resolve();
+
+            }, err => {
+
+                isSyncing = null;
+                return Promise.reject(err);
+            });
+        });
+    }
+};

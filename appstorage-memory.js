@@ -1,22 +1,18 @@
-﻿define([], function () {
-    'use strict';
-
-    function MyStore() {
+﻿export default class MyStore {
+    constructor() {
 
         this.localData = {};
     }
 
-    MyStore.prototype.setItem = function (name, value) {
+    setItem(name, value) {
         this.localData[name] = value;
-    };
+    }
 
-    MyStore.prototype.getItem = function (name) {
+    getItem(name) {
         return this.localData[name];
-    };
+    }
 
-    MyStore.prototype.removeItem = function (name) {
+    removeItem(name) {
         this.localData[name] = null;
-    };
-
-    return new MyStore();
-});
+    }
+}

@@ -1,25 +1,23 @@
-﻿define([], function () {
-    'use strict';
+﻿function onCachePutFail(e) {
+    console.log(e);
+}
 
-    function onCachePutFail(e) {
-        console.log(e);
+function updateCache(instance) {
+
+    const cache = instance.cache;
+
+    if (cache) {
+        cache.put('data', new Response(JSON.stringify(instance.localData))).catch(onCachePutFail);
     }
+}
 
-    function updateCache(instance) {
+function onCacheOpened(result) {
+    this.cache = result;
+    this.localData = {};
+}
 
-        var cache = instance.cache;
-
-        if (cache) {
-            cache.put('data', new Response(JSON.stringify(instance.localData))).catch(onCachePutFail);
-        }
-    }
-
-    function onCacheOpened(result) {
-        this.cache = result;
-        this.localData = {};
-    }
-
-    function MyStore() {
+export default class MyStore {
+    constructor() {
 
         try {
 
@@ -29,41 +27,39 @@
             }
 
         } catch (err) {
-            console.log('Error opening cache: ' + err);
+            console.log(`Error opening cache: ${err}`);
         }
 
     }
 
-    MyStore.prototype.setItem = function (name, value) {
+    setItem(name, value) {
         localStorage.setItem(name, value);
 
-        var localData = this.localData;
+        const localData = this.localData;
 
         if (localData) {
-            var changed = localData[name] !== value;
+            const changed = localData[name] !== value;
 
             if (changed) {
                 localData[name] = value;
                 updateCache(this);
             }
         }
-    };
+    }
 
-    MyStore.prototype.getItem = function (name) {
+    getItem(name) {
         return localStorage.getItem(name);
-    };
+    }
 
-    MyStore.prototype.removeItem = function (name) {
+    removeItem(name) {
         localStorage.removeItem(name);
 
-        var localData = this.localData;
+        const localData = this.localData;
 
         if (localData) {
             localData[name] = null;
             delete localData[name];
             updateCache(this);
         }
-    };
-
-    return new MyStore();
-});
+    }
+}

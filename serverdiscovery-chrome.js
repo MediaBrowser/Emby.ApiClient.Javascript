@@ -1,166 +1,161 @@
-﻿define([], function () {
-    'use strict';
+﻿function stringToArrayBuffer(string) {
+    // UTF-16LE
+    const buf = new ArrayBuffer(string.length * 2);
+    const bufView = new Uint16Array(buf);
+    for (let i = 0, strLen = string.length; i < strLen; i++) {
+        bufView[i] = string.charCodeAt(i);
+    }
+    return buf;
+}
 
-    function stringToArrayBuffer(string) {
-        // UTF-16LE
-        var buf = new ArrayBuffer(string.length * 2);
-        var bufView = new Uint16Array(buf);
-        for (var i = 0, strLen = string.length; i < strLen; i++) {
-            bufView[i] = string.charCodeAt(i);
+function arrayBufferToString(buf) {
+    return String.fromCharCode.apply(null, new Uint16Array(buf));
+}
+
+function getResultCode(result) {
+
+    if (result != null && result.resultCode != null) {
+        return result.resultCode;
+    }
+
+    return result;
+}
+
+function closeSocket(socketId) {
+
+    try {
+        chrome.sockets.udp.close(socketId);
+    } catch (err) {
+
+    }
+}
+
+function findServersInternal(timeoutMs) {
+
+    return new Promise((resolve, reject) => {
+
+        const servers = [];
+
+        // Expected server properties
+        // Name, Id, Address, EndpointAddress (optional)
+
+        const chrome = window.chrome;
+
+        if (!chrome) {
+            resolve(servers);
+            return;
         }
-        return buf;
-    }
-
-    function arrayBufferToString(buf) {
-        return String.fromCharCode.apply(null, new Uint16Array(buf));
-    }
-
-    function getResultCode(result) {
-
-        if (result != null && result.resultCode != null) {
-            return result.resultCode;
+        if (!chrome.sockets) {
+            resolve(servers);
+            return;
         }
 
-        return result;
-    }
+        let timeout;
+        let socketId;
 
-    function closeSocket(socketId) {
+        function onTimerExpired() {
+            resolve(servers);
 
-        try {
-            chrome.sockets.udp.close(socketId);
-        } catch (err) {
-
+            if (socketId) {
+                chrome.sockets.udp.onReceive.removeListener(onReceive);
+                closeSocket(socketId);
+            }
         }
-    }
 
-    function findServersInternal(timeoutMs) {
+        function startTimer() {
 
-        return new Promise(function (resolve, reject) {
+            console.log(`starting udp receive timer with timeout ms: ${timeoutMs}`);
 
-            var servers = [];
+            timeout = setTimeout(onTimerExpired, timeoutMs);
+        }
 
-            // Expected server properties
-            // Name, Id, Address, EndpointAddress (optional)
+        function onReceive(info) {
 
-            var chrome = window.chrome;
+            try {
 
-            if (!chrome) {
-                resolve(servers);
-                return;
-            }
-            if (!chrome.sockets) {
-                resolve(servers);
-                return;
-            }
+                console.log('ServerDiscovery message received');
 
-            var timeout;
-            var socketId;
+                console.log(info);
 
-            function onTimerExpired() {
-                resolve(servers);
+                if (info != null && info.socketId === socketId) {
+                    const json = arrayBufferToString(info.data);
+                    console.log(`Server discovery json: ${json}`);
+                    const server = JSON.parse(json);
 
-                if (socketId) {
-                    chrome.sockets.udp.onReceive.removeListener(onReceive);
-                    closeSocket(socketId);
-                }
-            }
+                    server.RemoteAddress = info.remoteAddress;
 
-            function startTimer() {
-
-                console.log('starting udp receive timer with timeout ms: ' + timeoutMs);
-
-                timeout = setTimeout(onTimerExpired, timeoutMs);
-            }
-
-            function onReceive(info) {
-
-                try {
-
-                    console.log('ServerDiscovery message received');
-
-                    console.log(info);
-
-                    if (info != null && info.socketId === socketId) {
-                        var json = arrayBufferToString(info.data);
-                        console.log('Server discovery json: ' + json);
-                        var server = JSON.parse(json);
-
-                        server.RemoteAddress = info.remoteAddress;
-
-                        if (info.remotePort) {
-                            server.RemoteAddress += ':' + info.remotePort;
-                        }
-
-                        servers.push(server);
+                    if (info.remotePort) {
+                        server.RemoteAddress += `:${info.remotePort}`;
                     }
 
-                } catch (err) {
-                    console.log('Error receiving server info: ' + err);
+                    servers.push(server);
                 }
+
+            } catch (err) {
+                console.log(`Error receiving server info: ${err}`);
+            }
+        }
+
+        const port = 7359;
+        console.log('chrome.sockets.udp.create');
+
+        startTimer();
+
+        chrome.sockets.udp.create(createInfo => {
+
+            if (!createInfo) {
+                console.log('create fail');
+                return;
+            }
+            if (!createInfo.socketId) {
+                console.log('create fail');
+                return;
             }
 
-            var port = 7359;
-            console.log('chrome.sockets.udp.create');
+            socketId = createInfo.socketId;
 
-            startTimer();
+            console.log('chrome.sockets.udp.bind');
+            chrome.sockets.udp.bind(createInfo.socketId, '0.0.0.0', 0, bindResult => {
 
-            chrome.sockets.udp.create(function (createInfo) {
-
-                if (!createInfo) {
-                    console.log('create fail');
-                    return;
-                }
-                if (!createInfo.socketId) {
-                    console.log('create fail');
+                if (getResultCode(bindResult) !== 0) {
+                    console.log(`bind fail: ${bindResult}`);
                     return;
                 }
 
-                socketId = createInfo.socketId;
+                const data = stringToArrayBuffer('who is EmbyServer?');
 
-                console.log('chrome.sockets.udp.bind');
-                chrome.sockets.udp.bind(createInfo.socketId, '0.0.0.0', 0, function (bindResult) {
+                console.log('chrome.sockets.udp.send');
 
-                    if (getResultCode(bindResult) !== 0) {
-                        console.log('bind fail: ' + bindResult);
-                        return;
+                chrome.sockets.udp.send(createInfo.socketId, data, '255.255.255.255', port, sendResult => {
+
+                    if (getResultCode(sendResult) !== 0) {
+                        console.log(`send fail: ${sendResult}`);
+
+                    } else {
+                        chrome.sockets.udp.onReceive.addListener(onReceive);
+                        console.log(`sendTo: success ${port}`);
                     }
-
-                    var data = stringToArrayBuffer('who is EmbyServer?');
-
-                    console.log('chrome.sockets.udp.send');
-
-                    chrome.sockets.udp.send(createInfo.socketId, data, '255.255.255.255', port, function (sendResult) {
-
-                        if (getResultCode(sendResult) !== 0) {
-                            console.log('send fail: ' + sendResult);
-
-                        } else {
-                            chrome.sockets.udp.onReceive.addListener(onReceive);
-                            console.log('sendTo: success ' + port);
-                        }
-                    });
                 });
             });
         });
-    }
+    });
+}
 
-    return {
+export default {
 
-        findServers: function (timeoutMs) {
+    findServers(timeoutMs) {
 
-            return new Promise(function (resolve, reject) {
+        return new Promise((resolve, reject) => {
 
-                try {
-                    findServersInternal(timeoutMs).then(resolve, function () {
+            try {
+                findServersInternal(timeoutMs).then(resolve, () => {
 
-                        resolve([]);
-                    });
-
-                } catch (err) {
                     resolve([]);
-                }
-            });
-        }
-    };
+                });
 
-});
+            } catch (err) {
+                resolve([]);
+            }
+        });
+    }
+};

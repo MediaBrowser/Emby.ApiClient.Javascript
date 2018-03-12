@@ -1,15 +1,6 @@
-﻿define([], function () {
-    'use strict';
-
-    function CameraRoll() {
-
-    }
-
-    CameraRoll.prototype.getFiles = function () {
+﻿export default class CameraRoll {
+    getFiles() {
 
         return Promise.resolve([]);
-    };
-
-    return new CameraRoll();
-
-});
+    }
+}

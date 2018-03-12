@@ -1,18 +1,13 @@
-﻿define([], function () {
-    'use strict';
+﻿function send(info) {
 
-    function send(info) {
+    return Promise.reject();
+}
 
-        return Promise.reject();
-    }
+function isSupported() {
+    return false;
+}
 
-    function isSupported() {
-        return false;
-    }
-
-    return {
-        send: send,
-        isSupported: isSupported
-    };
-
-});
+export default {
+    send,
+    isSupported
+};
