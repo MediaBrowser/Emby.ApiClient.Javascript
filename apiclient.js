@@ -640,37 +640,33 @@
 
         return new Promise(function (resolve, reject) {
 
-            require(["cryptojs-sha1", "cryptojs-md5"], function () {
-                var postData = {
-                    Password: CryptoJS.SHA1(password || "").toString(),
-                    PasswordMd5: CryptoJS.MD5(password || "").toString(),
-                    Username: name,
-                    Pw: password
+            var postData = {
+                Username: name,
+                Pw: password
+            };
+
+            instance.ajax({
+                type: "POST",
+                url: url,
+                data: JSON.stringify(postData),
+                dataType: "json",
+                contentType: "application/json"
+
+            }).then(function (result) {
+
+                var afterOnAuthenticated = function () {
+                    redetectBitrate(instance);
+                    refreshWakeOnLanInfoIfNeeded(instance);
+                    resolve(result);
                 };
 
-                instance.ajax({
-                    type: "POST",
-                    url: url,
-                    data: JSON.stringify(postData),
-                    dataType: "json",
-                    contentType: "application/json"
+                if (instance.onAuthenticated) {
+                    instance.onAuthenticated(instance, result).then(afterOnAuthenticated);
+                } else {
+                    afterOnAuthenticated();
+                }
 
-                }).then(function (result) {
-
-                    var afterOnAuthenticated = function () {
-                        redetectBitrate(instance);
-                        refreshWakeOnLanInfoIfNeeded(instance);
-                        resolve(result);
-                    };
-
-                    if (instance.onAuthenticated) {
-                        instance.onAuthenticated(instance, result).then(afterOnAuthenticated);
-                    } else {
-                        afterOnAuthenticated();
-                    }
-
-                }, reject);
-            });
+            }, reject);
         });
     };
 
@@ -2839,23 +2835,13 @@
 
         var url = this.getUrl("Users/" + userId + "/Password");
 
-        var instance = this;
-
-        return new Promise(function (resolve, reject) {
-
-            require(["cryptojs-sha1"], function () {
-
-                instance.ajax({
-                    type: "POST",
-                    url: url,
-                    data: {
-                        CurrentPassword: CryptoJS.SHA1(currentPassword).toString(),
-                        NewPassword: CryptoJS.SHA1(newPassword).toString(),
-                        CurrentPw: currentPassword,
-                        NewPw: newPassword
-                    }
-                }).then(resolve, reject);
-            });
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: {
+                CurrentPw: currentPassword,
+                NewPw: newPassword
+            }
         });
     };
 
@@ -2868,26 +2854,19 @@
 
         var instance = this;
 
-        return new Promise(function (resolve, reject) {
+        if (!userId) {
+            Promise.reject();
+            return;
+        }
 
-            if (!userId) {
-                reject();
-                return;
+        var url = this.getUrl("Users/" + userId + "/EasyPassword");
+
+        return this.ajax({
+            type: "POST",
+            url: url,
+            data: {
+                NewPw: newPassword
             }
-
-            var url = instance.getUrl("Users/" + userId + "/EasyPassword");
-
-            require(["cryptojs-sha1"], function () {
-
-                instance.ajax({
-                    type: "POST",
-                    url: url,
-                    data: {
-                        newPassword: CryptoJS.SHA1(newPassword).toString(),
-                        NewPw: newPassword
-                    }
-                }).then(resolve, reject);
-            });
         });
     };
 
