@@ -549,7 +549,7 @@ class ApiClient {
 
             const postData = {
                 Username: name,
-                Pw: password
+                Pw: password || ''
             };
 
             instance.ajax({
