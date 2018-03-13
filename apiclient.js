@@ -2517,11 +2517,12 @@ class ApiClient {
 
         return this.ajax({
             type: "POST",
-            url,
-            data: {
-                CurrentPw: currentPassword,
+            url: url,
+            data: JSON.stringify({
+                CurrentPw: currentPassword || '',
                 NewPw: newPassword
-            }
+            }),
+            contentType: "application/json"
         });
     }
 
