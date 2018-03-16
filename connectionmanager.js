@@ -253,7 +253,7 @@ export default class ConnectionManager {
         credentialProvider,
         appStorage,
         apiClientFactory,
-        serverDiscoveryModulePath,
+        serverDiscoveryFn,
         wakeOnLanModulePath,
         appName,
         appVersion,
@@ -830,7 +830,7 @@ export default class ConnectionManager {
                     resolve(servers);
                 };
 
-                import(serverDiscoveryModulePath).then(serverDiscovery => {
+                serverDiscoveryFn().then(serverDiscovery => {
                     serverDiscovery.default.findServers(1000).then(onFinish, () => {
                         onFinish([]);
                     });

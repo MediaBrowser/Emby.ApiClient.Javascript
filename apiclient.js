@@ -132,7 +132,7 @@ function getServerAddress(server, mode) {
 class ApiClient {
     constructor(
         appStorage,
-        wakeOnLanModulePath,
+        wakeOnLanFn,
         serverAddress,
         appName,
         appVersion,
@@ -151,7 +151,7 @@ class ApiClient {
         console.log(`ApiClient deviceId: ${deviceId}`);
 
         this.appStorage = appStorage;
-        this.wakeOnLanModulePath = wakeOnLanModulePath;
+        this.wakeOnLanFn = wakeOnLanFn;
         this._serverInfo = {};
         this._serverAddress = serverAddress;
         this._deviceId = deviceId;
@@ -3911,7 +3911,7 @@ function getCachedWakeOnLanInfo(instance) {
 
 function refreshWakeOnLanInfoIfNeeded(instance) {
 
-    import(instance.wakeOnLanModulePath).then(wakeOnLan => {
+    instance.wakeOnLanFn().then(wakeOnLan => {
         if (!wakeOnLan.default.isSupported()) {
             return;
         }
@@ -3930,7 +3930,7 @@ function refreshWakeOnLanInfo() {
     const instance = this;
 
     console.log('refreshWakeOnLanInfo');
-    instance.getWakeOnLanInfo().then(info => {
+    instance.wakeOnLanFn().then(info => {
 
         const serverId = instance.serverId();
         instance.appStorage.setItem(`server-${serverId}-wakeonlaninfo`, JSON.stringify(info));
@@ -3952,7 +3952,7 @@ function sendNextWakeOnLan(instance, infos, index, resolve) {
 
     console.log(`sending wakeonlan to ${info.MacAddress}`);
 
-    import(instance.wakeOnLanModulePath).then(wakeOnLan => {
+    instance.wakeOnLanFn().then(wakeOnLan => {
         wakeOnLan.default.send(info).then(result => {
 
             sendNextWakeOnLan(infos, index + 1, resolve);
