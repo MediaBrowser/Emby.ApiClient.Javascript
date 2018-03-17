@@ -1,4 +1,6 @@
-﻿function redetectBitrate(instance) {
+﻿import events from './events.js';
+
+function redetectBitrate(instance) {
     stopBitrateDetection(instance);
 
     if (instance.accessToken() && instance.enableAutomaticBitrateDetection !== false) {
