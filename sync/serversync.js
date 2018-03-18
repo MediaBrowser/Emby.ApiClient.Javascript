@@ -4,11 +4,11 @@
 
     options = options || {};
 
-    let uploadPhotos = options.uploadPhotos !== false;
+    const cameraUploadServers = options.cameraUploadServers || [];
+    console.log("ServerSync cameraUploadServers: " + JSON.stringify(cameraUploadServers));
 
-    if (options.cameraUploadServers && !options.cameraUploadServers.includes(server.Id)) {
-        uploadPhotos = false;
-    }
+    const uploadPhotos = cameraUploadServers.includes(server.Id);
+    console.log("ServerSync uploadPhotos: " + uploadPhotos);
 
     const promise = uploadPhotos ? uploadContent(connectionManager, server, options) : Promise.resolve();
 
