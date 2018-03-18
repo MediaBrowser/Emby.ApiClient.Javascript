@@ -1,4 +1,8 @@
-﻿function performSync(connectionManager, server, options) {
+﻿import MediaSync from './mediasync';
+import ContentUploader from './contentuploader';
+import localAssetManager from '../localassetmanager';
+
+function performSync(connectionManager, server, options) {
 
     console.log(`ServerSync.performSync to server: ${server.Id}`);
 
@@ -17,23 +21,14 @@
 
 function uploadContent(connectionManager, server, options) {
 
-    return import(AppModules.contentUploader).then((ContentUploader) => {
-
-        return new ContentUploader().uploadImages(connectionManager, server);
-    });
+    return new ContentUploader().uploadImages(connectionManager, server);
 }
 
 function syncMedia(connectionManager, server, options) {
 
-    return import('./mediasync').then((MediaSync) => {
+    const apiClient = connectionManager.getApiClient(server.Id);
 
-        return import(AppModules.localAssetManager).then((localAssetManager) => {
-
-            const apiClient = connectionManager.getApiClient(server.Id);
-
-            return new MediaSync().sync(apiClient, localAssetManager, server, options);
-        });
-    });
+    return new MediaSync().sync(apiClient, localAssetManager, server, options);
 }
 
 export default class ServerSync {
