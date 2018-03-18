@@ -907,6 +907,13 @@ class ApiClient {
         });
     }
 
+    getRecordingFolders(userId) {
+
+        const url = this.getUrl("LiveTv/Recordings/Folders", { userId: userId });
+
+        return this.getJSON(url);
+    }
+
     getLiveTvInfo(options) {
 
         const url = this.getUrl("LiveTv/Info", options || {});
