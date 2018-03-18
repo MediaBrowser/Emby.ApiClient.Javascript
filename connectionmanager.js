@@ -426,6 +426,9 @@ export default class ConnectionManager {
             credentialProvider.addOrUpdateServer(credentials.Servers, server);
             credentialProvider.credentials(credentials);
 
+            // set this now before updating server info, otherwise it won't be set in time
+            apiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
+
             apiClient.serverInfo(server);
             afterConnected(apiClient, options);
 
@@ -1088,6 +1091,10 @@ export default class ConnectionManager {
                 'ServerSignIn';
 
             result.Servers.push(server);
+
+            // set this now before updating server info, otherwise it won't be set in time
+            result.ApiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
+
             result.ApiClient.updateServerInfo(server, connectionMode);
 
             if (result.State === 'SignedIn') {
@@ -1569,6 +1576,17 @@ export default class ConnectionManager {
         const instance = this;
 
         return instance.getAvailableServers().then(servers => instance.connectToServers(servers, options));
+    }
+
+    handleMessageReceived(msg) {
+
+        var serverId = msg.ServerId;
+        if (serverId) {
+            var apiClient = this.getApiClient(serverId);
+            if (apiClient) {
+                apiClient.handleMessageReceived(msg);
+            }
+        }
     }
 
     isLoggedIntoConnect() {

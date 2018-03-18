@@ -1,4 +1,6 @@
-﻿let isSyncing;
+﻿import MultiServerSync from './multiserversync.js';
+
+let isSyncing;
 
 export default {
 
@@ -12,23 +14,20 @@ export default {
 
         isSyncing = true;
 
-        return import('./multiserversync').then((MultiServerSync) => {
+        options = options || {};
 
-            options = options || {};
+        // TODO, get from appSettings
+        options.cameraUploadServers = [];
 
-            // TODO, get from appSettings
-            options.cameraUploadServers = [];
+        return new MultiServerSync().sync(connectionManager, options).then(() => {
 
-            return new MultiServerSync().sync(connectionManager, options).then(() => {
+            isSyncing = null;
+            return Promise.resolve();
 
-                isSyncing = null;
-                return Promise.resolve();
+        }, err => {
 
-            }, err => {
-
-                isSyncing = null;
-                return Promise.reject(err);
-            });
+            isSyncing = null;
+            return Promise.reject(err);
         });
     }
 };

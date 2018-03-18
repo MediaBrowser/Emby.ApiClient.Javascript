@@ -7,12 +7,14 @@
             return false;
         }
 
-        return uploadHistory.FilesUploaded.filter(u => getUploadId(file) === u.Id).length === 0;
+        const uploadId = getUploadId(file);
+
+        return uploadHistory.FilesUploaded.filter(u => uploadId === u.Id).length === 0;
     });
 }
 
 function getUploadId(file) {
-    return btoa(file);
+    return btoa(file.Id + "1");
 }
 
 function uploadNext(files, index, server, apiClient, resolve, reject) {
@@ -37,11 +39,9 @@ function uploadFile(file, apiClient) {
 
     return import(AppModules.fileUpload).then((FileUpload) => {
 
-        const name = `camera image ${new Date().getTime()}`;
-
         const url = apiClient.getUrl('Devices/CameraUploads', {
             DeviceId: apiClient.deviceId(),
-            Name: name,
+            Name: file.Name,
             Album: 'Camera Roll',
             Id: getUploadId(file),
             api_key: apiClient.accessToken()
@@ -49,7 +49,7 @@ function uploadFile(file, apiClient) {
 
         console.log(`Uploading file to ${url}`);
 
-        return new FileUpload().upload(file, name, url);
+        return new FileUpload().upload(file, url);
     });
 }
 
@@ -58,9 +58,9 @@ export default class ContentUploader {
 
         return import(AppModules.cameraRoll).then(cameraRoll => {
 
-            return cameraRoll.getFiles().then(photos => {
+            return cameraRoll.getFiles().then(files => {
 
-                if (!photos.length) {
+                if (!files.length) {
                     return Promise.resolve();
                 }
 
@@ -68,13 +68,13 @@ export default class ContentUploader {
 
                 return apiClient.getContentUploadHistory().then(uploadHistory => {
 
-                    photos = getFilesToUpload(photos, uploadHistory);
+                    files = getFilesToUpload(files, uploadHistory);
 
-                    console.log(`Found ${photos.length} files to upload`);
+                    console.log(`Found ${files.length} files to upload`);
 
                     return new Promise((resolve, reject) => {
 
-                        uploadNext(photos, 0, server, apiClient, resolve, reject);
+                        uploadNext(files, 0, server, apiClient, resolve, reject);
                     });
 
                 }, () => Promise.resolve());
