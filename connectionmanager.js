@@ -254,7 +254,7 @@ export default class ConnectionManager {
         appStorage,
         apiClientFactory,
         serverDiscoveryFn,
-        wakeOnLanModulePath,
+        wakeOnLanFn,
         appName,
         appVersion,
         deviceName,
@@ -374,7 +374,7 @@ export default class ConnectionManager {
 
                 const url = getServerAddress(server, connectionMode);
 
-                apiClient = new apiClientFactory(appStorage, wakeOnLanModulePath, url, appName, appVersion, deviceName, deviceId, devicePixelRatio);
+                apiClient = new apiClientFactory(appStorage, wakeOnLanFn, url, appName, appVersion, deviceName, deviceId, devicePixelRatio);
 
                 self._apiClients.push(apiClient);
 
