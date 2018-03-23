@@ -580,8 +580,7 @@ export default class ConnectionManager {
 
                     }).then(user => {
 
-                        onLocalUserSignIn(server, connectionMode, user);
-                        return Promise.resolve();
+                        return onLocalUserSignIn(server, connectionMode, user);
 
                     }, () => {
 
