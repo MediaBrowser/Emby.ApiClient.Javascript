@@ -567,30 +567,7 @@ export default class ConnectionManager {
             }).then(systemInfo => {
 
                 updateServerInfo(server, systemInfo);
-
-                if (server.UserId) {
-
-                    return ajax({
-                        type: "GET",
-                        url: getEmbyServerUrl(url, `users/${server.UserId}`),
-                        dataType: "json",
-                        headers: {
-                            "X-MediaBrowser-Token": server.AccessToken
-                        }
-
-                    }).then(user => {
-
-                        return onLocalUserSignIn(server, connectionMode, user);
-
-                    }, () => {
-
-                        server.UserId = null;
-                        server.AccessToken = null;
-                        return Promise.resolve();
-                    });
-                } else {
-                    return Promise.resolve();
-                }
+                return Promise.resolve();
 
             }, () => {
 
@@ -1096,13 +1073,22 @@ export default class ConnectionManager {
 
             result.ApiClient.updateServerInfo(server, connectionMode);
 
+            const resolveActions = function () {
+                resolve(result);
+
+                events.trigger(self, 'connected', [result]);
+            };
+
             if (result.State === 'SignedIn') {
                 afterConnected(result.ApiClient, options);
+
+                result.ApiClient.getCurrentUser().then(function (user) {
+                    onLocalUserSignIn(server, connectionMode, user).then(resolveActions, resolveActions);
+                }, resolveActions);
             }
-
-            resolve(result);
-
-            events.trigger(self, 'connected', [result]);
+            else {
+                resolveActions();
+            }
         }
 
         self.connectToAddress = function (address, options) {
