@@ -67,11 +67,6 @@ function updateServerInfo(server, systemInfo) {
     if (systemInfo.WanAddress) {
         server.RemoteAddress = systemInfo.WanAddress;
     }
-    if (systemInfo.MacAddress) {
-        server.WakeOnLanInfos = [
-            { MacAddress: systemInfo.MacAddress }
-        ];
-    }
 }
 
 function getEmbyServerUrl(baseUrl, handler) {
