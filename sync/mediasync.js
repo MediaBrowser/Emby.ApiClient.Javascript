@@ -52,7 +52,7 @@ function reportTransfer(apiClient, localassetmanager, item) {
                             '[mediasync] Mediasync error on reportSyncJobItemTransferred',
                             error
                         );
-                        item.SyncStatus = 'error';
+                        item.SyncStatus = 'synced';
                         return localassetmanager.addOrUpdateLocalItem(item);
                     }
                 );
@@ -137,11 +137,11 @@ function reportOfflineActions(apiClient, localassetmanager, serverInfo) {
         });
 }
 
-function syncData(apiClient, localassetmanager, serverInfo, syncUserItemAccess) {
+function syncData(apiClient, localassetmanager, serverInfo) {
     console.log('[mediasync] Begin syncData');
 
     return localassetmanager.getServerItems(serverInfo.Id).then(items => {
-        const completedItems = items.filter(item => item && (item.SyncStatus === 'synced' || item.SyncStatus === 'error'));
+        const completedItems = items.filter(item => item && item.SyncStatus === 'synced');
 
         const request = {
             TargetId: apiClient.deviceId(),
@@ -152,7 +152,6 @@ function syncData(apiClient, localassetmanager, serverInfo, syncUserItemAccess) 
             apiClient,
             localassetmanager,
             serverInfo,
-            syncUserItemAccess,
             result
         ).then(
             () => {
@@ -171,7 +170,6 @@ function afterSyncData(
     apiClient,
     localassetmanager,
     serverInfo,
-    enableSyncUserItemAccess,
     syncDataResult
 ) {
     console.log('[mediasync] Begin afterSyncData');
@@ -185,10 +183,6 @@ function afterSyncData(
         syncDataResult.ItemIdsToRemove.forEach(itemId => {
             p = p.then(() => removeLocalItem(localassetmanager, itemId, serverInfo.Id));
         });
-    }
-
-    if (enableSyncUserItemAccess) {
-        p = p.then(() => syncUserItemAccess(syncDataResult, serverInfo.Id));
     }
 
     p = p.then(() => removeObsoleteContainerItems(localassetmanager, serverInfo.Id));
@@ -281,22 +275,20 @@ function getNewItem(jobItem, apiClient, localassetmanager, serverInfo, options) 
             libraryItem.LocalTrailerCount = null;
             libraryItem.RemoteTrailers = [];
 
-            return localassetmanager
-                .createLocalItem(libraryItem, serverInfo, jobItem)
-                .then(localItem => {
-                    console.log('[mediasync] getNewItem: createLocalItem completed');
+            const localItem = localassetmanager.createLocalItem(libraryItem, serverInfo, jobItem);
 
-                    localItem.SyncStatus = 'queued';
+            console.log('[mediasync] getNewItem: createLocalItem completed');
 
-                    return downloadParentItems(
-                        apiClient,
-                        localassetmanager,
-                        jobItem,
-                        localItem,
-                        serverInfo,
-                        options
-                    ).then(() => onDownloadParentItemsDone(localItem));
-                });
+            localItem.SyncStatus = 'queued';
+
+            return downloadParentItems(
+                apiClient,
+                localassetmanager,
+                jobItem,
+                localItem,
+                serverInfo,
+                options
+            ).then(() => onDownloadParentItemsDone(localItem));
         });
 }
 
@@ -363,11 +355,11 @@ function downloadItem(apiClient, localassetmanager, libraryItem, itemId, serverI
             downloadedItem.ParentArtImageTag = null;
             downloadedItem.ParentLogoImageTag = null;
 
+            const localItem = localassetmanager.createLocalItem(downloadedItem, serverInfo, null);
+
             return localassetmanager
-                .createLocalItem(downloadedItem, serverInfo, null)
-                .then(localItem => localassetmanager
-                    .addOrUpdateLocalItem(localItem)
-                    .then(() => Promise.resolve(localItem)));
+                .addOrUpdateLocalItem(localItem)
+                .then(() => Promise.resolve(localItem));
         },
         err => {
             console.error(`[mediasync] downloadItem failed: ${err.toString()}`);
@@ -384,19 +376,18 @@ function downloadMedia(apiClient, localassetmanager, jobItem, localItem, options
         }
     );
 
-    const localPath = localItem.LocalPath;
-
-    console.log(
-        `[mediasync] Downloading media. Url: ${url}. Local path: ${localPath}`
-    );
-
     options = options || {};
 
     return localassetmanager.downloadFile(url, localItem).then(result => {
         // result.path
         // result.isComplete
 
-        localItem.SyncStatus = result.isComplete ? 'synced' : 'transferring';
+        if (result.isComplete) {
+            localItem.SyncStatus = 'synced';
+            return reportTransfer(apiClient, localItem);
+        }
+
+        localItem.SyncStatus = 'transferring';
 
         return localassetmanager.addOrUpdateLocalItem(localItem);
     });
@@ -707,8 +698,7 @@ function checkLocalFileExistence(apiClient, localassetmanager, serverInfo, optio
         return localassetmanager
             .getServerItems(serverInfo.Id)
             .then(items => {
-                const completedItems = items.filter(item => item &&
-                    (item.SyncStatus === 'synced' || item.SyncStatus === 'error'));
+                const completedItems = items.filter(item => item && item.SyncStatus === 'synced');
 
                 let p = Promise.resolve();
 
@@ -760,7 +750,7 @@ export default class MediaSync {
                                     options,
                                     downloadCount
                                 ).then(() => // Do the second data sync
-                                    syncData(apiClient, localassetmanager, serverInfo, false).then(() => {
+                                    syncData(apiClient, localassetmanager, serverInfo).then(() => {
                                         console.log(
                                             '[mediasync]************************************* Exit sync'
                                         );

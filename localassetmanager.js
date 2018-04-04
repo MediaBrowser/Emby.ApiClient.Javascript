@@ -359,13 +359,15 @@ function createLocalItem(libraryItem, serverInfo, jobItem) {
     console.log('[lcoalassetmanager] Begin createLocalItem');
 
     const path = getDirectoryPath(libraryItem, serverInfo);
-    const localFolder = filerepository.getFullLocalPath(path);
+    // pass in isFile = false
+    const localFolder = filerepository.getFullLocalPath(path, false);
 
     let localPath;
 
     if (jobItem) {
         path.push(getLocalFileName(libraryItem, jobItem.OriginalFileName));
-        localPath = filerepository.getFullLocalPath(path);
+        // pass in isFile = true
+        localPath = filerepository.getFullLocalPath(path, true);
     }
 
     if (libraryItem.MediaSources) {
@@ -391,7 +393,7 @@ function createLocalItem(libraryItem, serverInfo, jobItem) {
         item.SyncJobItemId = jobItem.SyncJobItemId;
     }
 
-    return Promise.resolve(item);
+    return item;
 }
 
 function getSubtitleSaveFileName(
