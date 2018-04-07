@@ -211,7 +211,7 @@ function removeLocalItem(localassetmanager, itemId, serverId) {
     });
 }
 
-function getNewMedia(apiClient, localassetmanager, serverInfo, options, downloadCount) {
+function getNewMedia(apiClient, localassetmanager, serverInfo, downloadCount) {
     console.log('[mediasync] Begin getNewMedia');
 
     return apiClient
@@ -224,7 +224,7 @@ function getNewMedia(apiClient, localassetmanager, serverInfo, options, download
 
             jobItems.forEach(jobItem => {
                 if (currentCount++ <= maxDownloads) {
-                    p = p.then(() => getNewItem(jobItem, apiClient, localassetmanager, serverInfo, options));
+                    p = p.then(() => getNewItem(jobItem, apiClient, localassetmanager, serverInfo));
                 }
             });
 
@@ -235,35 +235,25 @@ function getNewMedia(apiClient, localassetmanager, serverInfo, options, download
         });
 }
 
-function getNewItem(jobItem, apiClient, localassetmanager, serverInfo, options) {
+function getNewItem(jobItem, apiClient, serverInfo) {
+
     console.log('[mediasync] Begin getNewItem');
 
     const libraryItem = jobItem.Item;
 
-    return localassetmanager
-        .getLocalItem(serverInfo.Id, libraryItem.Id)
-        .then(existingItem => {
-            const onDownloadParentItemsDone = localItem => downloadMedia(apiClient, localassetmanager, jobItem, localItem, options).then(
-                () => getImages(apiClient, localassetmanager, jobItem, localItem).then(() => getSubtitles(apiClient, localassetmanager, jobItem, localItem))
-            );
+    return localassetmanager.getLocalItem(serverInfo.Id, libraryItem.Id).then((existingItem) => {
 
-            if (existingItem) {
-                if (
-                    existingItem.SyncStatus === 'queued' ||
-                    existingItem.SyncStatus === 'transferring' ||
-                    existingItem.SyncStatus === 'synced'
-                ) {
-                    console.log(
-                        '[mediasync] getNewItem: getLocalItem found existing item'
-                    );
+        if (existingItem) {
+            if (existingItem.SyncStatus === 'queued' || existingItem.SyncStatus === 'transferring' || existingItem.SyncStatus === 'synced') {
+                console.log('[mediasync] getNewItem: getLocalItem found existing item');
 
-                    if (localassetmanager.enableRepeatDownloading()) {
-                        return onDownloadParentItemsDone(existingItem);
-                    }
-
+                if (localassetmanager.enableBackgroundCompletion()) {
                     return Promise.resolve();
                 }
             }
+        }
+
+        return downloadParentItems(apiClient, jobItem, libraryItem, serverInfo).then(() => {
 
             libraryItem.CanDelete = false;
             libraryItem.CanDownload = false;
@@ -275,110 +265,79 @@ function getNewItem(jobItem, apiClient, localassetmanager, serverInfo, options) 
             libraryItem.LocalTrailerCount = null;
             libraryItem.RemoteTrailers = [];
 
-            const localItem = localassetmanager.createLocalItem(libraryItem, serverInfo, jobItem);
+            return localassetmanager.createLocalItem(libraryItem, serverInfo, jobItem).then((localItem) => {
 
-            console.log('[mediasync] getNewItem: createLocalItem completed');
+                localItem.SyncStatus = 'queued';
 
-            localItem.SyncStatus = 'queued';
+                return downloadMedia(apiClient, jobItem, localItem).then(() => {
 
-            return downloadParentItems(
-                apiClient,
-                localassetmanager,
-                jobItem,
-                localItem,
-                serverInfo,
-                options
-            ).then(() => onDownloadParentItemsDone(localItem));
+                    return getImages(apiClient, jobItem, localItem).then(() => {
+
+                        return getSubtitles(apiClient, jobItem, localItem);
+
+                    });
+                });
+            });
         });
+    });
 }
 
-function downloadParentItems(
-    apiClient,
-    localassetmanager,
-    jobItem,
-    localItem,
-    serverInfo,
-    options
-) {
+function downloadParentItems(apiClient, jobItem, libraryItem, serverInfo) {
+
     let p = Promise.resolve();
 
-    const libraryItem = localItem.Item;
-
-    const itemType = (libraryItem.Type || '').toLowerCase();
-
     if (libraryItem.SeriesId) {
-        p = p.then(() => downloadItem(
-            apiClient,
-            localassetmanager,
-            libraryItem,
-            libraryItem.SeriesId,
-            serverInfo
-        ));
+        p = p.then(() => {
+            return downloadItem(apiClient, libraryItem.SeriesId, serverInfo);
+        });
     }
     if (libraryItem.SeasonId) {
-        p = p.then(() => downloadItem(
-            apiClient,
-            localassetmanager,
-            libraryItem,
-            libraryItem.SeasonId,
-            serverInfo
-        ).then(seasonItem => {
-            libraryItem.SeasonPrimaryImageTag = (
-                seasonItem.Item.ImageTags || {}
-            ).Primary;
-            return Promise.resolve();
-        }));
+        p = p.then(() => {
+            return downloadItem(apiClient, libraryItem.SeasonId, serverInfo).then((seasonItem) => {
+                libraryItem.SeasonPrimaryImageTag = (seasonItem.Item.ImageTags || {}).Primary;
+                return Promise.resolve();
+            });
+        });
     }
     if (libraryItem.AlbumId) {
-        p = p.then(() => downloadItem(
-            apiClient,
-            localassetmanager,
-            libraryItem,
-            libraryItem.AlbumId,
-            serverInfo
-        ));
+        p = p.then(() => {
+            return downloadItem(apiClient, libraryItem.AlbumId, serverInfo);
+        });
     }
 
     return p;
 }
 
-function downloadItem(apiClient, localassetmanager, libraryItem, itemId, serverInfo) {
-    return apiClient.getItem(apiClient.getCurrentUserId(), itemId).then(
-        downloadedItem => {
-            downloadedItem.CanDelete = false;
-            downloadedItem.CanDownload = false;
-            downloadedItem.SupportsSync = false;
-            downloadedItem.People = [];
-            downloadedItem.SpecialFeatureCount = null;
-            downloadedItem.BackdropImageTags = null;
-            downloadedItem.ParentBackdropImageTags = null;
-            downloadedItem.ParentArtImageTag = null;
-            downloadedItem.ParentLogoImageTag = null;
+function downloadItem(apiClient, itemId, serverInfo) {
 
-            const localItem = localassetmanager.createLocalItem(downloadedItem, serverInfo, null);
+    return apiClient.getItem(apiClient.getCurrentUserId(), itemId).then((downloadedItem) => {
 
-            return localassetmanager
-                .addOrUpdateLocalItem(localItem)
-                .then(() => Promise.resolve(localItem));
-        },
-        err => {
-            console.error(`[mediasync] downloadItem failed: ${err.toString()}`);
-            return Promise.resolve(null);
-        }
-    );
+        downloadedItem.CanDelete = false;
+        downloadedItem.CanDownload = false;
+        downloadedItem.SupportsSync = false;
+        downloadedItem.People = [];
+        downloadedItem.SpecialFeatureCount = null;
+        downloadedItem.BackdropImageTags = null;
+        downloadedItem.ParentBackdropImageTags = null;
+        downloadedItem.ParentArtImageTag = null;
+        downloadedItem.ParentLogoImageTag = null;
+
+        return localassetmanager.createLocalItem(downloadedItem, serverInfo, null).then((localItem) => {
+            return localassetmanager.addOrUpdateLocalItem(localItem).then(() => {
+                return Promise.resolve(localItem);
+            });
+        });
+    });
 }
 
-function downloadMedia(apiClient, localassetmanager, jobItem, localItem, options) {
-    const url = apiClient.getUrl(
-        `Sync/JobItems/${jobItem.SyncJobItemId}/File`,
-        {
-            api_key: apiClient.accessToken()
-        }
-    );
+function downloadMedia(apiClient, jobItem, localItem) {
 
-    options = options || {};
+    const url = apiClient.getUrl('Sync/JobItems/' + jobItem.SyncJobItemId + '/File', {
+        api_key: apiClient.accessToken()
+    });
 
-    return localassetmanager.downloadFile(url, localItem).then(result => {
+    return localassetmanager.downloadFile(url, localItem).then((result) => {
+
         // result.path
         // result.isComplete
 
@@ -388,7 +347,6 @@ function downloadMedia(apiClient, localassetmanager, jobItem, localItem, options
         }
 
         localItem.SyncStatus = 'transferring';
-
         return localassetmanager.addOrUpdateLocalItem(localItem);
     });
 }

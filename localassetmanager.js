@@ -176,6 +176,15 @@ function normalizeId(id) {
     return null;
 }
 
+function normalizeIdList(val) {
+
+    if (val) {
+        return val.split(',').map(normalizeId);
+    }
+
+    return [];
+}
+
 function getViewItems(serverId, userId, options) {
     let parentId = options.ParentId;
 
@@ -184,6 +193,7 @@ function getViewItems(serverId, userId, options) {
     parentId = normalizeId(parentId);
     const seasonId = normalizeId(options.SeasonId || options.seasonId);
     const seriesId = normalizeId(options.SeriesId || options.seriesId);
+    const albumIds = normalizeIdList(options.AlbumIds || options.albumIds);
 
     const includeItemTypes = options.IncludeItemTypes
         ? options.IncludeItemTypes.split(',')
@@ -211,6 +221,10 @@ function getViewItems(serverId, userId, options) {
                 }
 
                 if (seasonId && Item.SeasonId !== seasonId) {
+                    return false;
+                }
+
+                if (albumIds.length && albumIds.indexOf(item.Item.AlbumId || '') === -1) {
                     return false;
                 }
 
@@ -356,9 +370,9 @@ function addOrUpdateLocalItem(localItem) {
 }
 
 function createLocalItem(libraryItem, serverInfo, jobItem) {
-    console.log('[lcoalassetmanager] Begin createLocalItem');
+    console.log('[localassetmanager] Begin createLocalItem');
 
-    const path = getDirectoryPath(libraryItem, serverInfo);
+    const path = getDirectoryPath(libraryItem);
     // pass in isFile = false
     const localFolder = filerepository.getFullLocalPath(path, false);
 
@@ -389,11 +403,12 @@ function createLocalItem(libraryItem, serverInfo, jobItem) {
     };
 
     if (jobItem) {
-        item.AdditionalFiles = jobItem.AdditionalFiles.slice(0);
+        item.AdditionalFiles = (jobItem.AdditionalFiles || []).slice(0);
         item.SyncJobItemId = jobItem.SyncJobItemId;
     }
 
-    return item;
+    console.log('[localassetmanager] End createLocalItem');
+    return Promise.resolve(item);
 }
 
 function getSubtitleSaveFileName(
@@ -512,44 +527,55 @@ function getDownloadItemCount() {
 
 // Helpers ***********************************************************
 
-function getDirectoryPath(item, { Name }) {
+function getDirectoryPath(item) {
     const parts = [];
-    parts.push(Name);
 
     const itemtype = item.Type.toLowerCase();
+    const mediaType = (item.MediaType || '').toLowerCase();
 
-    if (itemtype === 'episode') {
-        parts.push('TV');
+    if (itemtype === 'episode' || itemtype === 'series' || itemtype === 'season') {
 
-        const seriesName = item.SeriesName;
-        if (seriesName) {
-            parts.push(seriesName);
-        }
+        parts.push("TV");
 
-        const seasonName = item.SeasonName;
-        if (seasonName) {
-            parts.push(seasonName);
-        }
-    } else if (itemtype === 'video') {
-        parts.push('Videos');
+    } else if (mediaType === 'video') {
+
+        parts.push("Videos");
+
+    } else if (itemtype === 'audio' || itemtype === 'musicalbum' || itemtype === 'musicartist') {
+
+        parts.push("Music");
+
+    } else if (itemtype === 'photo' || itemtype === 'photoalbum') {
+
+        parts.push("Photos");
+
+    } else if (itemtype === 'game' || itemtype === 'gamesystem') {
+
+        parts.push("Games");
+    }
+
+    const albumArtist = item.AlbumArtist;
+    if (albumArtist) {
+        parts.push(albumArtist);
+    }
+
+    const seriesName = item.SeriesName;
+    if (seriesName) {
+        parts.push(seriesName);
+    }
+
+    const seasonName = item.SeasonName;
+    if (seasonName) {
+        parts.push(seasonName);
+    }
+
+    if (item.Album) {
+        parts.push(item.Album);
+    }
+
+    if ((mediaType === 'video' && itemtype !== 'episode') || itemtype === 'game' || item.IsFolder) {
+
         parts.push(item.Name);
-    } else if (itemtype === 'audio') {
-        parts.push('Music');
-
-        const albumArtist = item.AlbumArtist;
-        if (albumArtist) {
-            parts.push(albumArtist);
-        }
-
-        if (item.AlbumId && item.Album) {
-            parts.push(item.Album);
-        }
-    } else if (itemtype === 'photo') {
-        parts.push('Photos');
-
-        if (item.AlbumId && item.Album) {
-            parts.push(item.Album);
-        }
     }
 
     const finalParts = [];
@@ -562,8 +588,6 @@ function getDirectoryPath(item, { Name }) {
 
 function getImagePath(serverId, itemId, imageType, index) {
     const parts = [];
-    parts.push('Metadata');
-    parts.push(serverId);
     parts.push('images');
 
     index = index || 0;
@@ -648,8 +672,8 @@ function debugPrintItems(items) {
     console.groupEnd();
 }
 
-function enableRepeatDownloading() {
-    return transfermanager.enableRepeatDownloading;
+function enableBackgroundCompletion() {
+    return transfermanager.enableBackgroundCompletion;
 }
 
 export default {
@@ -677,5 +701,5 @@ export default {
     getItemsFromIds,
     removeObsoleteContainerItems,
     fileExists,
-    enableRepeatDownloading
+    enableBackgroundCompletion
 };

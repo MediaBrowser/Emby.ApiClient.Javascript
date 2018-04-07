@@ -196,7 +196,7 @@ export default class ApiClientEx extends ApiClient {
                 return Promise.resolve(result);
             });
 
-        } else if (serverInfo && options && (isLocalId(options.ParentId) || isLocalId(options.SeriesId) || isLocalId(options.SeasonId) || isLocalViewId(options.ParentId))) {
+        } else if (serverInfo && options && (isLocalId(options.ParentId) || isLocalId(options.SeriesId) || isLocalId(options.SeasonId) || isLocalViewId(options.ParentId) || isLocalViewId(options.AlbumIds))) {
 
             return this.localAssetManager.getViewItems(serverInfo.Id, userId, options).then(items => {
 
