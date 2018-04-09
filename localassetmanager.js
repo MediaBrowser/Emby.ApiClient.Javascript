@@ -337,32 +337,30 @@ function removeObsoleteContainerItems(serverId) {
 function removeLocalItem({ ServerId, Id }) {
     return itemrepository
         .get(ServerId, Id)
-        .then(({ LocalPath, AdditionalFiles }) =>
-            filerepository.deleteFile(LocalPath).then(
-                () => {
-                    let p = Promise.resolve(true);
+        .then(({ LocalPath, AdditionalFiles }) => {
 
-                    if (AdditionalFiles) {
-                        AdditionalFiles.forEach(({ Path }) => {
-                            p = p.then(() => filerepository.deleteFile(Path));
+            const onFileDeletedSuccessOrFail = () => {
+                let p = Promise.resolve(true);
+
+                if (item.AdditionalFiles) {
+                    item.AdditionalFiles.forEach((file) => {
+                        p = p.then(() => {
+                            return filerepository.deleteFile(file.Path);
                         });
-                    }
-
-                    return p.then(file => itemrepository.remove(ServerId, Id));
-                },
-                error => {
-                    let p = Promise.resolve(true);
-
-                    if (AdditionalFiles) {
-                        AdditionalFiles.forEach(({ Path }) => {
-                            p = p.then(item => filerepository.deleteFile(Path));
-                        });
-                    }
-
-                    return p.then(file => itemrepository.remove(ServerId, Id));
+                    });
                 }
-            )
-        );
+
+                return p.then((file) => {
+                    return itemrepository.remove(localItem.ServerId, localItem.Id);
+                });
+            };
+
+            if (!item.LocalPath) {
+                return onFileDeletedSuccessOrFail();
+            }
+
+            return filerepository.deleteFile(item.LocalPath).then(onFileDeletedSuccessOrFail, onFileDeletedSuccessOrFail);
+        });
 }
 
 function addOrUpdateLocalItem(localItem) {
@@ -372,13 +370,11 @@ function addOrUpdateLocalItem(localItem) {
 function createLocalItem(libraryItem, serverInfo, jobItem) {
     console.log('[localassetmanager] Begin createLocalItem');
 
-    const path = getDirectoryPath(libraryItem);
-    // pass in isFile = false
-    const localFolder = filerepository.getFullLocalPath(path, false);
-
     let localPath;
 
     if (jobItem) {
+        const path = getDirectoryPath(libraryItem);
+
         path.push(getLocalFileName(libraryItem, jobItem.OriginalFileName));
         // pass in isFile = true
         localPath = filerepository.getFullLocalPath(path, true);
@@ -397,7 +393,6 @@ function createLocalItem(libraryItem, serverInfo, jobItem) {
         ItemId: libraryItem.Id,
         ServerId: serverInfo.Id,
         LocalPath: localPath,
-        LocalFolder: localFolder,
         SyncDate: Date.now(),
         Id: libraryItem.Id
     };

@@ -355,8 +355,6 @@ export default class ConnectionManager {
 
         function onConnectUserSignIn(user) {
 
-            appStorage.removeItem('lastLocalServerId');
-
             connectUser = user;
             events.trigger(self, 'connectusersignedin', [user]);
         }
@@ -444,12 +442,6 @@ export default class ConnectionManager {
         }
 
         function onLocalUserSignIn(server, connectionMode, user) {
-
-            if (self.connectUserId()) {
-                appStorage.removeItem('lastLocalServerId');
-            } else {
-                appStorage.setItem('lastLocalServerId', server.Id);
-            }
 
             // Ensure this is created so that listeners of the event can get the apiClient instance
             self._getOrAddApiClient(server, connectionMode);
@@ -668,10 +660,6 @@ export default class ConnectionManager {
                     server.ExchangeToken = null;
                 }
 
-                if (credentials.ConnectAccessToken) {
-                    appStorage.removeItem('lastLocalServerId');
-                }
-
                 credentials.Servers = servers;
                 credentials.ConnectAccessToken = null;
                 credentials.ConnectUserId = null;
@@ -837,27 +825,6 @@ export default class ConnectionManager {
         self.connectToServers = (servers, options) => {
 
             console.log(`Begin connectToServers, with ${servers.length} servers`);
-
-            let defaultServer = servers.length === 1 ? servers[0] : null;
-
-            if (!defaultServer) {
-                const lastLocalServerId = appStorage.getItem('lastLocalServerId');
-                defaultServer = servers.filter(s => s.Id === lastLocalServerId)[0];
-            }
-
-            if (defaultServer) {
-
-                return self.connectToServer(defaultServer, options).then(result => {
-
-                    if (result.State === 'Unavailable') {
-
-                        result.State = 'ServerSelection';
-                    }
-
-                    console.log(`resolving connectToServers with result.State: ${result.State}`);
-                    return result;
-                });
-            }
 
             const firstServer = servers.length ? servers[0] : null;
             // See if we have any saved credentials and can auto sign in
@@ -1395,7 +1362,8 @@ export default class ConnectionManager {
                         oldDeviceId: regInfo.deviceId,
                         newDeviceId: params.deviceId
                     })}`,
-                    type: 'POST'
+                    type: 'POST',
+                    dataType: 'json'
                 });
             }
 
@@ -1404,7 +1372,7 @@ export default class ConnectionManager {
             }
 
             const onFailure = err => {
-                console.log(`getRegistrationInfo failed: ${err}`);
+                console.log('getRegistrationInfo failed: ' + err);
 
                 // Allow for up to 7 days
                 if (timeSinceLastValidation <= 604800000) {
@@ -1426,33 +1394,22 @@ export default class ConnectionManager {
 
                 return ajax({
                     url: `https://mb3admin.com/admin/service/registration/validateDevice?${paramsToString(params)}`,
-                    type: 'POST'
+                    type: 'POST',
+                    dataType: 'json'
 
                 }).then(response => {
 
-                    const status = response.status;
-                    console.log(`getRegistrationInfo response: ${status}`);
-
-                    if (status === 200) {
-                        appStorage.setItem(cacheKey, JSON.stringify({
-                            lastValidDate: new Date().getTime(),
-                            deviceId: params.deviceId
-                        }));
-                        return Promise.resolve();
-                    }
-                    if (status === 401) {
-                        return Promise.reject();
-                    }
-                    if (status === 403) {
-                        return Promise.reject('overlimit');
-                    }
-                    // general error
-                    return Promise.reject();
+                    appStorage.setItem(cacheKey, JSON.stringify({
+                        lastValidDate: new Date().getTime(),
+                        deviceId: params.deviceId,
+                        cacheExpirationDays: response.cacheExpirationDays
+                    }));
+                    return Promise.resolve();
 
                 }, response => {
 
                     const status = (response || {}).status;
-                    console.log(`getRegistrationInfo response: ${status}`);
+                    console.log('getRegistrationInfo response: ' + status);
 
                     if (status === 403) {
                         return Promise.reject('overlimit');
@@ -1560,9 +1517,9 @@ export default class ConnectionManager {
 
     handleMessageReceived(msg) {
 
-        var serverId = msg.ServerId;
+        const serverId = msg.ServerId;
         if (serverId) {
-            var apiClient = this.getApiClient(serverId);
+            const apiClient = this.getApiClient(serverId);
             if (apiClient) {
                 apiClient.handleMessageReceived(msg);
             }
