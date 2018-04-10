@@ -3695,7 +3695,7 @@ function getCachedUser(instance, userId) {
         return null;
     }
 
-    const json = appStorage.getItem(`user-${userId}-${serverId}`);
+    const json = instance.appStorage.getItem(`user-${userId}-${serverId}`);
 
     if (json) {
         return JSON.parse(json);
