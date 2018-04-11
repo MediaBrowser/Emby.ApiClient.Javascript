@@ -340,19 +340,7 @@ function removeLocalItem({ ServerId, Id }) {
         .then(({ LocalPath, AdditionalFiles }) => {
 
             const onFileDeletedSuccessOrFail = () => {
-                let p = Promise.resolve(true);
-
-                if (item.AdditionalFiles) {
-                    item.AdditionalFiles.forEach((file) => {
-                        p = p.then(() => {
-                            return filerepository.deleteFile(file.Path);
-                        });
-                    });
-                }
-
-                return p.then((file) => {
-                    return itemrepository.remove(localItem.ServerId, localItem.Id);
-                });
+                return itemrepository.remove(localItem.ServerId, localItem.Id);
             };
 
             if (!item.LocalPath) {
@@ -365,45 +353,6 @@ function removeLocalItem({ ServerId, Id }) {
 
 function addOrUpdateLocalItem(localItem) {
     return itemrepository.set(localItem.ServerId, localItem.Id, localItem);
-}
-
-function createLocalItem(libraryItem, serverInfo, jobItem) {
-    console.log('[localassetmanager] Begin createLocalItem');
-
-    let localPath;
-
-    if (jobItem) {
-        const path = getDirectoryPath(libraryItem);
-
-        path.push(getLocalFileName(libraryItem, jobItem.OriginalFileName));
-        // pass in isFile = true
-        localPath = filerepository.getFullLocalPath(path, true);
-    }
-
-    if (libraryItem.MediaSources) {
-        for (let i = 0; i < libraryItem.MediaSources.length; i++) {
-            const mediaSource = libraryItem.MediaSources[i];
-            mediaSource.Path = localPath;
-            mediaSource.Protocol = 'File';
-        }
-    }
-
-    const item = {
-        Item: libraryItem,
-        ItemId: libraryItem.Id,
-        ServerId: serverInfo.Id,
-        LocalPath: localPath,
-        SyncDate: Date.now(),
-        Id: libraryItem.Id
-    };
-
-    if (jobItem) {
-        item.AdditionalFiles = (jobItem.AdditionalFiles || []).slice(0);
-        item.SyncJobItemId = jobItem.SyncJobItemId;
-    }
-
-    console.log('[localassetmanager] End createLocalItem');
-    return Promise.resolve(item);
 }
 
 function getSubtitleSaveFileName(
@@ -493,23 +442,10 @@ function fileExists(localFilePath) {
 }
 
 function downloadImage(localItem, url, serverId, itemId, imageType, index) {
-    const pathArray = getImagePath(serverId, itemId, imageType, index);
-    const localFilePath = filerepository.getFullMetadataPath(pathArray);
 
-    if (!localItem.AdditionalFiles) {
-        localItem.AdditionalFiles = [];
-    }
+    const localPathParts = getImagePath(serverId, itemId, imageType, index);
 
-    const fileInfo = {
-        Path: localFilePath,
-        Type: 'Image',
-        Name: imageType + index.toString(),
-        ImageType: imageType
-    };
-
-    localItem.AdditionalFiles.push(fileInfo);
-
-    return transfermanager.downloadImage(url, localFilePath);
+    return transfermanager.downloadImage(url, localPathParts);
 }
 
 function isDownloadFileInQueue(path) {
@@ -592,7 +528,7 @@ function getImagePath(serverId, itemId, imageType, index) {
 
     const finalParts = [];
     for (let i = 0; i < parts.length; i++) {
-        finalParts.push(filerepository.getValidFileName(parts[i]));
+        finalParts.push(parts[i]);
     }
 
     return finalParts;
@@ -673,13 +609,14 @@ function enableBackgroundCompletion() {
 
 export default {
     getLocalItem,
+    getDirectoryPath,
+    getLocalFileName,
     recordUserAction,
     getUserActions,
     deleteUserAction,
     deleteUserActions,
     removeLocalItem,
     addOrUpdateLocalItem,
-    createLocalItem,
     downloadFile,
     downloadSubtitles,
     hasImage,
