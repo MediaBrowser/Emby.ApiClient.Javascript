@@ -211,89 +211,116 @@ function removeLocalItem(localassetmanager, itemId, serverId) {
     });
 }
 
-function getNewMedia(apiClient, localassetmanager, serverInfo, downloadCount) {
+function getNewMedia(apiClient, downloadCount) {
+
     console.log('[mediasync] Begin getNewMedia');
 
-    return apiClient
-        .getReadySyncItems(apiClient.deviceId())
-        .then(jobItems => {
-            let p = Promise.resolve();
+    return apiClient.getReadySyncItems(apiClient.deviceId()).then((jobItems) => {
 
-            const maxDownloads = 10;
-            let currentCount = downloadCount;
+        let p = Promise.resolve();
 
-            jobItems.forEach(jobItem => {
-                if (currentCount++ <= maxDownloads) {
-                    p = p.then(() => getNewItem(jobItem, apiClient, localassetmanager, serverInfo));
-                }
-            });
+        const maxDownloads = 10;
+        let currentCount = downloadCount;
 
-            return p.then(() => {
-                console.log('[mediasync] Exit getNewMedia');
-                return Promise.resolve();
-            });
+        jobItems.forEach((jobItem) => {
+            if (currentCount++ <= maxDownloads) {
+                p = p.then(() => {
+                    return getNewItem(jobItem, apiClient);
+                });
+            }
         });
+
+        return p.then(() => {
+            console.log('[mediasync] Exit getNewMedia');
+            return Promise.resolve();
+        });
+    });
 }
 
-function getNewItem(jobItem, apiClient, serverInfo) {
+function afterMediaDownloaded(apiClient, jobItem, localItem) {
+
+    return getImages(apiClient, jobItem, localItem).then(() => {
+
+        const libraryItem = jobItem.Item;
+
+        return downloadParentItems(apiClient, jobItem, libraryItem).then(() => {
+
+            return getSubtitles(apiClient, jobItem, localItem);
+        });
+    });
+}
+
+function createLocalItem(libraryItem, jobItem) {
+
+    console.log('[localassetmanager] Begin createLocalItem');
+
+    const item = {
+
+        Item: libraryItem,
+        ItemId: libraryItem.Id,
+        ServerId: libraryItem.ServerId,
+        Id: libraryItem.Id
+    };
+
+    if (jobItem) {
+
+        item.SyncJobItemId = jobItem.SyncJobItemId;
+    }
+
+    console.log('[localassetmanager] End createLocalItem');
+    return item;
+}
+
+function getNewItem(jobItem, apiClient) {
 
     console.log('[mediasync] Begin getNewItem');
 
     const libraryItem = jobItem.Item;
 
-    return localassetmanager.getLocalItem(serverInfo.Id, libraryItem.Id).then((existingItem) => {
+    return localassetmanager.getLocalItem(libraryItem.ServerId, libraryItem.Id).then((existingItem) => {
 
         if (existingItem) {
             if (existingItem.SyncStatus === 'queued' || existingItem.SyncStatus === 'transferring' || existingItem.SyncStatus === 'synced') {
                 console.log('[mediasync] getNewItem: getLocalItem found existing item');
 
                 if (localassetmanager.enableBackgroundCompletion()) {
-                    return Promise.resolve();
+                    return afterMediaDownloaded(apiClient, jobItem, existingItem);
                 }
             }
         }
 
-        return downloadParentItems(apiClient, jobItem, libraryItem, serverInfo).then(() => {
+        libraryItem.CanDelete = false;
+        libraryItem.CanDownload = false;
+        libraryItem.SupportsSync = false;
+        libraryItem.People = [];
+        libraryItem.Chapters = [];
+        libraryItem.Studios = [];
+        libraryItem.SpecialFeatureCount = null;
+        libraryItem.LocalTrailerCount = null;
+        libraryItem.RemoteTrailers = [];
 
-            libraryItem.CanDelete = false;
-            libraryItem.CanDownload = false;
-            libraryItem.SupportsSync = false;
-            libraryItem.People = [];
-            libraryItem.Chapters = [];
-            libraryItem.Studios = [];
-            libraryItem.SpecialFeatureCount = null;
-            libraryItem.LocalTrailerCount = null;
-            libraryItem.RemoteTrailers = [];
+        const localItem = createLocalItem(libraryItem, jobItem);
+        localItem.SyncStatus = 'queued';
 
-            return localassetmanager.createLocalItem(libraryItem, serverInfo, jobItem).then((localItem) => {
+        return downloadMedia(apiClient, jobItem, localItem).then(() => {
 
-                localItem.SyncStatus = 'queued';
-
-                return downloadMedia(apiClient, jobItem, localItem).then(() => {
-
-                    return getImages(apiClient, jobItem, localItem).then(() => {
-
-                        return getSubtitles(apiClient, jobItem, localItem);
-
-                    });
-                });
-            });
+            return afterMediaDownloaded(apiClient, jobItem, localItem);
         });
     });
 }
 
-function downloadParentItems(apiClient, jobItem, libraryItem, serverInfo) {
+function downloadParentItems(apiClient, jobItem, libraryItem) {
 
     let p = Promise.resolve();
 
     if (libraryItem.SeriesId) {
         p = p.then(() => {
-            return downloadItem(apiClient, libraryItem.SeriesId, serverInfo);
+            return downloadItem(apiClient, libraryItem.SeriesId);
         });
     }
     if (libraryItem.SeasonId) {
         p = p.then(() => {
-            return downloadItem(apiClient, libraryItem.SeasonId, serverInfo).then((seasonItem) => {
+            return downloadItem(apiClient, libraryItem.SeasonId).then((seasonItem) => {
                 libraryItem.SeasonPrimaryImageTag = (seasonItem.Item.ImageTags || {}).Primary;
                 return Promise.resolve();
             });
@@ -301,14 +328,14 @@ function downloadParentItems(apiClient, jobItem, libraryItem, serverInfo) {
     }
     if (libraryItem.AlbumId) {
         p = p.then(() => {
-            return downloadItem(apiClient, libraryItem.AlbumId, serverInfo);
+            return downloadItem(apiClient, libraryItem.AlbumId);
         });
     }
 
     return p;
 }
 
-function downloadItem(apiClient, itemId, serverInfo) {
+function downloadItem(apiClient, itemId) {
 
     return apiClient.getItem(apiClient.getCurrentUserId(), itemId).then((downloadedItem) => {
 
@@ -322,12 +349,27 @@ function downloadItem(apiClient, itemId, serverInfo) {
         downloadedItem.ParentArtImageTag = null;
         downloadedItem.ParentLogoImageTag = null;
 
-        return localassetmanager.createLocalItem(downloadedItem, serverInfo, null).then((localItem) => {
-            return localassetmanager.addOrUpdateLocalItem(localItem).then(() => {
-                return Promise.resolve(localItem);
-            });
+        const localItem = createLocalItem(downloadedItem, null);
+
+        return localassetmanager.addOrUpdateLocalItem(localItem).then(() => {
+            return Promise.resolve(localItem);
         });
     });
+}
+
+function ensureLocalPathParts(localItem, jobItem) {
+
+    if (localItem.LocalPathParts) {
+        return;
+    }
+
+    const libraryItem = localItem.Item;
+
+    const parts = localassetmanager.getDirectoryPath(libraryItem);
+
+    parts.push(localassetmanager.getLocalFileName(libraryItem, jobItem.OriginalFileName));
+
+    localItem.LocalPathParts = parts;
 }
 
 function downloadMedia(apiClient, jobItem, localItem) {
@@ -336,13 +378,31 @@ function downloadMedia(apiClient, jobItem, localItem) {
         api_key: apiClient.accessToken()
     });
 
+    ensureLocalPathParts(localItem, jobItem);
+
     return localassetmanager.downloadFile(url, localItem).then((result) => {
 
         // result.path
         // result.isComplete
 
+        const localPath = result.path;
+        const libraryItem = localItem.Item;
+
+        if (localPath) {
+            if (libraryItem.MediaSources) {
+                for (let i = 0; i < libraryItem.MediaSources.length; i++) {
+                    const mediaSource = libraryItem.MediaSources[i];
+                    mediaSource.Path = localPath;
+                    mediaSource.Protocol = 'File';
+                }
+            }
+        }
+
+        localItem.LocalPath = localPath;
+
         if (result.isComplete) {
             localItem.SyncStatus = 'synced';
+
             return reportTransfer(apiClient, localItem);
         }
 
@@ -434,10 +494,10 @@ function getImages(apiClient, localassetmanager, jobItem, localItem) {
     // Backdrops
     if (libraryItem.Id && libraryItem.BackdropImageTags) {
         for (let i = 0; i < libraryItem.BackdropImageTags.length; i++) {
-            //var backdropImageTag = libraryItem.BackdropImageTags[i];
+            //const backdropImageTag = libraryItem.BackdropImageTags[i];
             //// use self-invoking function to simulate block-level variable scope
-            //(function (index, tag) {
-            //    p = p.then(function () {
+            //( (index, tag) => {
+            //    p = p.then( ()=> {
             //        return downloadImage(localItem, apiClient, serverId, libraryItem.Id, tag, 'backdrop', index);
             //    });
             //})(i, backdropImageTag);
@@ -704,7 +764,6 @@ export default class MediaSync {
                                 getNewMedia(
                                     apiClient,
                                     localassetmanager,
-                                    serverInfo,
                                     options,
                                     downloadCount
                                 ).then(() => // Do the second data sync

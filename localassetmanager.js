@@ -139,31 +139,54 @@ function getViews(serverId, userId) {
     });
 }
 
-function getTypeFilterForTopLevelView(parentId) {
-    let typeFilter = null;
+function updateFiltersForTopLevelView(parentId, mediaTypes, includeItemTypes, query) {
 
     switch (parentId) {
-        case 'localview:MusicView':
-            typeFilter = 'MusicAlbum';
-            break;
-        case 'localview:PhotosView':
-            typeFilter = 'PhotoAlbum';
-            break;
-        case 'localview:TVView':
-            typeFilter = 'Series';
-            break;
-        case 'localview:VideosView':
-            typeFilter = 'Video';
-            break;
-        case 'localview:MoviesView':
-            typeFilter = 'Movie';
-            break;
-        case 'localview:MusicVideosView':
-            typeFilter = 'MusicVideo';
-            break;
+        case 'MusicView':
+            if (query.Recursive) {
+                includeItemTypes.push('Audio');
+            } else {
+                includeItemTypes.push('MusicAlbum');
+            }
+            return true;
+        case 'PhotosView':
+            if (query.Recursive) {
+                includeItemTypes.push('Photo');
+            } else {
+                includeItemTypes.push('PhotoAlbum');
+            }
+            return true;
+        case 'TVView':
+            if (query.Recursive) {
+                includeItemTypes.push('Episode');
+            } else {
+                includeItemTypes.push('Series');
+            }
+            return true;
+        case 'VideosView':
+            if (query.Recursive) {
+                includeItemTypes.push('Video');
+            } else {
+                includeItemTypes.push('Video');
+            }
+            return true;
+        case 'MoviesView':
+            if (query.Recursive) {
+                includeItemTypes.push('Movie');
+            } else {
+                includeItemTypes.push('Movie');
+            }
+            return true;
+        case 'MusicVideosView':
+            if (query.Recursive) {
+                includeItemTypes.push('MusicVideo');
+            } else {
+                includeItemTypes.push('MusicVideo');
+            }
+            return true;
     }
 
-    return typeFilter;
+    return false;
 }
 
 function normalizeId(id) {
@@ -185,75 +208,113 @@ function normalizeIdList(val) {
     return [];
 }
 
-function getViewItems(serverId, userId, options) {
-    let parentId = options.ParentId;
+function shuffle(array) {
+    let currentIndex = array.length, temporaryValue, randomIndex;
 
-    const typeFilter = getTypeFilterForTopLevelView(parentId);
+    // While there remain elements to shuffle...
+    while (0 !== currentIndex) {
+
+        // Pick a remaining element...
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex -= 1;
+
+        // And swap it with the current element.
+        temporaryValue = array[currentIndex];
+        array[currentIndex] = array[randomIndex];
+        array[randomIndex] = temporaryValue;
+    }
+
+    return array;
+}
+
+function sortItems(items, query) {
+
+    const sortBy = (query.sortBy || '').split(',')[0];
+
+    if (sortBy === 'DateCreated') {
+        items.sort((a, b) => { return compareDates(a.DateCreated, b.DateCreated); });
+    }
+    else if (sortBy === 'Random') {
+        items = shuffle(items);
+    } else {
+        items.sort((a, b) => { return a.SortName.toLowerCase().localeCompare(b.SortName.toLowerCase()); });
+    }
+
+    return items;
+}
+
+function getViewItems(serverId, userId, options) {
+
+    let parentId = options.ParentId;
 
     parentId = normalizeId(parentId);
     const seasonId = normalizeId(options.SeasonId || options.seasonId);
     const seriesId = normalizeId(options.SeriesId || options.seriesId);
     const albumIds = normalizeIdList(options.AlbumIds || options.albumIds);
 
-    const includeItemTypes = options.IncludeItemTypes
-        ? options.IncludeItemTypes.split(',')
-        : [];
-    if (typeFilter) {
+    const includeItemTypes = options.IncludeItemTypes ? options.IncludeItemTypes.split(',') : [];
+    const filters = options.Filters ? options.Filters.split(',') : [];
+    const mediaTypes = options.MediaTypes ? options.MediaTypes.split(',') : [];
+
+    if (updateFiltersForTopLevelView(parentId, mediaTypes, includeItemTypes, options)) {
         parentId = null;
-        includeItemTypes.push(typeFilter);
     }
 
-    return getServerItems(serverId).then(items => {
+    return getServerItems(serverId).then((items) => {
+
         //debugPrintItems(items);
 
-        let resultItems = items
-            .filter(({ SyncStatus, Item }) => {
-                if (SyncStatus && SyncStatus !== 'synced') {
+        let resultItems = items.filter((item) => {
+
+            if (item.SyncStatus && item.SyncStatus !== 'synced') {
+                return false;
+            }
+
+            if (mediaTypes.length) {
+                if (mediaTypes.indexOf(item.Item.MediaType || '') === -1) {
                     return false;
                 }
+            }
 
-                if (options.MediaType && Item.MediaType !== options.MediaType) {
+            if (seriesId && item.Item.SeriesId !== seriesId) {
+                return false;
+            }
+
+            if (seasonId && item.Item.SeasonId !== seasonId) {
+                return false;
+            }
+
+            if (albumIds.length && albumIds.indexOf(item.Item.AlbumId || '') === -1) {
+                return false;
+            }
+
+            if (item.Item.IsFolder && filters.indexOf('IsNotFolder') !== -1) {
+                return false;
+            } else if (!item.Item.IsFolder && filters.indexOf('IsFolder') !== -1) {
+                return false;
+            }
+
+            if (includeItemTypes.length) {
+                if (includeItemTypes.indexOf(item.Item.Type || '') === -1) {
                     return false;
                 }
+            }
 
-                if (seriesId && Item.SeriesId !== seriesId) {
+            if (options.Recursive) {
+
+            } else {
+                if (parentId && item.Item.ParentId !== parentId) {
                     return false;
                 }
+            }
 
-                if (seasonId && Item.SeasonId !== seasonId) {
-                    return false;
-                }
+            return true;
 
-                if (albumIds.length && albumIds.indexOf(item.Item.AlbumId || '') === -1) {
-                    return false;
-                }
+        }).map((item2) => {
+            return item2.Item;
+        });
 
-                if (options.Filters === 'IsNotFolder' && Item.IsFolder) {
-                    return false;
-                } else if (options.Filters === 'IsFolder' && !Item.IsFolder) {
-                    return false;
-                }
-
-                if (includeItemTypes.length) {
-                    if (!includeItemTypes.includes(Item.Type || '')) {
-                        return false;
-                    }
-                }
-
-                if (options.Recursive) {
-                } else {
-                    if (parentId && Item.ParentId !== parentId) {
-                        return false;
-                    }
-                }
-
-                return true;
-            })
-            .map(({ Item }) => Item);
-
-        if (options.SortBy === 'DateCreated') {
-            resultItems.sort((a, b) => compareDates(a, b));
-        }
+        resultItems = sortItems(resultItems, options);
 
         if (options.Limit) {
             resultItems = resultItems.slice(0, options.Limit);

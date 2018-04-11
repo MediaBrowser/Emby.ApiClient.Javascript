@@ -204,8 +204,6 @@ export default class ApiClientEx extends ApiClient {
                     adjustGuidProperties(item);
                 });
 
-                items.sort((a, b) => a.SortName.toLowerCase().localeCompare(b.SortName.toLowerCase()));
-
                 const result = {
                     Items: items,
                     TotalRecordCount: items.length
