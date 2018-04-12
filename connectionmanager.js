@@ -829,19 +829,15 @@ export default class ConnectionManager {
             const firstServer = servers.length ? servers[0] : null;
             // See if we have any saved credentials and can auto sign in
             if (firstServer) {
-                return self.connectToServer(firstServer, options).then(result => {
+                return self.connectToServer(firstServer, options).then((result) => {
 
-                    if (result.State === 'SignedIn') {
+                    if (result.State === 'Unavailable') {
 
-                        return result;
-
+                        result.State = 'ServerSelection';
                     }
 
-                    return {
-                        Servers: servers,
-                        State: (!servers.length && !self.connectUser()) ? 'ConnectSignIn' : 'ServerSelection',
-                        ConnectUser: self.connectUser()
-                    };
+                    console.log('resolving connectToServers with result.State: ' + result.State);
+                    return result;
                 });
             }
 
