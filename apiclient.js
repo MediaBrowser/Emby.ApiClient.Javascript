@@ -1225,7 +1225,7 @@ class ApiClient {
     /**
      * Gets the current server status
      */
-    getSystemInfo() {
+    getSystemInfo(itemId) {
 
         const url = this.getUrl("System/Info");
 
@@ -1235,6 +1235,21 @@ class ApiClient {
 
             instance.setSystemInfo(info);
             return Promise.resolve(info);
+        });
+    }
+
+    getSyncStatus() {
+
+        const url = this.getUrl("Sync/" + itemId + "/Status");
+
+        return this.ajax({
+            url: url,
+            type: 'POST',
+            dataType: 'json',
+            contentType: "application/json",
+            data: JSON.stringify({
+                TargetId: this.deviceId()
+            })
         });
     }
 
