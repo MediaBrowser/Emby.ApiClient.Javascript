@@ -350,6 +350,20 @@ export default class ConnectionManager {
             return apiClient;
         };
 
+        self.getOrCreateApiClient = serverId => {
+
+            const credentials = credentialProvider.credentials();
+            const servers = credentials.Servers.filter(s => stringEqualsIgnoreCase(s.Id, serverId));
+
+            if (!servers.length) {
+                throw new Error(`Server not found: ${serverId}`);
+            }
+
+            const server = servers[0];
+
+            return self._getOrAddApiClient(server, getServerAddress(server, server.LastConnectionMode));
+        };
+
         function onAuthenticated(apiClient, result, options, saveCredentials) {
 
             const credentials = credentialProvider.credentials();
