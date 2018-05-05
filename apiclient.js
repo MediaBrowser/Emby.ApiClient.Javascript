@@ -108,23 +108,6 @@ function getFetchPromise(request) {
     return fetchWithTimeout(request.url, fetchRequest, request.timeout);
 }
 
-function getServerAddress(server, mode) {
-
-    switch (mode) {
-        case 0:
-        case 'local':
-            return server.LocalAddress;
-        case 2:
-        case 'manual':
-            return server.ManualAddress;
-        case 1:
-        case 'remote':
-            return server.RemoteAddress;
-        default:
-            return server.ManualAddress || server.LocalAddress || server.RemoteAddress;
-    }
-}
-
 /**
  * Creates a new api client instance
  * @param {String} serverAddress
@@ -321,7 +304,7 @@ class ApiClient {
             }
 
             // http://api.jquery.com/jQuery.ajax/		     
-            if (!error && enableReconnection) {
+            if ((!error || !error.status) && enableReconnection) {
                 console.log("Attempting reconnection");
 
                 const previousServerAddress = instance.serverAddress();
@@ -699,21 +682,13 @@ class ApiClient {
         }, includeAuthorization);
     }
 
-    updateServerInfo(server, connectionMode) {
+    updateServerInfo(server, serverUrl) {
 
         if (server == null) {
             throw new Error('server cannot be null');
         }
 
-        if (connectionMode == null) {
-            throw new Error('connectionMode cannot be null');
-        }
-
-        console.log(`Begin updateServerInfo. connectionMode: ${connectionMode}`);
-
         this.serverInfo(server);
-
-        const serverUrl = getServerAddress(server, connectionMode);
 
         if (!serverUrl) {
             throw new Error(`serverUrl cannot be null. serverInfo: ${JSON.stringify(server)}`);
@@ -3623,42 +3598,11 @@ function setSavedEndpointInfo(instance, info) {
     instance._endPointInfo = info;
 }
 
-function switchConnectionMode(instance, connectionMode) {
+function getTryConnectPromise(instance, url, state, resolve, reject) {
 
-    const currentServerInfo = instance.serverInfo();
-    let newConnectionMode = connectionMode;
+    console.log('getTryConnectPromise ' + url);
 
-    newConnectionMode--;
-    if (newConnectionMode < 0) {
-        newConnectionMode = 'manual';
-    }
-
-    if (getServerAddress(currentServerInfo, newConnectionMode)) {
-        return newConnectionMode;
-    }
-
-    newConnectionMode--;
-    if (newConnectionMode < 0) {
-        newConnectionMode = 'manual';
-    }
-
-    if (getServerAddress(currentServerInfo, newConnectionMode)) {
-        return newConnectionMode;
-    }
-
-    return connectionMode;
-}
-
-function tryReconnectInternal(instance, resolve, reject, connectionMode, currentRetryCount) {
-
-    connectionMode = switchConnectionMode(instance, connectionMode);
-    const url = getServerAddress(instance.serverInfo(), connectionMode);
-
-    console.log(`Attempting reconnection to ${url}`);
-
-    const timeout = connectionMode === 'local' ? 7000 : 15000;
-
-    fetchWithTimeout(`${url}/system/info/public`, {
+    return fetchWithTimeout(url + "/system/info/public", {
 
         method: 'GET',
         accept: 'application/json'
@@ -3666,40 +3610,82 @@ function tryReconnectInternal(instance, resolve, reject, connectionMode, current
         // Commenting this out since the fetch api doesn't have a timeout option yet
         //timeout: timeout
 
-    }, timeout).then(() => {
+    }, 15000).then(() => {
 
-        console.log(`Reconnect succeeded to ${url}`);
+        if (!state.resolved) {
+            state.resolved = true;
 
-        instance.serverInfo().LastConnectionMode = connectionMode;
-        instance.serverAddress(url);
-
-        resolve();
+            console.log("Reconnect succeeded to " + url);
+            instance.serverAddress(url);
+            resolve();
+        }
 
     }, () => {
 
-        console.log(`Reconnect attempt failed to ${url}`);
+        console.log("Reconnect failed to " + url);
 
-        if (currentRetryCount < 4) {
-
-            const newConnectionMode = switchConnectionMode(instance, connectionMode);
-
-            setTimeout(() => {
-                tryReconnectInternal(instance, resolve, reject, newConnectionMode, currentRetryCount + 1);
-            }, 300);
-
-        } else {
+        state.rejects++;
+        if (state.rejects >= state.numAddresses) {
             reject();
         }
     });
 }
 
-function tryReconnect(instance) {
+function tryReconnectInternal(instance) {
+
+    const addresses = [];
+    const addressesStrings = [];
+
+    const serverInfo = instance.serverInfo();
+    if (serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1) {
+        addresses.push({ url: serverInfo.LocalAddress, timeout: 0 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+    if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1) {
+        addresses.push({ url: serverInfo.ManualAddress, timeout: 100 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+    if (serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1) {
+        addresses.push({ url: serverInfo.RemoteAddress, timeout: 200 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+
+    console.log('tryReconnect: ' + addressesStrings.join('|'));
 
     return new Promise((resolve, reject) => {
 
-        setTimeout(() => {
-            tryReconnectInternal(instance, resolve, reject, instance.serverInfo().LastConnectionMode, 0);
-        }, 300);
+        const state = {};
+        state.numAddresses = addresses.length;
+        state.rejects = 0;
+
+        addresses.map((url) => {
+
+            setTimeout(() => {
+                getTryConnectPromise(instance, url.url, state, resolve, reject);
+
+            }, url.timeout);
+        });
+    });
+}
+
+function tryReconnect(instance, retryCount) {
+
+    retryCount = retryCount || 0;
+
+    if (retryCount >= 20) {
+        return Promise.reject();
+    }
+
+    return tryReconnectInternal(instance).catch((err) => {
+
+        console.log('error in tryReconnectInternal: ' + (err || ''));
+
+        return new Promise((resolve, reject) => {
+
+            setTimeout(() => {
+                tryReconnect(instance, retryCount + 1).then(resolve, reject);
+            }, 500);
+        });
     });
 }
 

@@ -172,23 +172,6 @@ function ajax(request) {
     });
 }
 
-function tryConnect(url, timeout) {
-
-    url = getEmbyServerUrl(url, "system/info/public");
-
-    console.log(`tryConnect url: ${url}`);
-
-    return ajax({
-
-        type: "GET",
-        url,
-        dataType: "json",
-
-        timeout: timeout || defaultTimeout
-
-    });
-}
-
 function getConnectUrl(handler) {
     return `https://connect.emby.media/service/${handler}`;
 }
@@ -301,21 +284,6 @@ export default class ConnectionManager {
             return servers[0];
         };
 
-        self.getLastUsedApiClient = () => {
-
-            const servers = credentialProvider.credentials().Servers;
-
-            servers.sort((a, b) => (b.DateLastAccessed || 0) - (a.DateLastAccessed || 0));
-
-            if (!servers.length) {
-                return null;
-            }
-
-            const server = servers[0];
-
-            return self._getOrAddApiClient(server, server.LastConnectionMode);
-        };
-
         self.addApiClient = apiClient => {
 
             self._apiClients.push(apiClient);
@@ -359,41 +327,27 @@ export default class ConnectionManager {
             events.trigger(self, 'connectusersignedin', [user]);
         }
 
-        self._getOrAddApiClient = (server, connectionMode) => {
+        self._getOrAddApiClient = (server, serverUrl) => {
 
             let apiClient = self.getApiClient(server.Id);
 
             if (!apiClient) {
 
-                const url = getServerAddress(server, connectionMode);
-
-                apiClient = new apiClientFactory(appStorage, wakeOnLanFn, url, appName, appVersion, deviceName, deviceId, devicePixelRatio);
+                apiClient = new apiClientFactory(serverUrl, appName, appVersion, deviceName, deviceId, devicePixelRatio);
 
                 self._apiClients.push(apiClient);
 
                 apiClient.serverInfo(server);
 
-                apiClient.onAuthenticated = (instance, result) => onAuthenticated(instance, result, {}, true);
+                apiClient.onAuthenticated = (instance, result) => {
+                    return onAuthenticated(instance, result, {}, true);
+                };
 
                 events.trigger(self, 'apiclientcreated', [apiClient]);
             }
 
             console.log('returning instance from getOrAddApiClient');
             return apiClient;
-        };
-
-        self.getOrCreateApiClient = serverId => {
-
-            const credentials = credentialProvider.credentials();
-            const servers = credentials.Servers.filter(s => stringEqualsIgnoreCase(s.Id, serverId));
-
-            if (!servers.length) {
-                throw new Error(`Server not found: ${serverId}`);
-            }
-
-            const server = servers[0];
-
-            return self._getOrAddApiClient(server, server.LastConnectionMode);
         };
 
         function onAuthenticated(apiClient, result, options, saveCredentials) {
@@ -425,7 +379,7 @@ export default class ConnectionManager {
             apiClient.serverInfo(server);
             afterConnected(apiClient, options);
 
-            return onLocalUserSignIn(server, server.LastConnectionMode, result.User);
+            return onLocalUserSignIn(server, apiClient.serverAddress(), result.User);
         }
 
         function afterConnected(apiClient, options = {}) {
@@ -441,10 +395,10 @@ export default class ConnectionManager {
             }
         }
 
-        function onLocalUserSignIn(server, connectionMode, user) {
+        function onLocalUserSignIn(server, serverUrl, user) {
 
             // Ensure this is created so that listeners of the event can get the apiClient instance
-            self._getOrAddApiClient(server, connectionMode);
+            self._getOrAddApiClient(server, serverUrl);
 
             // This allows the app to have a single hook that fires before any other
             const promise = self.onLocalUserSignedIn ? self.onLocalUserSignedIn.call(self, user) : Promise.resolve();
@@ -499,7 +453,7 @@ export default class ConnectionManager {
             });
         }
 
-        function addAuthenticationInfoFromConnect(server, connectionMode, credentials) {
+        function addAuthenticationInfoFromConnect(server, serverUrl, credentials) {
 
             if (!server.ExchangeToken) {
                 throw new Error("server.ExchangeToken cannot be null");
@@ -508,9 +462,7 @@ export default class ConnectionManager {
                 throw new Error("credentials.ConnectUserId cannot be null");
             }
 
-            let url = getServerAddress(server, connectionMode);
-
-            url = getEmbyServerUrl(url, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
+            const = getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
 
             const auth = `MediaBrowser Client="${appName}", Device="${deviceName}", DeviceId="${deviceId}", Version="${appVersion}"`;
 
@@ -538,14 +490,12 @@ export default class ConnectionManager {
             });
         }
 
-        function validateAuthentication(server, connectionMode) {
-
-            const url = getServerAddress(server, connectionMode);
+        function validateAuthentication(server, serverUrl) {
 
             return ajax({
 
                 type: "GET",
-                url: getEmbyServerUrl(url, "System/Info"),
+                url: getEmbyServerUrl(serverUrl, "System/Info"),
                 dataType: "json",
                 headers: {
                     "X-MediaBrowser-Token": server.AccessToken
@@ -848,109 +798,120 @@ export default class ConnectionManager {
             });
         };
 
+        function getTryConnectPromise(url, connectionMode, state, resolve, reject) {
+
+            console.log('getTryConnectPromise ' + url);
+
+            return ajax({
+
+                url: url + "/system/info/public",
+                timeout: defaultTimeout,
+                type: 'GET',
+                dataType: 'json'
+
+            }).then((result) => {
+
+                if (!state.resolved) {
+                    state.resolved = true;
+
+                    console.log("Reconnect succeeded to " + url);
+                    resolve({
+                        url: url,
+                        connectionMode: connectionMode,
+                        data: result
+                    });
+                }
+
+            }, () => {
+
+                console.log("Reconnect failed to " + url);
+
+                state.rejects++;
+                if (state.rejects >= state.numAddresses) {
+                    reject();
+                }
+            });
+        }
+
+        function tryReconnect(serverInfo) {
+
+            const addresses = [];
+            const addressesStrings = [];
+
+            // the timeouts are a small hack to try and ensure the remote address doesn't resolve first
+
+            if (serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1) {
+                addresses.push({ url: serverInfo.LocalAddress, mode: ConnectionMode.Local, timeout: 0 });
+                addressesStrings.push(addresses[addresses.length - 1].url);
+            }
+            if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1) {
+                addresses.push({ url: serverInfo.ManualAddress, mode: ConnectionMode.Manual, timeout: 100 });
+                addressesStrings.push(addresses[addresses.length - 1].url);
+            }
+            if (serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1) {
+                addresses.push({ url: serverInfo.RemoteAddress, mode: ConnectionMode.Remote, timeout: 200 });
+                addressesStrings.push(addresses[addresses.length - 1].url);
+            }
+
+            console.log('tryReconnect: ' + addressesStrings.join('|'));
+
+            return new Promise((resolve, reject) => {
+
+                const state = {};
+                state.numAddresses = addresses.length;
+                state.rejects = 0;
+
+                addresses.map((url) => {
+
+                    setTimeout(() => {
+                        getTryConnectPromise(url.url, url.mode, state, resolve, reject);
+
+                    }, url.timeout);
+                });
+            });
+        }
+
         self.connectToServer = (server, options) => {
 
             console.log('begin connectToServer');
 
             return new Promise((resolve, reject) => {
 
-                const tests = [];
-
-                if (server.LastConnectionMode != null) {
-                    //tests.push(server.LastConnectionMode);
-                }
-                if (!tests.includes(ConnectionMode.Manual)) { tests.push(ConnectionMode.Manual); }
-                if (!tests.includes(ConnectionMode.Local)) { tests.push(ConnectionMode.Local); }
-                if (!tests.includes(ConnectionMode.Remote)) { tests.push(ConnectionMode.Remote); }
-
                 options = options || {};
 
-                console.log('beginning connection tests');
-                testNextConnectionMode(tests, 0, server, options, resolve);
+                tryReconnect(server).then((result) => {
+
+                    const serverUrl = result.url;
+                    const connectionMode = result.connectionMode;
+                    result = result.data;
+
+                    if (compareVersions(self.minServerVersion(), result.Version) === 1) {
+
+                        console.log('minServerVersion requirement not met. Server version: ' + result.Version);
+                        resolve({
+                            State: 'ServerUpdateNeeded',
+                            Servers: [server]
+                        });
+
+                    }
+                    else if (server.Id && result.Id !== server.Id) {
+
+                        console.log('http request succeeded, but found a different server Id than what was expected');
+                        resolveFailure(self, resolve);
+
+                    }
+                    else {
+                        onSuccessfulConnection(server, result, connectionMode, serverUrl, options, resolve);
+                    }
+
+                }, () => {
+
+                    resolveFailure(self, resolve);
+                });
             });
         };
 
-        function testNextConnectionMode(tests, index, server, options, resolve) {
-
-            if (index >= tests.length) {
-
-                console.log('Tested all connection modes. Failing server connection.');
-                resolveFailure(self, resolve);
-                return;
-            }
-
-            const mode = tests[index];
-            const address = getServerAddress(server, mode);
-            let enableRetry = false;
-            let skipTest = false;
-            let timeout = defaultTimeout;
-
-            if (mode === ConnectionMode.Local) {
-
-                enableRetry = true;
-                timeout = 8000;
-
-                if (stringEqualsIgnoreCase(address, server.ManualAddress)) {
-                    console.log('skipping LocalAddress test because it is the same as ManualAddress');
-                    skipTest = true;
-                }
-            }
-
-            else if (mode === ConnectionMode.Manual) {
-
-                if (stringEqualsIgnoreCase(address, server.LocalAddress)) {
-                    enableRetry = true;
-                    timeout = 8000;
-                }
-            }
-
-            if (skipTest || !address) {
-                console.log(`skipping test at index ${index}`);
-                testNextConnectionMode(tests, index + 1, server, options, resolve);
-                return;
-            }
-
-            console.log(`testing connection mode ${mode} with server ${server.Name}`);
-
-            tryConnect(address, timeout).then(result => {
-
-                if (compareVersions(self.minServerVersion(), result.Version) === 1) {
-
-                    console.log(`minServerVersion requirement not met. Server version: ${result.Version}`);
-                    resolve({
-                        State: 'ServerUpdateNeeded',
-                        Servers: [server]
-                    });
-
-                }
-                else if (server.Id && result.Id !== server.Id) {
-
-                    console.log('http request succeeded, but found a different server Id than what was expected');
-                    resolveFailure(self, resolve);
-
-                } else {
-                    console.log(`calling onSuccessfulConnection with connection mode ${mode} with server ${server.Name}`);
-                    onSuccessfulConnection(server, result, mode, options, resolve);
-                }
-
-            }, () => {
-
-                console.log(`test failed for connection mode ${mode} with server ${server.Name}`);
-
-                if (enableRetry) {
-
-                    // TODO: wake on lan and retry
-
-                    testNextConnectionMode(tests, index + 1, server, options, resolve);
-
-                } else {
-                    testNextConnectionMode(tests, index + 1, server, options, resolve);
-
-                }
-            });
-        }
-
-        function onSuccessfulConnection(server, systemInfo, connectionMode, options, resolve) {
+        function onSuccessfulConnection(server, systemInfo, connectionMode, serverUrl, options, resolve) {
 
             const credentials = credentialProvider.credentials();
             options = options || {};
@@ -959,23 +920,23 @@ export default class ConnectionManager {
                 ensureConnectUser(credentials).then(() => {
 
                     if (server.ExchangeToken) {
-                        addAuthenticationInfoFromConnect(server, connectionMode, credentials).then(() => {
+                        addAuthenticationInfoFromConnect(server, serverUrl, credentials).then(() => {
 
-                            afterConnectValidated(server, credentials, systemInfo, connectionMode, true, options, resolve);
+                            afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
 
                         }, () => {
 
-                            afterConnectValidated(server, credentials, systemInfo, connectionMode, true, options, resolve);
+                            afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
                         });
 
                     } else {
 
-                        afterConnectValidated(server, credentials, systemInfo, connectionMode, true, options, resolve);
+                        afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
                     }
                 });
             }
             else {
-                afterConnectValidated(server, credentials, systemInfo, connectionMode, true, options, resolve);
+                afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
             }
         }
 
@@ -984,6 +945,7 @@ export default class ConnectionManager {
             credentials,
             systemInfo,
             connectionMode,
+            serverUrl,
             verifyLocalAuthentication,
             options = {},
             resolve) {
@@ -994,9 +956,9 @@ export default class ConnectionManager {
 
             } else if (verifyLocalAuthentication && server.AccessToken && options.enableAutoLogin !== false) {
 
-                validateAuthentication(server, connectionMode).then(() => {
+                validateAuthentication(server, serverUrl).then(() => {
 
-                    afterConnectValidated(server, credentials, systemInfo, connectionMode, false, options, resolve);
+                    afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, false, options, resolve);
                 });
 
                 return;
@@ -1016,7 +978,7 @@ export default class ConnectionManager {
                 Servers: []
             };
 
-            result.ApiClient = self._getOrAddApiClient(server, connectionMode);
+            result.ApiClient = self._getOrAddApiClient(server, serverUrl);
 
             result.ApiClient.setSystemInfo(systemInfo);
 
@@ -1029,7 +991,7 @@ export default class ConnectionManager {
             // set this now before updating server info, otherwise it won't be set in time
             result.ApiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
 
-            result.ApiClient.updateServerInfo(server, connectionMode);
+            result.ApiClient.updateServerInfo(server, serverUrl);
 
             const resolveActions = function () {
                 resolve(result);
@@ -1040,8 +1002,8 @@ export default class ConnectionManager {
             if (result.State === 'SignedIn') {
                 afterConnected(result.ApiClient, options);
 
-                result.ApiClient.getCurrentUser().then(function (user) {
-                    onLocalUserSignIn(server, connectionMode, user).then(resolveActions, resolveActions);
+                result.ApiClient.getCurrentUser().then((user) => {
+                    onLocalUserSignIn(server, serverUrl, user).then(resolveActions, resolveActions);
                 }, resolveActions);
             }
             else {
@@ -1538,7 +1500,7 @@ export default class ConnectionManager {
         for (let i = 0, length = servers.length; i < length; i++) {
             const server = servers[i];
             if (server.Id) {
-                this._getOrAddApiClient(server, server.LastConnectionMode);
+                this._getOrAddApiClient(server, getServerAddress(server, server.LastConnectionMode));
             }
         }
 
