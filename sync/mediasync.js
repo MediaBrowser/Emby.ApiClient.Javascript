@@ -52,7 +52,7 @@ function reportTransfer(apiClient, localassetmanager, item) {
                             '[mediasync] Mediasync error on reportSyncJobItemTransferred',
                             error
                         );
-                        item.SyncStatus = 'synced';
+                        item.SyncStatus = 'error';
                         return localassetmanager.addOrUpdateLocalItem(item);
                     }
                 );
@@ -141,7 +141,7 @@ function syncData(apiClient, localassetmanager, serverInfo) {
     console.log('[mediasync] Begin syncData');
 
     return localassetmanager.getServerItems(serverInfo.Id).then(items => {
-        const completedItems = items.filter(item => item && item.SyncStatus === 'synced');
+        const completedItems = items.filter(item => (item) && ((item.SyncStatus === 'synced') || (item.SyncStatus === 'error')));
 
         const request = {
             TargetId: apiClient.deviceId(),
@@ -162,7 +162,7 @@ function syncData(apiClient, localassetmanager, serverInfo) {
                 console.error(`[mediasync] Error in syncData: ${err.toString()}`);
                 return Promise.resolve();
             }
-            ));
+        ));
     });
 }
 
@@ -353,6 +353,9 @@ function downloadItem(apiClient, itemId) {
 
         return localassetmanager.addOrUpdateLocalItem(localItem).then(() => {
             return Promise.resolve(localItem);
+        }, () => {
+            console.log('[mediasync] downloadItem failed');
+            return Promise.resolve(null);
         });
     });
 }
@@ -623,11 +626,11 @@ function downloadImage(localItem, apiClient, localassetmanager, serverId, itemId
             return localassetmanager
                 .downloadImage(localItem, imageUrl, serverId, itemId, imageType, index)
                 .then(
-                result => Promise.resolve(),
-                err => {
-                    console.log(`[mediasync] Error downloadImage: ${err.toString()}`);
-                    return Promise.resolve();
-                }
+                    result => Promise.resolve(),
+                    err => {
+                        console.log(`[mediasync] Error downloadImage: ${err.toString()}`);
+                        return Promise.resolve();
+                    }
                 );
         },
         err => {
@@ -694,16 +697,16 @@ function getItemSubtitle(file, apiClient, localassetmanager, jobItem, localItem,
 
     return localassetmanager
         .downloadSubtitles(url, fileName)
-        .then(subtitlePath => {
+        .then(subtitleResult => {
             if (localItem.AdditionalFiles) {
                 localItem.AdditionalFiles.forEach(item => {
                     if (item.Name === file.Name) {
-                        item.Path = subtitlePath;
+                        item.Path = subtitleResult.path;
                     }
                 });
             }
 
-            subtitleStream.Path = subtitlePath;
+            subtitleStream.Path = subtitleResult.path;
             subtitleStream.DeliveryMethod = 'External';
             return localassetmanager.addOrUpdateLocalItem(localItem);
         });
@@ -716,7 +719,7 @@ function checkLocalFileExistence(apiClient, localassetmanager, serverInfo, optio
         return localassetmanager
             .getServerItems(serverInfo.Id)
             .then(items => {
-                const completedItems = items.filter(item => item && item.SyncStatus === 'synced');
+                const completedItems = items.filter(item => (item) && ((item.SyncStatus === 'synced') || (item.SyncStatus === 'error')));
 
                 let p = Promise.resolve();
 
