@@ -816,7 +816,7 @@ export default class ConnectionManager {
 
             console.log('getTryConnectPromise ' + url);
 
-            return ajax({
+            ajax({
 
                 url: url + "/system/info/public",
                 timeout: defaultTimeout,
@@ -840,9 +840,11 @@ export default class ConnectionManager {
 
                 console.log("Reconnect failed to " + url);
 
-                state.rejects++;
-                if (state.rejects >= state.numAddresses) {
-                    reject();
+                if (!state.resolved) {
+                    state.rejects++;
+                    if (state.rejects >= state.numAddresses) {
+                        reject();
+                    }
                 }
             });
         }
@@ -878,7 +880,9 @@ export default class ConnectionManager {
                 addresses.map((url) => {
 
                     setTimeout(() => {
-                        getTryConnectPromise(url.url, url.mode, state, resolve, reject);
+                        if (!state.resolved) {
+                            getTryConnectPromise(url.url, url.mode, state, resolve, reject);
+                        }
 
                     }, url.timeout);
                 });

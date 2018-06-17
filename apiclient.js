@@ -3602,7 +3602,7 @@ function getTryConnectPromise(instance, url, state, resolve, reject) {
 
     console.log('getTryConnectPromise ' + url);
 
-    return fetchWithTimeout(url + "/system/info/public", {
+    fetchWithTimeout(url + "/system/info/public", {
 
         method: 'GET',
         accept: 'application/json'
@@ -3622,11 +3622,13 @@ function getTryConnectPromise(instance, url, state, resolve, reject) {
 
     }, () => {
 
-        console.log("Reconnect failed to " + url);
+        if (!state.resolved) {
+            console.log("Reconnect failed to " + url);
 
-        state.rejects++;
-        if (state.rejects >= state.numAddresses) {
-            reject();
+            state.rejects++;
+            if (state.rejects >= state.numAddresses) {
+                reject();
+            }
         }
     });
 }
@@ -3661,7 +3663,10 @@ function tryReconnectInternal(instance) {
         addresses.map((url) => {
 
             setTimeout(() => {
-                getTryConnectPromise(instance, url.url, state, resolve, reject);
+
+                if (!state.resolved) {
+                    getTryConnectPromise(instance, url.url, state, resolve, reject);
+                }
 
             }, url.timeout);
         });
