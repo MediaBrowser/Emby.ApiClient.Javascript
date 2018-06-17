@@ -238,13 +238,13 @@ class ApiClient {
      * @param {String} name
      * @param {Object} params
      */
-    getUrl(name, params) {
+    getUrl(name, params, serverAddress) {
 
         if (!name) {
             throw new Error("Url name cannot be empty");
         }
 
-        let url = this._serverAddress;
+        let url = serverAddress || this._serverAddress;
 
         if (!url) {
             throw new Error("serverAddress is yet not set");
@@ -3602,7 +3602,7 @@ function getTryConnectPromise(instance, url, state, resolve, reject) {
 
     console.log('getTryConnectPromise ' + url);
 
-    fetchWithTimeout(url + "/system/info/public", {
+    fetchWithTimeout(instance.getUrl('system/info/public', null, url), {
 
         method: 'GET',
         accept: 'application/json'

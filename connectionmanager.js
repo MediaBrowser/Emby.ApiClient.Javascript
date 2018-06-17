@@ -818,7 +818,7 @@ export default class ConnectionManager {
 
             ajax({
 
-                url: url + "/system/info/public",
+                url: getEmbyServerUrl(url, 'system/info/public'),
                 timeout: defaultTimeout,
                 type: 'GET',
                 dataType: 'json'
