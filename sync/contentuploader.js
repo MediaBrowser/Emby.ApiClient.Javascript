@@ -14,7 +14,7 @@
 }
 
 function getUploadId(file) {
-    return btoa(file.Id + "1");
+    return btoa(`${file.Id}1`);
 }
 
 function uploadNext(files, index, server, apiClient, resolve, reject) {

@@ -4,12 +4,14 @@ import useractionrepository from 'userActionRepository';
 import transfermanager from 'transferManager';
 
 function getLocalItem(serverId, itemId) {
+
     console.log('[lcoalassetmanager] Begin getLocalItem');
 
     return itemrepository.get(serverId, itemId);
 }
 
 function recordUserAction(action) {
+
     action.Id = createGuid();
     return useractionrepository.set(action.Id, action);
 }
@@ -18,8 +20,8 @@ function getUserActions(serverId) {
     return useractionrepository.getByServerId(serverId);
 }
 
-function deleteUserAction({ Id }) {
-    return useractionrepository.remove(Id);
+function deleteUserAction(action) {
+    return useractionrepository.remove(action.Id);
 }
 
 function deleteUserActions(actions) {
@@ -33,12 +35,14 @@ function deleteUserActions(actions) {
 }
 
 function getServerItems(serverId) {
+
     console.log('[localassetmanager] Begin getServerItems');
 
     return itemrepository.getAll(serverId);
 }
 
 function getItemsFromIds(serverId, ids) {
+
     const actions = ids.map(id => {
         const strippedId = stripStart(id, 'local:');
 
@@ -46,18 +50,23 @@ function getItemsFromIds(serverId, ids) {
     });
 
     return Promise.all(actions).then(items => {
-        const libItems = items.map(({ Item }) => Item);
+
+        const libItems = items.map(locItem => locItem.Item);
+
 
         return Promise.resolve(libItems);
     });
 }
 
 function getViews(serverId, userId) {
+
     return itemrepository.getServerItemTypes(serverId, userId).then(types => {
+
         const list = [];
         let item;
 
         if (types.includes('Audio')) {
+
             item = {
                 Name: 'Music',
                 ServerId: serverId,
@@ -71,6 +80,7 @@ function getViews(serverId, userId) {
         }
 
         if (types.includes('Photo')) {
+
             item = {
                 Name: 'Photos',
                 ServerId: serverId,
@@ -84,6 +94,7 @@ function getViews(serverId, userId) {
         }
 
         if (types.includes('Episode')) {
+
             item = {
                 Name: 'TV',
                 ServerId: serverId,
@@ -97,6 +108,7 @@ function getViews(serverId, userId) {
         }
 
         if (types.includes('Movie')) {
+
             item = {
                 Name: 'Movies',
                 ServerId: serverId,
@@ -110,6 +122,7 @@ function getViews(serverId, userId) {
         }
 
         if (types.includes('Video')) {
+
             item = {
                 Name: 'Videos',
                 ServerId: serverId,
@@ -123,6 +136,7 @@ function getViews(serverId, userId) {
         }
 
         if (types.includes('MusicVideo')) {
+
             item = {
                 Name: 'Music Videos',
                 ServerId: serverId,
@@ -190,6 +204,7 @@ function updateFiltersForTopLevelView(parentId, mediaTypes, includeItemTypes, qu
 }
 
 function normalizeId(id) {
+
     if (id) {
         id = stripStart(id, 'localview:');
         id = stripStart(id, 'local:');
@@ -209,7 +224,9 @@ function normalizeIdList(val) {
 }
 
 function shuffle(array) {
-    let currentIndex = array.length, temporaryValue, randomIndex;
+    let currentIndex = array.length;
+    let temporaryValue;
+    let randomIndex;
 
     // While there remain elements to shuffle...
     while (0 !== currentIndex) {
@@ -232,12 +249,12 @@ function sortItems(items, query) {
     const sortBy = (query.sortBy || '').split(',')[0];
 
     if (sortBy === 'DateCreated') {
-        items.sort((a, b) => { return compareDates(a.DateCreated, b.DateCreated); });
+        items.sort((a, b) => compareDates(a.DateCreated, b.DateCreated));
     }
     else if (sortBy === 'Random') {
         items = shuffle(items);
     } else {
-        items.sort((a, b) => { return a.SortName.toLowerCase().localeCompare(b.SortName.toLowerCase()); });
+        items.sort((a, b) => a.SortName.toLowerCase().localeCompare(b.SortName.toLowerCase()));
     }
 
     return items;
@@ -260,18 +277,18 @@ function getViewItems(serverId, userId, options) {
         parentId = null;
     }
 
-    return getServerItems(serverId).then((items) => {
+    return getServerItems(serverId).then(items => {
 
         //debugPrintItems(items);
 
-        let resultItems = items.filter((item) => {
+        let resultItems = items.filter(item => {
 
             if (item.SyncStatus && item.SyncStatus !== 'synced') {
                 return false;
             }
 
             if (mediaTypes.length) {
-                if (mediaTypes.indexOf(item.Item.MediaType || '') === -1) {
+                if (!mediaTypes.includes(item.Item.MediaType || '')) {
                     return false;
                 }
             }
@@ -284,18 +301,18 @@ function getViewItems(serverId, userId, options) {
                 return false;
             }
 
-            if (albumIds.length && albumIds.indexOf(item.Item.AlbumId || '') === -1) {
+            if (albumIds.length && !albumIds.includes(item.Item.AlbumId || '')) {
                 return false;
             }
 
-            if (item.Item.IsFolder && filters.indexOf('IsNotFolder') !== -1) {
+            if (item.Item.IsFolder && filters.includes('IsNotFolder')) {
                 return false;
-            } else if (!item.Item.IsFolder && filters.indexOf('IsFolder') !== -1) {
+            } else if (!item.Item.IsFolder && filters.includes('IsFolder')) {
                 return false;
             }
 
             if (includeItemTypes.length) {
-                if (includeItemTypes.indexOf(item.Item.Type || '') === -1) {
+                if (!includeItemTypes.includes(item.Item.Type || '')) {
                     return false;
                 }
             }
@@ -310,9 +327,7 @@ function getViewItems(serverId, userId, options) {
 
             return true;
 
-        }).map((item2) => {
-            return item2.Item;
-        });
+        }).map(item2 => item2.Item);
 
         resultItems = sortItems(resultItems, options);
 
@@ -325,104 +340,102 @@ function getViewItems(serverId, userId, options) {
 }
 
 function removeObsoleteContainerItems(serverId) {
+
     return getServerItems(serverId).then(items => {
-        const seriesItems = items.filter(({ Item }) => {
-            const type = (Item.Type || '').toLowerCase();
+
+        const seriesItems = items.filter(item => {
+
+            const type = (item.Item.Type || '').toLowerCase();
             return type === 'series';
         });
 
-        const seasonItems = items.filter(({ Item }) => {
-            const type = (Item.Type || '').toLowerCase();
+
+        const seasonItems = items.filter(item => {
+
+            const type = (item.Item.Type || '').toLowerCase();
             return type === 'season';
         });
 
-        const albumItems = items.filter(({ Item }) => {
-            const type = (Item.Type || '').toLowerCase();
+        const albumItems = items.filter(item => {
+
+            const type = (item.Item.Type || '').toLowerCase();
             return type === 'musicalbum' || type === 'photoalbum';
         });
 
-        const requiredSeriesIds = items
-            .filter(({ Item }) => {
-                const type = (Item.Type || '').toLowerCase();
-                return type === 'episode';
-            })
-            .map(({ Item }) => Item.SeriesId)
-            .filter(filterDistinct);
+        const requiredSeriesIds = items.filter(item => {
 
-        const requiredSeasonIds = items
-            .filter(({ Item }) => {
-                const type = (Item.Type || '').toLowerCase();
-                return type === 'episode';
-            })
-            .map(({ Item }) => Item.SeasonId)
-            .filter(filterDistinct);
+            const type = (item.Item.Type || '').toLowerCase();
+            return type === 'episode';
+        }).map(item2 => item2.Item.SeriesId).filter(filterDistinct);
 
-        const requiredAlbumIds = items
-            .filter(({ Item }) => {
-                const type = (Item.Type || '').toLowerCase();
-                return type === 'audio' || type === 'photo';
-            })
-            .map(({ Item }) => Item.AlbumId)
-            .filter(filterDistinct);
+        const requiredSeasonIds = items.filter(item => {
+
+            const type = (item.Item.Type || '').toLowerCase();
+            return type === 'episode';
+        }).map(item2 => item2.Item.SeasonId).filter(filterDistinct);
+
+        const requiredAlbumIds = items.filter(item => {
+
+            const type = (item.Item.Type || '').toLowerCase();
+            return type === 'audio' || type === 'photo';
+        }).map(item2 => item2.Item.AlbumId).filter(filterDistinct);
 
         const obsoleteItems = [];
 
         seriesItems.forEach(item => {
+
             if (!requiredSeriesIds.includes(item.Item.Id)) {
                 obsoleteItems.push(item);
             }
         });
 
         seasonItems.forEach(item => {
+
             if (!requiredSeasonIds.includes(item.Item.Id)) {
                 obsoleteItems.push(item);
             }
         });
 
         albumItems.forEach(item => {
+
             if (!requiredAlbumIds.includes(item.Item.Id)) {
                 obsoleteItems.push(item);
             }
         });
 
+
         let p = Promise.resolve();
 
-        obsoleteItems.forEach(({ ServerId, Id }) => {
-            p = p.then(() => itemrepository.remove(ServerId, Id));
+        obsoleteItems.forEach(item => {
+
+            p = p.then(() => itemrepository.remove(item.ServerId, item.Id));
         });
 
         return p;
     });
 }
 
-function removeLocalItem({ ServerId, Id }) {
-    return itemrepository
-        .get(ServerId, Id)
-        .then(({ LocalPath, AdditionalFiles }) => {
 
-            const onFileDeletedSuccessOrFail = () => {
-                return itemrepository.remove(localItem.ServerId, localItem.Id);
-            };
+function removeLocalItem(localItem) {
 
-            if (!item.LocalPath) {
-                return onFileDeletedSuccessOrFail();
-            }
+    return itemrepository.get(localItem.ServerId, localItem.Id).then(item => {
 
-            return filerepository.deleteFile(item.LocalPath).then(onFileDeletedSuccessOrFail, onFileDeletedSuccessOrFail);
-        });
+        const onFileDeletedSuccessOrFail = () => itemrepository.remove(localItem.ServerId, localItem.Id);
+
+        if (!item.LocalPath) {
+            return onFileDeletedSuccessOrFail();
+        }
+
+        return filerepository.deleteFile(item.LocalPath).then(onFileDeletedSuccessOrFail, onFileDeletedSuccessOrFail);
+    });
 }
 
 function addOrUpdateLocalItem(localItem) {
     return itemrepository.set(localItem.ServerId, localItem.Id, localItem);
 }
 
-function getSubtitleSaveFileName(
-    { LocalPath },
-    mediaPath,
-    language,
-    isForced,
-    format
-) {
+function getSubtitleSaveFileName(localItem, mediaPath, language, isForced, format) {
+
     let name = getNameWithoutExtension(mediaPath);
 
     if (language) {
@@ -430,13 +443,13 @@ function getSubtitleSaveFileName(
     }
 
     if (isForced) {
-        name += '.foreign';
+        name += ".foreign";
     }
 
     name = `${name}.${format.toLowerCase()}`;
 
-    let mediaFolder = filerepository.getParentPath(localItem.LocalPath);
-    let subtitleFileName = filerepository.combinePath(mediaFolder, name);
+    const mediaFolder = filerepository.getParentPath(localItem.LocalPath);
+    const subtitleFileName = filerepository.combinePath(mediaFolder, name);
 
     return subtitleFileName;
 }
@@ -446,9 +459,10 @@ function getItemFileSize(path) {
 }
 
 function getNameWithoutExtension(path) {
+
     let fileName = path;
 
-    const pos = fileName.lastIndexOf('.');
+    const pos = fileName.lastIndexOf(".");
 
     if (pos > 0) {
         fileName = fileName.substring(0, pos);
@@ -458,6 +472,7 @@ function getNameWithoutExtension(path) {
 }
 
 function downloadFile(url, localItem) {
+
     const imageUrl = getImageUrl(localItem.Item.ServerId, localItem.Item.Id, {
         type: 'Primary',
         index: 0
@@ -466,10 +481,12 @@ function downloadFile(url, localItem) {
 }
 
 function downloadSubtitles(url, fileName) {
+
     return transfermanager.downloadSubtitles(url, fileName);
 }
 
 function getImageUrl(serverId, itemId, imageOptions) {
+
     const imageType = imageOptions.type;
     const index = imageOptions.index;
 
@@ -479,23 +496,19 @@ function getImageUrl(serverId, itemId, imageOptions) {
 }
 
 function hasImage(serverId, itemId, imageType, index) {
+
     const pathArray = getImagePath(serverId, itemId, imageType, index);
     const localFilePath = filerepository.getFullMetadataPath(pathArray);
 
-    return filerepository.fileExists(localFilePath).then(
-        (
-            exists // TODO: Maybe check for broken download when file size is 0 and item is not queued
-        ) =>
-            ////if (exists) {
-            ////    if (!transfermanager.isDownloadFileInQueue(localFilePath)) {
-            ////        // If file exists but
-            ////        exists = false;
-            ////    }
-            ////}
+    return filerepository.fileExists(localFilePath).then(exists => // TODO: Maybe check for broken download when file size is 0 and item is not queued
+        ////if (exists) {
+        ////    if (!transfermanager.isDownloadFileInQueue(localFilePath)) {
+        ////        // If file exists but 
+        ////        exists = false;
+        ////    }
+        ////}
 
-            Promise.resolve(exists),
-        err => Promise.resolve(false)
-    );
+        Promise.resolve(exists), err => Promise.resolve(false));
 }
 
 function fileExists(localFilePath) {
@@ -510,16 +523,19 @@ function downloadImage(localItem, url, serverId, itemId, imageType, index) {
 }
 
 function isDownloadFileInQueue(path) {
+
     return transfermanager.isDownloadFileInQueue(path);
 }
 
 function getDownloadItemCount() {
+
     return transfermanager.getDownloadItemCount();
 }
 
 // Helpers ***********************************************************
 
 function getDirectoryPath(item) {
+
     const parts = [];
 
     const itemtype = item.Type.toLowerCase();
@@ -572,6 +588,7 @@ function getDirectoryPath(item) {
 
     const finalParts = [];
     for (let i = 0; i < parts.length; i++) {
+
         finalParts.push(filerepository.getValidFileName(parts[i]));
     }
 
@@ -579,6 +596,7 @@ function getDirectoryPath(item) {
 }
 
 function getImagePath(serverId, itemId, imageType, index) {
+
     const parts = [];
     parts.push('images');
 
@@ -589,14 +607,16 @@ function getImagePath(serverId, itemId, imageType, index) {
 
     const finalParts = [];
     for (let i = 0; i < parts.length; i++) {
+
         finalParts.push(parts[i]);
     }
 
     return finalParts;
 }
 
-function getLocalFileName({ Name }, originalFileName) {
-    const filename = originalFileName || Name;
+function getLocalFileName(item, originalFileName) {
+
+    const filename = originalFileName || item.Name;
 
     return filerepository.getValidFileName(filename);
 }
@@ -607,18 +627,19 @@ function resyncTransfers() {
 
 function createGuid() {
     let d = new Date().getTime();
-    if (window.performance && typeof window.performance.now === 'function') {
+    if (window.performance && typeof window.performance.now === "function") {
         d += performance.now(); //use high-precision timer if available
     }
     const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = ((d + Math.random() * 16) % 16) | 0;
+        const r = (d + Math.random() * 16) % 16 | 0;
         d = Math.floor(d / 16);
-        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
     return uuid;
 }
 
 function startsWith(str, find) {
+
     if (str && find && str.length > find.length) {
         if (str.indexOf(find) === 0) {
             return true;
@@ -648,17 +669,21 @@ function compareDates(a, b) {
     //   1 : if a > b
     // NaN : if a or b is an illegal date
     // NOTE: The code inside isFinite does an assignment (=).
-    return isFinite((a = a.valueOf())) && isFinite((b = b.valueOf()))
-        ? (a > b) - (a < b)
-        : NaN;
+    return (
+        isFinite(a = a.valueOf()) &&
+            isFinite(b = b.valueOf()) ?
+            (a > b) - (a < b) :
+            NaN
+    );
 }
 
 function debugPrintItems(items) {
-    console.log('Current local items:');
+
+    console.log("Current local items:");
     console.group();
 
-    items.forEach(({ Item }) => {
-        console.info('ID: %s Type: %s Name: %s', Item.Id, Item.Type, Item.Name);
+    items.forEach(item => {
+        console.info("ID: %s Type: %s Name: %s", item.Item.Id, item.Item.Type, item.Item.Name);
     });
 
     console.groupEnd();
