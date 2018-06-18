@@ -417,7 +417,7 @@ function addOrUpdateLocalItem(localItem) {
 }
 
 function getSubtitleSaveFileName(
-    { LocalFolder },
+    { LocalPath },
     mediaPath,
     language,
     isForced,
@@ -435,10 +435,10 @@ function getSubtitleSaveFileName(
 
     name = `${name}.${format.toLowerCase()}`;
 
-    const localPathArray = [LocalFolder, name];
-    const localFilePath = filerepository.getPathFromArray(localPathArray);
+    let mediaFolder = filerepository.getParentPath(localItem.LocalPath);
+    let subtitleFileName = filerepository.combinePath(mediaFolder, name);
 
-    return localFilePath;
+    return subtitleFileName;
 }
 
 function getItemFileSize(path) {
