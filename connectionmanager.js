@@ -1497,6 +1497,15 @@ export default class ConnectionManager {
         if (serverId) {
             const apiClient = this.getApiClient(serverId);
             if (apiClient) {
+
+                if (typeof (msg.Data) === 'string') {
+                    try {
+                        msg.Data = JSON.parse(msg.Data);
+                    }
+                    catch (err) {
+                    }
+                }
+
                 apiClient.handleMessageReceived(msg);
             }
         }
