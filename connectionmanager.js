@@ -296,6 +296,11 @@ export default class ConnectionManager {
             existingServer.DateLastAccessed = new Date().getTime();
             existingServer.LastConnectionMode = ConnectionMode.Manual;
             existingServer.ManualAddress = apiClient.serverAddress();
+
+            if (apiClient.manualAddressOnly) {
+                existingServer.manualAddressOnly = true;
+            }
+
             apiClient.serverInfo(existingServer);
 
             apiClient.onAuthenticated = (instance, result) => onAuthenticated(instance, result, {}, true);
@@ -856,7 +861,8 @@ export default class ConnectionManager {
 
             // the timeouts are a small hack to try and ensure the remote address doesn't resolve first
 
-            if (serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1) {
+            // manualAddressOnly is used for the local web app that always connects to a fixed address
+            if (!serverInfo.manualAddressOnly && serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1) {
                 addresses.push({ url: serverInfo.LocalAddress, mode: ConnectionMode.Local, timeout: 0 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
@@ -864,7 +870,7 @@ export default class ConnectionManager {
                 addresses.push({ url: serverInfo.ManualAddress, mode: ConnectionMode.Manual, timeout: 100 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
-            if (serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1) {
+            if (!serverInfo.manualAddressOnly && serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1) {
                 addresses.push({ url: serverInfo.RemoteAddress, mode: ConnectionMode.Remote, timeout: 200 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
