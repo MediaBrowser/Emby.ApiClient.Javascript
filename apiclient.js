@@ -3032,19 +3032,7 @@ class ApiClient {
         return this.getJSON(url);
     }
 
-    getThemeMedia(userId, itemId, inherit) {
-
-        if (!itemId) {
-            throw new Error("null itemId");
-        }
-
-        const options = {};
-
-        if (userId) {
-            options.userId = userId;
-        }
-
-        options.InheritFromParent = inherit || false;
+    getThemeMedia(itemId, options) {
 
         const url = this.getUrl(`Items/${itemId}/ThemeMedia`, options);
 
