@@ -108,6 +108,15 @@ function getFetchPromise(request) {
     return fetchWithTimeout(request.url, fetchRequest, request.timeout);
 }
 
+function clearCurrentUserCacheIfNeeded(apiClient) {
+
+    var user = apiClient._currentUser;
+    var serverInfo = apiClient._serverInfo;
+    if (user && serverInfo && user.Id !== serverInfo.UserId) {
+        apiClient._currentUser = null;
+    }
+}
+
 /**
  * Creates a new api client instance
  * @param {String} serverAddress
@@ -385,6 +394,7 @@ class ApiClient {
 
         this._serverInfo.AccessToken = accessKey;
         this._serverInfo.UserId = userId;
+        clearCurrentUserCacheIfNeeded(this);
         redetectBitrate(this);
         refreshWakeOnLanInfoIfNeeded(this);
     }
@@ -393,6 +403,7 @@ class ApiClient {
 
         if (info) {
             this._serverInfo = info;
+            clearCurrentUserCacheIfNeeded(this);
         }
 
         return this._serverInfo;
