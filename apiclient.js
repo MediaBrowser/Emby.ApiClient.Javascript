@@ -409,6 +409,19 @@ class ApiClient {
         return this._serverInfo;
     }
 
+    getCurrentUserName() {
+
+        var userId = this.getCurrentUserId();
+
+        if (!userId) {
+            return null;
+        }
+
+        var user = getCachedUser(this, userId);
+
+        return user == null ? null : user.Name;
+    }
+
     /**
      * Gets or sets the current user id.
      */
