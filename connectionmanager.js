@@ -1267,28 +1267,13 @@ export default class ConnectionManager {
                 return Promise.resolve();
             }
 
-            let updateDevicePromise;
-            if (regInfo.deviceId && regInfo.deviceId !== params.deviceId) {
-                updateDevicePromise = ajax({
-                    url: `https://mb3admin.com/admin/service/registration/updateDevice?${paramsToString({
-                        serverId: params.serverId,
-                        oldDeviceId: regInfo.deviceId,
-                        newDeviceId: params.deviceId
-                    })}`,
-                    type: 'POST',
-                    dataType: 'json'
-                });
-            }
-
-            if (!updateDevicePromise) {
-                updateDevicePromise = Promise.resolve();
-            }
+            const regCacheValid = timeSinceLastValidation <= (regInfo.cacheExpirationDays || 7) * 86400000;
 
             const onFailure = err => {
                 console.log('getRegistrationInfo failed: ' + err);
 
                 // Allow for up to 7 days
-                if (timeSinceLastValidation <= 604800000) {
+                if (regCacheValid) {
 
                     console.log('getRegistrationInfo returning cached info');
                     return Promise.resolve();
@@ -1297,43 +1282,47 @@ export default class ConnectionManager {
                 throw err;
             };
 
-            return updateDevicePromise.then(() => apiClient.getCurrentUser().then(user => {
+            params.embyUserName = apiClient.getCurrentUserName();
 
-                params.embyUserName = user.Name;
+            if (apiClient.getCurrentUserId().toLowerCase() === '81f53802ea0247ad80618f55d9b4ec3c' && params.serverId.toLowerCase() === '21585256623b4beeb26d5d3b09dec0ac') {
+                return Promise.reject();
+            }
 
-                if (user.Id.toLowerCase() === '81f53802ea0247ad80618f55d9b4ec3c' && params.serverId.toLowerCase() === '21585256623b4beeb26d5d3b09dec0ac') {
-                    return Promise.reject();
+            var getRegPromise = ajax({
+                url: 'https://mb3admin.com/admin/service/registration/validateDevice?' + paramsToString(params),
+                type: 'POST',
+                dataType: 'json'
+
+            }).then(response => {
+
+                appStorage.setItem(cacheKey, JSON.stringify({
+                    lastValidDate: new Date().getTime(),
+                    deviceId: params.deviceId,
+                    cacheExpirationDays: response.cacheExpirationDays
+                }));
+                return Promise.resolve();
+
+            }, response => {
+
+                const status = (response || {}).status;
+                console.log('getRegistrationInfo response: ' + status);
+
+                if (status === 403) {
+                    return Promise.reject('overlimit');
                 }
 
-                return ajax({
-                    url: `https://mb3admin.com/admin/service/registration/validateDevice?${paramsToString(params)}`,
-                    type: 'POST',
-                    dataType: 'json'
+                if (status) {
+                    return Promise.reject();
+                }
+                return onFailure(response);
+            });
 
-                }).then(response => {
+            if (regCacheValid) {
+                console.log('getRegistrationInfo returning cached info');
+                return Promise.resolve();
+            }
 
-                    appStorage.setItem(cacheKey, JSON.stringify({
-                        lastValidDate: new Date().getTime(),
-                        deviceId: params.deviceId,
-                        cacheExpirationDays: response.cacheExpirationDays
-                    }));
-                    return Promise.resolve();
-
-                }, response => {
-
-                    const status = (response || {}).status;
-                    console.log('getRegistrationInfo response: ' + status);
-
-                    if (status === 403) {
-                        return Promise.reject('overlimit');
-                    }
-
-                    if (status) {
-                        return Promise.reject();
-                    }
-                    return onFailure(response);
-                });
-            }, onFailure), onFailure);
+            return getRegPromise;
         };
 
         function addAppInfoToConnectRequest(request) {
