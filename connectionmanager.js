@@ -398,7 +398,7 @@ export default class ConnectionManager {
             apiClient.serverInfo(server);
             afterConnected(apiClient, options);
 
-            return onLocalUserSignIn(server, apiClient.serverAddress(), result.User);
+            return onLocalUserSignIn(server, apiClient.serverAddress());
         }
 
         function afterConnected(apiClient, options = {}) {
@@ -414,16 +414,16 @@ export default class ConnectionManager {
             }
         }
 
-        function onLocalUserSignIn(server, serverUrl, user) {
+        function onLocalUserSignIn(server, serverUrl) {
 
             // Ensure this is created so that listeners of the event can get the apiClient instance
             self._getOrAddApiClient(server, serverUrl);
 
             // This allows the app to have a single hook that fires before any other
-            const promise = self.onLocalUserSignedIn ? self.onLocalUserSignedIn.call(self, user) : Promise.resolve();
+            const promise = self.onLocalUserSignedIn ? self.onLocalUserSignedIn.call(self, server.Id, server.UserId) : Promise.resolve();
 
             return promise.then(() => {
-                events.trigger(self, 'localusersignedin', [user]);
+                events.trigger(self, 'localusersignedin', [server.Id, server.UserId]);
             });
         }
 
@@ -532,73 +532,6 @@ export default class ConnectionManager {
                 return Promise.resolve();
             });
         }
-
-        function getImageUrl(localUser) {
-
-            if (connectUser && connectUser.ImageUrl) {
-                return {
-                    url: connectUser.ImageUrl
-                };
-            }
-            if (localUser && localUser.PrimaryImageTag) {
-
-                const apiClient = self.getApiClient(localUser);
-
-                const url = apiClient.getUserImageUrl(localUser.Id, {
-                    tag: localUser.PrimaryImageTag,
-                    type: "Primary"
-                });
-
-                return {
-                    url,
-                    supportsParams: true
-                };
-            }
-
-            return {
-                url: null,
-                supportsParams: false
-            };
-        }
-
-        self.user = apiClient => new Promise((resolve, reject) => {
-
-            let localUser;
-
-            function onLocalUserDone(e) {
-
-                const image = getImageUrl(localUser);
-
-                resolve({
-                    localUser,
-                    name: connectUser ? connectUser.Name : (localUser ? localUser.Name : null),
-                    imageUrl: image.url,
-                    supportsImageParams: image.supportsParams,
-                    connectUser
-                });
-            }
-
-            function onEnsureConnectUserDone() {
-
-                if (apiClient && apiClient.getCurrentUserId()) {
-                    apiClient.getCurrentUser().then(u => {
-                        localUser = u;
-                        onLocalUserDone();
-
-                    }, onLocalUserDone);
-                } else {
-                    onLocalUserDone();
-                }
-            }
-
-            const credentials = credentialProvider.credentials();
-
-            if (credentials.ConnectUserId && credentials.ConnectAccessToken && !(apiClient && apiClient.getCurrentUserId())) {
-                ensureConnectUser(credentials).then(onEnsureConnectUserDone, onEnsureConnectUserDone);
-            } else {
-                onEnsureConnectUserDone();
-            }
-        });
 
         self.logout = () => {
 
@@ -1026,9 +959,7 @@ export default class ConnectionManager {
             if (result.State === 'SignedIn') {
                 afterConnected(result.ApiClient, options);
 
-                result.ApiClient.getCurrentUser().then((user) => {
-                    onLocalUserSignIn(server, serverUrl, user).then(resolveActions, resolveActions);
-                }, resolveActions);
+                onLocalUserSignIn(server, serverUrl).then(resolveActions, resolveActions);
             }
             else {
                 resolveActions();
