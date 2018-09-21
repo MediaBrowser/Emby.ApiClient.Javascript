@@ -3689,7 +3689,7 @@ function tryReconnect(instance, retryCount) {
 
     retryCount = retryCount || 0;
 
-    if (retryCount >= 20) {
+    if (retryCount >= 5) {
         return Promise.reject();
     }
 
