@@ -1650,6 +1650,30 @@ class ApiClient {
     }
 
     /**
+        Gets available hardware accelerations
+    */
+    getHardwareAccelerations() {
+		
+         const url = this.getUrl("Encoding/HardwareAccelerations");
+		 
+         return this.getJSON(url).catch(function () {
+             return Promise.resolve(null);
+        });
+    };
+	
+     /**
+        Gets available video codecs
+    */
+    getVideoCodecInformation() {
+		
+         const url = this.getUrl("Encoding/CodecInformation/Video");
+		 
+         return this.getJSON(url).catch(function () {
+             return Promise.resolve(null);
+        });
+    };
+	
+    /**
      * Gets the server's scheduled tasks
      */
     getScheduledTasks(options = {}) {
