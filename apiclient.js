@@ -110,10 +110,11 @@ function getFetchPromise(request) {
 
 function clearCurrentUserCacheIfNeeded(apiClient) {
 
-    var user = apiClient._currentUser;
-    var serverInfo = apiClient._serverInfo;
+    const user = apiClient._currentUser;
+    const serverInfo = apiClient._serverInfo;
     if (user && serverInfo && user.Id !== serverInfo.UserId) {
         apiClient._currentUser = null;
+        apiClient._userViewsPromise = null;
     }
 }
 
@@ -391,6 +392,7 @@ class ApiClient {
 
     setAuthenticationInfo(accessKey, userId) {
         this._currentUser = null;
+        this._userViewsPromise = null;
 
         this._serverInfo.AccessToken = accessKey;
         this._serverInfo.UserId = userId;
@@ -411,13 +413,13 @@ class ApiClient {
 
     getCurrentUserName() {
 
-        var userId = this.getCurrentUserId();
+        const userId = this.getCurrentUserId();
 
         if (!userId) {
             return null;
         }
 
-        var user = getCachedUser(this, userId);
+        const user = getCachedUser(this, userId);
 
         return user == null ? null : user.Name;
     }
@@ -569,6 +571,9 @@ class ApiClient {
                 contentType: "application/json"
 
             }).then(result => {
+
+                instance._userViewsPromise = null;
+                instance._currentUser = result.User;
 
                 const afterOnAuthenticated = () => {
                     redetectBitrate(instance);
@@ -2736,6 +2741,10 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/Policy`);
 
+        if (this.getCurrentUserId() === userId) {
+            this._userViewsPromise = null;
+        }
+
         return this.ajax({
             type: "POST",
             url,
@@ -2754,6 +2763,10 @@ class ApiClient {
         }
 
         const url = this.getUrl(`Users/${userId}/Configuration`);
+
+        if (this.getCurrentUserId() === userId) {
+            this._userViewsPromise = null;
+        }
 
         return this.ajax({
             type: "POST",
@@ -2890,9 +2903,29 @@ class ApiClient {
     }
 
     getUserViews(options = {}, userId) {
-        const url = this.getUrl(`Users/${userId || this.getCurrentUserId()}/Views`, options);
 
-        return this.getJSON(url);
+        const currentUserId = this.getCurrentUserId();
+        userId = userId || currentUserId;
+
+        if (this._userViewsPromise && userId === currentUserId) {
+            return this._userViewsPromise;
+        }
+
+        const url = this.getUrl(`Users/${userId || this.getCurrentUserId()}/Views`, options);
+        const self = this;
+
+        const promise = this.getJSON(url).then(result => {
+
+            return Promise.resolve(result);
+
+        }, () => {
+            self._userViewsPromise = null;
+        });
+
+        if (userId === currentUserId) {
+            this._userViewsPromise = promise;
+        }
+        return promise;
     }
 
     /**
@@ -3560,11 +3593,6 @@ class ApiClient {
         return this.getJSON(this.getUrl(`Users/${this.getCurrentUserId()}/Items/Latest`, options));
     }
 
-    getFilters(options) {
-
-        return this.getJSON(this.getUrl('Items/Filters2', options));
-    }
-
     supportsWakeOnLan() {
 
         return getCachedWakeOnLanInfo(this).length > 0;
@@ -3744,16 +3772,20 @@ function onMessageReceivedInternal(instance, msg) {
         messageIdsReceived[messageId] = true;
     }
 
-    if (msg.MessageType === "UserDeleted") {
-        instance._currentUser = null;
-    }
-    else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated") {
+    const msgType = msg.MessageType;
+
+    if (msgType === "UserUpdated" || msgType === "UserConfigurationUpdated" || msgType === "UserPolicyUpdated") {
 
         const user = msg.Data;
         if (user.Id === instance.getCurrentUserId()) {
 
             instance._currentUser = null;
+            instance._userViewsPromise = null;
         }
+    } else if (msgType === 'LibraryChanged') {
+
+        // This might be a little aggressive improve this later
+        instance._userViewsPromise = null;
     }
 
     events.trigger(instance, 'message', [msg]);
