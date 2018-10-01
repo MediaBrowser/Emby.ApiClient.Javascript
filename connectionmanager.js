@@ -248,7 +248,7 @@ export default class ConnectionManager {
         let connectUser;
         self.connectUser = () => connectUser;
 
-        self._minServerVersion = '3.3.0';
+        self._minServerVersion = '3.3.1';
 
         self.appVersion = () => appVersion;
 
