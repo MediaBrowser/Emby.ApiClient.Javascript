@@ -1656,9 +1656,7 @@ class ApiClient {
 		
          const url = this.getUrl("Encoding/HardwareAccelerations");
 		 
-         return this.getJSON(url).catch(function () {
-             return Promise.resolve(null);
-        });
+         return this.getJSON(url);
     };
 	
      /**
@@ -1668,9 +1666,7 @@ class ApiClient {
 		
          const url = this.getUrl("Encoding/CodecInformation/Video");
 		 
-         return this.getJSON(url).catch(function () {
-             return Promise.resolve(null);
-        });
+         return this.getJSON(url);
     };
 	
     /**
