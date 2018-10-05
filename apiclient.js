@@ -2982,6 +2982,62 @@ class ApiClient {
         return this.getJSON(url);
     }
 
+    getTags(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Tags", options);
+
+        return this.getJSON(url);
+    }
+
+    getYears(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Years", options);
+
+        return this.getJSON(url);
+    }
+
+    getContainers(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Containers", options);
+
+        return this.getJSON(url);
+    }
+
+    getOfficialRatings(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("OfficialRatings", options);
+
+        return this.getJSON(url);
+    }
+
     /**
         Gets genres from an item
     */
