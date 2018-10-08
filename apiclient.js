@@ -219,15 +219,9 @@ class ApiClient {
                 throw new Error(`Invalid url: ${val}`);
             }
 
-            const changed = val !== this._serverAddress;
-
             this._serverAddress = val;
 
             this.onNetworkChange();
-
-            if (changed) {
-                events.trigger(this, 'serveraddresschanged');
-            }
         }
 
         return this._serverAddress;
