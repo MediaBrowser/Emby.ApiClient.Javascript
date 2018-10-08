@@ -1437,6 +1437,14 @@ export default class ConnectionManager {
         }
     }
 
+    onNetworkChanged() {
+
+        const apiClients = this._apiClients;
+        for (let i = 0, length = apiClients.length; i < length; i++) {
+            apiClients[i].onNetworkChanged();
+        }
+    }
+
     isLoggedIntoConnect() {
 
         // Make sure it returns true or false
