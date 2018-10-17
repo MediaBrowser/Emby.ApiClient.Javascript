@@ -228,6 +228,7 @@ export default class ApiClientEx extends ApiClient {
             for (i = 0; i < ids.length; i++) {
                 if (isLocalId(ids[i])) {
                     hasLocal = true;
+                    break;
                 }
             }
 
