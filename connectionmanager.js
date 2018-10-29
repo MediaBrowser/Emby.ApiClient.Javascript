@@ -303,7 +303,7 @@ export default class ConnectionManager {
 
             apiClient.serverInfo(existingServer);
 
-            apiClient.onAuthenticated = (instance, result) => onAuthenticated(instance, result, {}, true);
+            apiClient.onAuthenticated = onAuthenticated;
 
             if (!existingServers.length) {
                 const credentials = credentialProvider.credentials();
@@ -344,9 +344,7 @@ export default class ConnectionManager {
 
                 apiClient.serverInfo(server);
 
-                apiClient.onAuthenticated = (instance, result) => {
-                    return onAuthenticated(instance, result, {}, true);
-                };
+                apiClient.onAuthenticated = onAuthenticated;
 
                 events.trigger(self, 'apiclientcreated', [apiClient]);
             }
@@ -369,7 +367,10 @@ export default class ConnectionManager {
             return self._getOrAddApiClient(server, getServerAddress(server, server.LastConnectionMode));
         };
 
-        function onAuthenticated(apiClient, result, options, saveCredentials) {
+        function onAuthenticated(apiClient, result) {
+
+            const options = {};
+            const saveCredentials = true;
 
             const credentials = credentialProvider.credentials();
             const servers = credentials.Servers.filter(s => s.Id === result.ServerId);
