@@ -126,6 +126,10 @@ function onNetworkChanged(instance, resetAddress) {
     refreshWakeOnLanInfoIfNeeded(instance);
 }
 
+function saveUserInCache(user) {
+    appStorage.setItem('user-' + user.Id + '-' + user.ServerId, JSON.stringify(user));
+}
+
 /**
  * Creates a new api client instance
  * @param {String} serverAddress
@@ -383,12 +387,13 @@ class ApiClient {
     }
 
     setAuthenticationInfo(accessKey, userId) {
-        this._currentUser = null;
-        this._userViewsPromise = null;
-
         this._serverInfo.AccessToken = accessKey;
+
+        if (this._serverInfo.UserId !== userId) {
+            this._userViewsPromise = null;
+        }
+
         this._serverInfo.UserId = userId;
-        clearCurrentUserCacheIfNeeded(this);
         redetectBitrate(this);
         refreshWakeOnLanInfoIfNeeded(this);
     }
@@ -396,8 +401,13 @@ class ApiClient {
     serverInfo(info) {
 
         if (info) {
+
+            const currentUserId = this.getCurrentUserId();
             this._serverInfo = info;
-            clearCurrentUserCacheIfNeeded(this);
+
+            if (currentUserId !== this.getCurrentUserId()) {
+                this._userViewsPromise = null;
+            }
         }
 
         return this._serverInfo;
@@ -453,50 +463,13 @@ class ApiClient {
      */
     getCurrentUser(enableCache) {
 
-        if (this._currentUser) {
-            return Promise.resolve(this._currentUser);
-        }
-
         const userId = this.getCurrentUserId();
 
         if (!userId) {
             return Promise.reject();
         }
 
-        const instance = this;
-        let user;
-
-        const serverPromise = this.getUser(userId).then(user => {
-
-            instance.appStorage.setItem(`user-${user.Id}-${user.ServerId}`, JSON.stringify(user));
-
-            instance._currentUser = user;
-            return user;
-
-        }, response => {
-
-            // if timed out, look for cached value
-            if (!response.status) {
-
-                if (userId && instance.accessToken()) {
-                    user = getCachedUser(instance, userId);
-                    if (user) {
-                        return Promise.resolve(user);
-                    }
-                }
-            }
-
-            throw response;
-        });
-
-        if (!this.lastFetch && enableCache !== false) {
-            user = getCachedUser(instance, userId);
-            if (user) {
-                return Promise.resolve(user);
-            }
-        }
-
-        return serverPromise;
+        return this.getUser(userId, enableCache);
     }
 
     isLoggedIn() {
@@ -565,7 +538,7 @@ class ApiClient {
             }).then(result => {
 
                 instance._userViewsPromise = null;
-                instance._currentUser = result.User;
+                saveUserInCache(result.User);
 
                 const afterOnAuthenticated = () => {
                     redetectBitrate(instance);
@@ -2259,9 +2232,40 @@ class ApiClient {
             throw new Error("Must supply a userId");
         }
 
+        const instance = this;
+        var user;
+
         const url = this.getUrl(`Users/${id}`);
 
-        return this.getJSON(url);
+        const serverPromise = this.getJSON(url).then(user => {
+
+            saveUserInCache(user);
+            return user;
+
+        }, response => {
+
+            // if timed out, look for cached value
+            if (!response.status) {
+
+                if (instance.accessToken()) {
+                    user = getCachedUser(instance, id);
+                    if (user) {
+                        return Promise.resolve(user);
+                    }
+                }
+            }
+
+            throw response;
+        });
+
+        if (enableCache !== false) {
+            user = getCachedUser(this, id);
+            if (user) {
+                return Promise.resolve(user);
+            }
+        }
+
+        return serverPromise;
     }
 
     /**
@@ -2919,7 +2923,9 @@ class ApiClient {
         const currentUserId = this.getCurrentUserId();
         userId = userId || currentUserId;
 
-        if (this._userViewsPromise && userId === currentUserId) {
+        const enableCache = userId === currentUserId && (!options || !options.IncludeHidden);
+
+        if (enableCache && this._userViewsPromise) {
             return this._userViewsPromise;
         }
 
@@ -2934,7 +2940,7 @@ class ApiClient {
             self._userViewsPromise = null;
         });
 
-        if (userId === currentUserId) {
+        if (enableCache) {
             this._userViewsPromise = promise;
         }
         return promise;
@@ -3847,7 +3853,7 @@ function onMessageReceivedInternal(instance, msg) {
         const user = msg.Data;
         if (user.Id === instance.getCurrentUserId()) {
 
-            instance._currentUser = null;
+            saveUserInCache(user);
             instance._userViewsPromise = null;
         }
     } else if (msgType === 'LibraryChanged') {
