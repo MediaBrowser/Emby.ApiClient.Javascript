@@ -25,16 +25,6 @@ function replaceAll(originalString, strReplace, strWith) {
     return originalString.replace(reg, strWith);
 }
 
-function onFetchFail(instance, url, response) {
-
-    events.trigger(instance, 'requestfail', [
-        {
-            url,
-            status: response.status,
-            errorCode: response.headers ? response.headers.get('X-Application-Error-Code') : null
-        }]);
-}
-
 function paramsToString(params) {
 
     const values = [];
@@ -116,6 +106,24 @@ function clearCurrentUserCacheIfNeeded(apiClient) {
         apiClient._currentUser = null;
         apiClient._userViewsPromise = null;
     }
+}
+
+function onNetworkChanged(instance, resetAddress) {
+
+    if (resetAddress) {
+
+        const serverInfo = instance.serverInfo();
+        if (serverInfo.LocalAddress) {
+            instance._serverAddress = serverInfo.LocalAddress;
+        }
+    }
+
+    instance.lastDetectedBitrate = 0;
+    instance.lastDetectedBitrateTime = 0;
+    setSavedEndpointInfo(instance, null);
+
+    redetectBitrate(instance);
+    refreshWakeOnLanInfoIfNeeded(instance);
 }
 
 /**
@@ -221,20 +229,15 @@ class ApiClient {
 
             this._serverAddress = val;
 
-            this.onNetworkChange();
+            onNetworkChanged(this);
         }
 
         return this._serverAddress;
     }
 
-    onNetworkChange() {
+    onNetworkChanged() {
 
-        this.lastDetectedBitrate = 0;
-        this.lastDetectedBitrateTime = 0;
-        setSavedEndpointInfo(this, null);
-
-        redetectBitrate(this);
-        refreshWakeOnLanInfoIfNeeded(this);
+        onNetworkChanged(this, true);
     }
 
     /**
@@ -295,7 +298,6 @@ class ApiClient {
                     return response;
                 }
             } else {
-                onFetchFail(instance, request.url, response);
                 return Promise.reject(response);
             }
 
@@ -323,7 +325,6 @@ class ApiClient {
                 }, innerError => {
 
                     console.log("Reconnect failed");
-                    onFetchFail(instance, request.url, {});
                     throw innerError;
                 });
 
@@ -331,7 +332,6 @@ class ApiClient {
 
                 console.log("Reporting request failure");
 
-                onFetchFail(instance, request.url, {});
                 throw error;
             }
         });
@@ -371,12 +371,10 @@ class ApiClient {
                         return response;
                     }
                 } else {
-                    onFetchFail(instance, request.url, response);
                     return Promise.reject(response);
                 }
 
             }, error => {
-                onFetchFail(instance, request.url, {});
                 throw error;
             });
         }
@@ -1647,22 +1645,22 @@ class ApiClient {
         Gets available hardware accelerations
     */
     getHardwareAccelerations() {
-		
-         const url = this.getUrl("Encoding/HardwareAccelerations");
-		 
-         return this.getJSON(url);
+
+        const url = this.getUrl("Encoding/HardwareAccelerations");
+
+        return this.getJSON(url);
     };
-	
-     /**
-        Gets available video codecs
-    */
+
+    /**
+       Gets available video codecs
+   */
     getVideoCodecInformation() {
-		
-         const url = this.getUrl("Encoding/CodecInformation/Video");
-		 
-         return this.getJSON(url);
+
+        const url = this.getUrl("Encoding/CodecInformation/Video");
+
+        return this.getJSON(url);
     };
-	
+
     /**
      * Gets the server's scheduled tasks
      */
