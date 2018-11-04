@@ -3022,6 +3022,24 @@ class ApiClient {
         return this.getJSON(url);
     }
 
+    getPrefixes(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!this.isMinServerVersion('3.6.0.60')) {
+            return Promise.resolve(['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']);
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Prefixes", options);
+
+        return this.getJSON(url);
+    }
+
     getOfficialRatings(userId, options) {
 
         if (!userId) {
