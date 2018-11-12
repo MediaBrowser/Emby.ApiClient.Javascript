@@ -576,4 +576,13 @@ export default class ApiClientEx extends ApiClient {
 
         return ApiClient.prototype.getItemDownloadUrl.call(this, itemId);
     }
+
+    getPrefixes(userId, options) {
+
+        if (isLocalId(options.ParentId) || isLocalId(options.GenreIds) || isLocalId(options.ArtistIds) || isLocalId(options.StudioIds)) {
+            return Promise.resolve(['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'].map(mapPrefix));
+        }
+
+        return ApiClient.prototype.getPrefixes.call(this, userId, options);
+    }
 }
