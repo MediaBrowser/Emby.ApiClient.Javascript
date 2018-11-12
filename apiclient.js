@@ -130,6 +130,10 @@ function saveUserInCache(user) {
     appStorage.setItem('user-' + user.Id + '-' + user.ServerId, JSON.stringify(user));
 }
 
+function removeCachedUser(userId, serverId) {
+    appStorage.removeItem('user-' + userId + '-' + serverId);
+}
+
 /**
  * Creates a new api client instance
  * @param {String} serverAddress
@@ -172,7 +176,7 @@ class ApiClient {
         return this._appName;
     }
 
-    setRequestHeaders(headers) {
+    setRequestHeaders(headers, includeAccessToken) {
 
         const currentServerInfo = this.serverInfo();
         const appName = this._appName;
@@ -196,7 +200,7 @@ class ApiClient {
             values.push(`Version="${this._appVersion}"`);
         }
 
-        if (accessToken) {
+        if (accessToken && includeAccessToken !== false) {
             values.push(`Token="${accessToken}"`);
         }
 
@@ -344,7 +348,7 @@ class ApiClient {
     /**
      * Wraps around jQuery ajax methods to add additional info to the request.
      */
-    fetch(request, includeAuthorization) {
+    fetch(request, includeAuthorization, includeAccessToken) {
 
         if (!request) {
             throw new Error("Request cannot be null");
@@ -354,7 +358,7 @@ class ApiClient {
 
         if (includeAuthorization !== false) {
 
-            this.setRequestHeaders(request.headers);
+            this.setRequestHeaders(request.headers, includeAccessToken);
         }
 
         if (this.enableAutomaticNetworking === false || request.type !== "GET") {
@@ -449,13 +453,13 @@ class ApiClient {
     /**
      * Wraps around jQuery ajax methods to add additional info to the request.
      */
-    ajax(request, includeAuthorization) {
+    ajax(request, includeAuthorization, includeAccessToken) {
 
         if (!request) {
             throw new Error("Request cannot be null");
         }
 
-        return this.fetch(request, includeAuthorization);
+        return this.fetch(request, includeAuthorization, includeAccessToken);
     }
 
     /**
@@ -2391,7 +2395,7 @@ class ApiClient {
             url,
             dataType: "json"
 
-        }, false);
+        }, true, false);
     }
 
     /**
@@ -2558,6 +2562,7 @@ class ApiClient {
         }
 
         const url = this.getUrl(`Users/${userId}/Password`);
+        const serverId = this.serverId();
 
         return this.ajax({
             type: "POST",
@@ -2567,6 +2572,9 @@ class ApiClient {
                 NewPw: newPassword
             }),
             contentType: "application/json"
+        }).then(() => {
+            removeCachedUser(userId, serverId);
+            return Promise.resolve();
         });
     }
 
@@ -2585,6 +2593,7 @@ class ApiClient {
         }
 
         const url = this.getUrl(`Users/${userId}/EasyPassword`);
+        const serverId = this.serverId();
 
         return this.ajax({
             type: "POST",
@@ -2592,6 +2601,9 @@ class ApiClient {
             data: {
                 NewPw: newPassword
             }
+        }).then(() => {
+            removeCachedUser(userId, serverId);
+            return Promise.resolve();
         });
     }
 
@@ -2606,6 +2618,7 @@ class ApiClient {
         }
 
         const url = this.getUrl(`Users/${userId}/Password`);
+        const serverId = this.serverId();
 
         const postData = {
 
@@ -2617,6 +2630,9 @@ class ApiClient {
             type: "POST",
             url,
             data: postData
+        }).then(() => {
+            removeCachedUser(userId, serverId);
+            return Promise.resolve();
         });
     }
 
@@ -2627,6 +2643,7 @@ class ApiClient {
         }
 
         const url = this.getUrl(`Users/${userId}/EasyPassword`);
+        const serverId = this.serverId();
 
         const postData = {
 
@@ -2638,6 +2655,10 @@ class ApiClient {
             type: "POST",
             url,
             data: postData
+
+        }).then(() => {
+            removeCachedUser(userId, serverId);
+            return Promise.resolve();
         });
     }
 
