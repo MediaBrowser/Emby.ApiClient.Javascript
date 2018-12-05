@@ -1237,6 +1237,8 @@ export default class ConnectionManager {
 
             cacheKey = getCacheKey('themes', apiClient, { viewOnly: false });
             appStorage.removeItem(cacheKey);
+
+            events.trigger(self, 'resetregistrationinfo');
         };
 
         self.getRegistrationInfo = (feature, apiClient, options) => {

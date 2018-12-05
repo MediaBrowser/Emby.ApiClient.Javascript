@@ -495,7 +495,7 @@ export default class ApiClientEx extends ApiClient {
 
                     const libraryItem = item.Item;
 
-                    if (libraryItem.MediaType === 'Video' || libraryItem.Type === 'AudioBook') {
+                    if (libraryItem.MediaType === 'Video' || libraryItem.Type === 'AudioBook' || libraryItem.SupportsResume) {
                         libraryItem.UserData = libraryItem.UserData || {};
                         libraryItem.UserData.PlaybackPositionTicks = options.PositionTicks;
                         libraryItem.UserData.PlayedPercentage = Math.min(libraryItem.RunTimeTicks ? (100 * ((options.PositionTicks || 0) / libraryItem.RunTimeTicks)) : 0, 100);
