@@ -126,11 +126,11 @@ function onNetworkChanged(instance, resetAddress) {
     refreshWakeOnLanInfoIfNeeded(instance);
 }
 
-function saveUserInCache(user) {
+function saveUserInCache(appStorage, user) {
     appStorage.setItem('user-' + user.Id + '-' + user.ServerId, JSON.stringify(user));
 }
 
-function removeCachedUser(userId, serverId) {
+function removeCachedUser(appStorage, userId, serverId) {
     appStorage.removeItem('user-' + userId + '-' + serverId);
 }
 
@@ -542,7 +542,7 @@ class ApiClient {
             }).then(result => {
 
                 instance._userViewsPromise = null;
-                saveUserInCache(result.User);
+                saveUserInCache(instance.appStorage, result.User);
 
                 const afterOnAuthenticated = () => {
                     redetectBitrate(instance);
@@ -2243,7 +2243,7 @@ class ApiClient {
 
         const serverPromise = this.getJSON(url).then(user => {
 
-            saveUserInCache(user);
+            saveUserInCache(instance.appStorage, user);
             return user;
 
         }, response => {
@@ -2563,6 +2563,7 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/Password`);
         const serverId = this.serverId();
+        const instance = this;
 
         return this.ajax({
             type: "POST",
@@ -2573,7 +2574,7 @@ class ApiClient {
             }),
             contentType: "application/json"
         }).then(() => {
-            removeCachedUser(userId, serverId);
+            removeCachedUser(instance.appStorage, userId, serverId);
             return Promise.resolve();
         });
     }
@@ -2594,6 +2595,7 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/EasyPassword`);
         const serverId = this.serverId();
+        const instance = this;
 
         return this.ajax({
             type: "POST",
@@ -2602,7 +2604,7 @@ class ApiClient {
                 NewPw: newPassword
             }
         }).then(() => {
-            removeCachedUser(userId, serverId);
+            removeCachedUser(instance.appStorage, userId, serverId);
             return Promise.resolve();
         });
     }
@@ -2619,6 +2621,7 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/Password`);
         const serverId = this.serverId();
+        const instance = this;
 
         const postData = {
 
@@ -2631,7 +2634,7 @@ class ApiClient {
             url,
             data: postData
         }).then(() => {
-            removeCachedUser(userId, serverId);
+            removeCachedUser(instance.appStorage, userId, serverId);
             return Promise.resolve();
         });
     }
@@ -2644,6 +2647,7 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/EasyPassword`);
         const serverId = this.serverId();
+        const instance = this;
 
         const postData = {
 
@@ -2657,7 +2661,7 @@ class ApiClient {
             data: postData
 
         }).then(() => {
-            removeCachedUser(userId, serverId);
+            removeCachedUser(instance.appStorage, userId, serverId);
             return Promise.resolve();
         });
     }
@@ -3892,7 +3896,7 @@ function onMessageReceivedInternal(instance, msg) {
         const user = msg.Data;
         if (user.Id === instance.getCurrentUserId()) {
 
-            saveUserInCache(user);
+            saveUserInCache(instance.appStorage, user);
             instance._userViewsPromise = null;
         }
     } else if (msgType === 'LibraryChanged') {
