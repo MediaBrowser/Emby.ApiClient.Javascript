@@ -478,7 +478,7 @@ export default class ConnectionManager {
                 throw new Error("credentials.ConnectUserId cannot be null");
             }
 
-            const = self.getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
+            const url = self.getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
 
             const auth = `MediaBrowser Client="${appName}", Device="${deviceName}", DeviceId="${deviceId}", Version="${appVersion}"`;
 
