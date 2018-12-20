@@ -2586,8 +2586,6 @@ class ApiClient {
      */
     updateEasyPassword(userId, newPassword) {
 
-        const instance = this;
-
         if (!userId) {
             Promise.reject();
             return;
