@@ -334,7 +334,7 @@ export default class ConnectionManager {
 
             if (!apiClient) {
 
-                apiClient = new apiClientFactory(serverUrl, appName, appVersion, deviceName, deviceId, devicePixelRatio);
+                apiClient = new apiClientFactory(appStorage, wakeOnLanFn, serverUrl, appName, appVersion, deviceName, deviceId, devicePixelRatio);
 
                 self._apiClients.push(apiClient);
 
