@@ -69,10 +69,6 @@ function updateServerInfo(server, systemInfo) {
     }
 }
 
-function getEmbyServerUrl(baseUrl, handler) {
-    return `${baseUrl}/emby/${handler}`;
-}
-
 function getFetchPromise(request) {
 
     const headers = request.headers || {};
@@ -482,7 +478,7 @@ export default class ConnectionManager {
                 throw new Error("credentials.ConnectUserId cannot be null");
             }
 
-            const = getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
+            const = self.getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
 
             const auth = `MediaBrowser Client="${appName}", Device="${deviceName}", DeviceId="${deviceId}", Version="${appVersion}"`;
 
@@ -515,7 +511,7 @@ export default class ConnectionManager {
             return ajax({
 
                 type: "GET",
-                url: getEmbyServerUrl(serverUrl, "System/Info"),
+                url: self.getEmbyServerUrl(serverUrl, "System/Info"),
                 dataType: "json",
                 headers: {
                     "X-MediaBrowser-Token": server.AccessToken
@@ -757,7 +753,7 @@ export default class ConnectionManager {
 
             ajax({
 
-                url: getEmbyServerUrl(url, 'system/info/public'),
+                url: self.getEmbyServerUrl(url, 'system/info/public'),
                 timeout: defaultTimeout,
                 type: 'GET',
                 dataType: 'json'
@@ -829,6 +825,21 @@ export default class ConnectionManager {
             });
         }
 
+        function resolveIfAvailable(url, server, result, connectionMode, serverUrl, options, resolve) {
+
+            const promise = self.validateServerAddress ? self.validateServerAddress(self, ajax, url) : Promise.resolve();
+
+            promise.then(() => {
+                onSuccessfulConnection(server, result, connectionMode, serverUrl, options, resolve);
+            }, () => {
+                console.log('minServerVersion requirement not met. Server version: ' + result.Version);
+                resolve({
+                    State: 'ServerUpdateNeeded',
+                    Servers: [server]
+                });
+            });
+        }
+
         self.connectToServer = (server, options) => {
 
             console.log('begin connectToServer');
@@ -859,7 +870,7 @@ export default class ConnectionManager {
 
                     }
                     else {
-                        onSuccessfulConnection(server, result, connectionMode, serverUrl, options, resolve);
+                        resolveIfAvailable(serverUrl, server, result, connectionMode, serverUrl, options, resolve);
                     }
 
                 }, () => {
@@ -1499,5 +1510,10 @@ export default class ConnectionManager {
         }
 
         return this._minServerVersion;
+    }
+
+    getEmbyServerUrl(baseUrl, handler) {
+
+        return `${baseUrl}/emby/${handler}`;
     }
 }
