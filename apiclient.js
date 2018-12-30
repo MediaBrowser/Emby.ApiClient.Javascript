@@ -680,6 +680,17 @@ class ApiClient {
         }, includeAuthorization);
     }
 
+    getText(url, includeAuthorization) {
+
+        return this.fetch({
+
+            url,
+            type: 'GET',
+            dataType: 'text'
+
+        }, includeAuthorization);
+    }
+
     updateServerInfo(server, serverUrl) {
 
         if (server == null) {
@@ -3041,6 +3052,48 @@ class ApiClient {
         options.userId = userId;
 
         const url = this.getUrl("Containers", options);
+
+        return this.getJSON(url);
+    }
+
+    getVideoCodecs(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("VideoCodecs", options);
+
+        return this.getJSON(url);
+    }
+
+    getAudioCodecs(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("AudioCodecs", options);
+
+        return this.getJSON(url);
+    }
+
+    getSubtitleCodecs(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("SubtitleCodecs", options);
 
         return this.getJSON(url);
     }
