@@ -2241,7 +2241,7 @@ class ApiClient {
      * Gets a user by id
      * @param {String} id
      */
-    getUser(id) {
+    getUser(id, enableCache) {
 
         if (!id) {
             throw new Error("Must supply a userId");
