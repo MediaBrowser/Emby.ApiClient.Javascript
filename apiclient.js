@@ -3104,14 +3104,32 @@ class ApiClient {
             throw new Error("null userId");
         }
 
-        if (!this.isMinServerVersion('3.6.0.60')) {
+        if (!this.isMinServerVersion('3.6.0.85')) {
             return Promise.resolve(['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']);
         }
 
         options = options || {};
         options.userId = userId;
 
-        const url = this.getUrl("Prefixes", options);
+        const url = this.getUrl("Items/Prefixes", options);
+
+        return this.getJSON(url);
+    }
+
+    getArtistPrefixes(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        if (!this.isMinServerVersion('3.6.0.85')) {
+            return Promise.resolve(['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']);
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Artists/Prefixes", options);
 
         return this.getJSON(url);
     }

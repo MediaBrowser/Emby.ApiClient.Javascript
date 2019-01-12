@@ -152,7 +152,11 @@ function ajax(request) {
 
         if (response.status < 400) {
 
-            if (request.dataType === 'json' || request.headers.accept === 'application/json') {
+            if (request.dataType === 'json') {
+                return response.json();
+            } else if (request.dataType === 'text') {
+                return response.text();
+            } else if (request.headers.accept === 'application/json') {
                 return response.json();
             } else {
                 return response;
@@ -1298,7 +1302,8 @@ export default class ConnectionManager {
 
             params.embyUserName = apiClient.getCurrentUserName();
 
-            if (apiClient.getCurrentUserId().toLowerCase() === '81f53802ea0247ad80618f55d9b4ec3c' && params.serverId.toLowerCase() === '21585256623b4beeb26d5d3b09dec0ac') {
+            const currentUserId = apiClient.getCurrentUserId();
+            if (currentUserId && currentUserId.toLowerCase() === '81f53802ea0247ad80618f55d9b4ec3c' && params.serverId.toLowerCase() === '21585256623b4beeb26d5d3b09dec0ac') {
                 return Promise.reject();
             }
 
