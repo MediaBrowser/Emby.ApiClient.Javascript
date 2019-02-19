@@ -127,6 +127,7 @@ function onNetworkChanged(instance, resetAddress) {
 }
 
 function saveUserInCache(appStorage, user) {
+    user.DateLastFetched = new Date().getTime();
     appStorage.setItem('user-' + user.Id + '-' + user.ServerId, JSON.stringify(user));
 }
 
@@ -2247,14 +2248,24 @@ class ApiClient {
             throw new Error("Must supply a userId");
         }
 
+        let cachedUser;
+
+        if (enableCache !== false) {
+            cachedUser = getCachedUser(this, id);
+
+            // time based cache is not ideal, try to improve in the future
+            if (cachedUser && (new Date().getTime() - (cachedUser.DateLastFetched || 0)) <= 60000) {
+                return Promise.resolve(cachedUser);
+            }
+        }
+
         const instance = this;
-        var user;
 
         const url = this.getUrl(`Users/${id}`);
 
         const serverPromise = this.getJSON(url).then(user => {
 
-            saveUserInCache(instance.appStorage, user);
+            saveUserInCache(user);
             return user;
 
         }, response => {
@@ -2263,7 +2274,7 @@ class ApiClient {
             if (!response.status) {
 
                 if (instance.accessToken()) {
-                    user = getCachedUser(instance, id);
+                    const user = getCachedUser(instance, id);
                     if (user) {
                         return Promise.resolve(user);
                     }
@@ -2274,9 +2285,8 @@ class ApiClient {
         });
 
         if (enableCache !== false) {
-            user = getCachedUser(this, id);
-            if (user) {
-                return Promise.resolve(user);
+            if (cachedUser) {
+                return Promise.resolve(cachedUser);
             }
         }
 
