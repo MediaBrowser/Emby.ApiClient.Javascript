@@ -3292,6 +3292,24 @@ class ApiClient {
         return this.getJSON(url);
     }
 
+    getThumbnails(itemId, options) {
+
+        const url = this.getUrl(`Items/${itemId}/Thumbnails`, options);
+
+        return this.getJSON(url);
+    }
+
+    getDeleteInfo(itemId, options) {
+
+        if (!this.isMinServerVersion('4.1.0.15')) {
+            return Promise.resolve({ Paths: [] });
+        }
+
+        const url = this.getUrl(`Items/${itemId}/DeleteInfo`, options);
+
+        return this.getJSON(url);
+    }
+
     getSearchHints(options) {
 
         const url = this.getUrl("Search/Hints", options);
