@@ -585,4 +585,13 @@ export default class ApiClientEx extends ApiClient {
 
         return ApiClient.prototype.getPrefixes.call(this, userId, options);
     }
+
+    getDeleteInfo(userId, options) {
+
+        if (isLocalId(itemId)) {
+            return Promise.resolve({ Paths: [] });
+        }
+
+        return ApiClient.prototype.getDeleteInfo.apply(this, arguments);
+    }
 }
