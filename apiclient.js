@@ -128,11 +128,11 @@ function onNetworkChanged(instance, resetAddress) {
 
 function saveUserInCache(appStorage, user) {
     user.DateLastFetched = new Date().getTime();
-    appStorage.setItem('user-' + user.Id + '-' + user.ServerId, JSON.stringify(user));
+    appStorage.setItem(getUserCacheKey(user.Id, user.ServerId), JSON.stringify(user));
 }
 
 function removeCachedUser(appStorage, userId, serverId) {
-    appStorage.removeItem('user-' + userId + '-' + serverId);
+    appStorage.removeItem(getUserCacheKey(userId, serverId));
 }
 
 /**
@@ -2800,9 +2800,11 @@ class ApiClient {
         }
 
         const url = this.getUrl(`Users/${userId}/Policy`);
+        const instance = this;
 
-        if (this.getCurrentUserId() === userId) {
-            this._userViewsPromise = null;
+        if (instance.getCurrentUserId() === userId) {
+            instance._userViewsPromise = null;
+            removeCachedUser(userId, instance.serverId());
         }
 
         return this.ajax({
@@ -2810,6 +2812,14 @@ class ApiClient {
             url,
             data: JSON.stringify(policy),
             contentType: "application/json"
+        }).then(() => {
+
+            if (instance.getCurrentUserId() === userId) {
+                instance._userViewsPromise = null;
+                removeCachedUser(userId, instance.serverId());
+            }
+
+            return Promise.resolve();
         });
     }
 
@@ -2823,9 +2833,11 @@ class ApiClient {
         }
 
         const url = this.getUrl(`Users/${userId}/Configuration`);
+        const instance = this;
 
-        if (this.getCurrentUserId() === userId) {
-            this._userViewsPromise = null;
+        if (instance.getCurrentUserId() === userId) {
+            instance._userViewsPromise = null;
+            removeCachedUser(userId, instance.serverId());
         }
 
         return this.ajax({
@@ -2833,6 +2845,14 @@ class ApiClient {
             url,
             data: JSON.stringify(configuration),
             contentType: "application/json"
+        }).then(() => {
+
+            if (instance.getCurrentUserId() === userId) {
+                instance._userViewsPromise = null;
+                removeCachedUser(userId, instance.serverId());
+            }
+
+            return Promise.resolve();
         });
     }
 
@@ -3948,6 +3968,11 @@ function tryReconnect(instance, retryCount) {
     });
 }
 
+function getUserCacheKey(userId, serverId) {
+
+    return `user-${userId}-${serverId}`;
+}
+
 function getCachedUser(instance, userId) {
 
     const serverId = instance.serverId();
@@ -3955,7 +3980,7 @@ function getCachedUser(instance, userId) {
         return null;
     }
 
-    const json = instance.appStorage.getItem(`user-${userId}-${serverId}`);
+    const json = instance.appStorage.getItem(getUserCacheKey(userId, serverId));
 
     if (json) {
         return JSON.parse(json);
