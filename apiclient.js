@@ -2804,8 +2804,8 @@ class ApiClient {
 
         if (instance.getCurrentUserId() === userId) {
             instance._userViewsPromise = null;
-            removeCachedUser(userId, instance.serverId());
         }
+        removeCachedUser(userId, instance.serverId());
 
         return this.ajax({
             type: "POST",
@@ -2816,8 +2816,8 @@ class ApiClient {
 
             if (instance.getCurrentUserId() === userId) {
                 instance._userViewsPromise = null;
-                removeCachedUser(userId, instance.serverId());
             }
+            removeCachedUser(userId, instance.serverId());
 
             return Promise.resolve();
         });
@@ -2837,8 +2837,8 @@ class ApiClient {
 
         if (instance.getCurrentUserId() === userId) {
             instance._userViewsPromise = null;
-            removeCachedUser(userId, instance.serverId());
         }
+        removeCachedUser(userId, instance.serverId());
 
         return this.ajax({
             type: "POST",
@@ -2849,8 +2849,8 @@ class ApiClient {
 
             if (instance.getCurrentUserId() === userId) {
                 instance._userViewsPromise = null;
-                removeCachedUser(userId, instance.serverId());
             }
+            removeCachedUser(userId, instance.serverId());
 
             return Promise.resolve();
         });
