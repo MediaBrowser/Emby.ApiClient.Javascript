@@ -3314,7 +3314,11 @@ class ApiClient {
 
     getThumbnails(itemId, options) {
 
-        const url = this.getUrl(`Items/${itemId}/Thumbnails`, options);
+        if (!this.isMinServerVersion('4.1.0.26')) {
+            return Promise.resolve({ Thumbnails: [] });
+        }
+
+        const url = this.getUrl(`Items/${itemId}/ThumbnailSet`, options);
 
         return this.getJSON(url);
     }
