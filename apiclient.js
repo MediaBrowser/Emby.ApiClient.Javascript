@@ -2956,20 +2956,7 @@ class ApiClient {
 
     getResumableItems(userId, options) {
 
-        if (this.isMinServerVersion('3.2.33')) {
-            return this.getJSON(this.getUrl(`Users/${userId}/Items/Resume`, options));
-        }
-
-        return this.getItems(userId, Object.assign({
-
-            SortBy: "DatePlayed",
-            SortOrder: "Descending",
-            Filters: "IsResumable",
-            Recursive: true,
-            CollapseBoxSetItems: false,
-            ExcludeLocationTypes: "Virtual"
-
-        }, options));
+        return this.getJSON(this.getUrl(`Users/${userId}/Items/Resume`, options));
     }
 
     getMovieRecommendations(options) {
