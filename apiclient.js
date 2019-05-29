@@ -135,6 +135,8 @@ function removeCachedUser(appStorage, userId, serverId) {
     appStorage.removeItem(getUserCacheKey(userId, serverId));
 }
 
+let startingPlaySession = new Date().getTime();
+
 /**
  * Creates a new api client instance
  * @param {String} serverAddress
@@ -3085,6 +3087,29 @@ class ApiClient {
         const url = this.getUrl("VideoCodecs", options);
 
         return this.getJSON(url);
+    }
+
+    getAudioStreamUrl(item, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia) {
+
+        const url = 'Audio/' + item.Id + '/universal';
+
+        startingPlaySession++;
+        return this.getUrl(url, {
+            UserId: this.getCurrentUserId(),
+            DeviceId: this.deviceId(),
+            MaxStreamingBitrate: maxBitrate,
+            Container: directPlayContainers,
+            TranscodingContainer: transcodingProfile.Container || null,
+            TranscodingProtocol: transcodingProfile.Protocol || null,
+            AudioCodec: transcodingProfile.AudioCodec,
+            MaxAudioSampleRate: maxAudioSampleRate,
+            MaxAudioBitDepth: maxAudioBitDepth,
+            api_key: this.accessToken(),
+            PlaySessionId: startingPlaySession,
+            StartTimeTicks: startPosition || 0,
+            EnableRedirection: true,
+            EnableRemoteMedia: enableRemoteMedia
+        });
     }
 
     getAudioCodecs(userId, options) {

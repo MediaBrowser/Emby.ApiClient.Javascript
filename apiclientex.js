@@ -125,59 +125,63 @@ export default class ApiClientEx extends ApiClient {
 
     getPlaybackInfo(itemId, options, deviceProfile) {
 
-        const onFailure = () => ApiClient.prototype.getPlaybackInfo.call(instance, itemId, options, deviceProfile);
+        const promises = [];
 
         if (isLocalId(itemId)) {
-            return this.localAssetManager.getLocalItem(this.serverId(), stripLocalPrefix(itemId)).then(item => {
+            promises.push(Promise.resolve({ MediaSources: [] }));
+        }
+        else {
+            promises.push(ApiClient.prototype.getPlaybackInfo.call(this, itemId, options, deviceProfile));
+        }
 
-                // TODO: This was already done during the sync process, right? If so, remove it
+        promises.push(localdatabase.getLibraryItem(this.serverId(), stripLocalPrefix(itemId)).then(item => {
+
+            if (item) {
+
                 const mediaSources = item.Item.MediaSources.map(m => {
+
+                    if (options.AudioStreamIndex != null) {
+                        m.DefaultAudioStreamIndex = parseInt(options.AudioStreamIndex);
+                    }
+
+                    if (options.SubtitleStreamIndex != null) {
+                        m.DefaultSubtitleStreamIndex = parseInt(options.SubtitleStreamIndex);
+                    }
+
                     m.SupportsDirectPlay = true;
                     m.SupportsDirectStream = false;
                     m.SupportsTranscoding = false;
                     m.IsLocal = true;
+
+                    if (!m.Name) {
+                        m.Name = 'Downloaded version';
+                    }
+
                     return m;
                 });
 
                 return {
                     MediaSources: mediaSources
                 };
-
-            }, onFailure);
-        }
-
-        var instance = this;
-        return this.localAssetManager.getLocalItem(this.serverId(), itemId).then(item => {
-
-            if (item) {
-
-                const mediaSources = item.Item.MediaSources.map(m => {
-                    m.SupportsDirectPlay = true;
-                    m.SupportsDirectStream = false;
-                    m.SupportsTranscoding = false;
-                    m.IsLocal = true;
-                    return m;
-                });
-
-                return instance.localAssetManager.fileExists(item.LocalPath).then(exists => {
-
-                    if (exists) {
-
-                        const res = {
-                            MediaSources: mediaSources
-                        };
-
-                        return Promise.resolve(res);
-                    }
-
-                    return ApiClient.prototype.getPlaybackInfo.call(instance, itemId, options, deviceProfile);
-
-                }, onFailure);
             }
 
-            return ApiClient.prototype.getPlaybackInfo.call(instance, itemId, options, deviceProfile);
+            return {
+                MediaSources: []
+            };
+        }));
 
-        }, onFailure);
+        return Promise.all(promises).then(results => {
+
+            const result = results[0];
+            const localResult = results[1];
+
+            for (let i = 0, length = localResult.MediaSources.length; i < length; i++) {
+
+                result.MediaSources.unshift(localResult.MediaSources[i]);
+            }
+
+            return result;
+        });
     }
 
     getItems(userId, options) {
@@ -417,13 +421,47 @@ export default class ApiClientEx extends ApiClient {
         return Promise.resolve([]);
     }
 
-    getThemeMedia(userId, itemId, inherit) {
+    getAudioStreamUrl(item, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia) {
 
-        if (isLocalViewId(itemId) || isLocalId(itemId) || isTopLevelLocalViewId(itemId)) {
-            return Promise.reject();
+        if (isLocalId(item.Id)) {
+            if (item.MediaSources && item.MediaSources.length) {
+
+                var mediaSource = item.MediaSources[0];
+                return mediaSource.StreamUrl || mediaSource.Path;
+            }
         }
 
-        return ApiClient.prototype.getThemeMedia.call(this, userId, itemId, inherit);
+        // TODO: Handle server item that has been downloaded
+
+        return ApiClient.prototype.getAudioStreamUrl.call(this, item, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia);
+    }
+
+    getSyncStatus(itemId) {
+
+        if (isLocalId(itemId)) {
+            return Promise.resolve({});
+        }
+
+        return ApiClient.prototype.getSyncStatus.call(this, itemId);
+    }
+
+    getThemeMedia(itemId, options) {
+
+        if (isLocalViewId(itemId) || isLocalId(itemId) || isTopLevelLocalViewId(itemId)) {
+
+            return Promise.resolve({
+                ThemeVideosResult: {
+                    Items: {},
+                    TotalRecordCount: 0
+                },
+                ThemeSongsResult: {
+                    Items: {},
+                    TotalRecordCount: 0
+                }
+            });
+        }
+
+        return ApiClient.prototype.getThemeMedia.call(this, itemId, options);
     }
 
     getSpecialFeatures(userId, itemId) {
@@ -523,14 +561,14 @@ export default class ApiClientEx extends ApiClient {
             const serverInfo = this.serverInfo();
 
             const action =
-                {
-                    Date: new Date().getTime(),
-                    ItemId: stripLocalPrefix(options.ItemId),
-                    PositionTicks: options.PositionTicks,
-                    ServerId: serverInfo.Id,
-                    Type: 0, // UserActionType.PlayedItem
-                    UserId: this.getCurrentUserId()
-                };
+            {
+                Date: new Date().getTime(),
+                ItemId: stripLocalPrefix(options.ItemId),
+                PositionTicks: options.PositionTicks,
+                ServerId: serverInfo.Id,
+                Type: 0, // UserActionType.PlayedItem
+                UserId: this.getCurrentUserId()
+            };
 
             return this.localAssetManager.recordUserAction(action);
         }
