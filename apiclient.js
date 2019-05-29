@@ -636,6 +636,34 @@ class ApiClient {
         }
     }
 
+    startMessageListener(name, options) {
+
+        this.sendMessage(name + "Start", options);
+
+        let list = this.messageListeners;
+
+        if (!list) {
+            this.messageListeners = list = [];
+        }
+
+        if (list.indexOf(name) === -1) {
+            list.push(name);
+        }
+    }
+
+    stopMessageListener(name) {
+
+        this.sendMessage(name + "Stop");
+
+        let list = this.messageListeners;
+
+        if (list && list.indexOf(name) !== -1) {
+            this.messageListeners = list = list.filter(function (n) {
+                return n !== name;
+            });
+        }
+    }
+
     isMessageChannelOpen() {
 
         return this.isWebSocketOpen();
@@ -4051,6 +4079,14 @@ function onWebSocketOpen() {
     const instance = this;
     console.log('web socket connection opened');
     events.trigger(instance, 'websocketopen');
+
+    let list = this.messageListeners;
+    if (list) {
+        list = list.slice(0);
+        for (let i = 0, length = list.length; i < length; i++) {
+            this.startMessageListener(list[i], "0,2000");
+        }
+    }
 }
 
 function onWebSocketError() {
