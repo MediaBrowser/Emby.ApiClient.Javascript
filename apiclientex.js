@@ -157,6 +157,8 @@ export default class ApiClientEx extends ApiClient {
                         m.Name = 'Downloaded version';
                     }
 
+                    m.Id += '_local';
+
                     return m;
                 });
 
