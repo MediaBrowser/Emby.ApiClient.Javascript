@@ -127,50 +127,55 @@ export default class ApiClientEx extends ApiClient {
 
         const promises = [];
 
-        if (isLocalId(itemId)) {
+        if (isLocalId(itemId) || (options && isLocalId(options.MediaSourceId))) {
             promises.push(Promise.resolve({ MediaSources: [] }));
         }
         else {
             promises.push(ApiClient.prototype.getPlaybackInfo.call(this, itemId, options, deviceProfile));
         }
 
-        promises.push(localdatabase.getLibraryItem(this.serverId(), stripLocalPrefix(itemId)).then(item => {
+        if (options && options.MediaSourceId && !isLocalId(options.MediaSourceId)) {
+            promises.push(Promise.resolve({ MediaSources: [] }));
+        }
+        else {
+            promises.push(localdatabase.getLibraryItem(this.serverId(), stripLocalPrefix(itemId)).then(function (item) {
 
-            if (item) {
+                if (item) {
 
-                const mediaSources = item.Item.MediaSources.map(m => {
+                    var mediaSources = item.Item.MediaSources.map(function (m) {
 
-                    if (options.AudioStreamIndex != null) {
-                        m.DefaultAudioStreamIndex = parseInt(options.AudioStreamIndex);
-                    }
+                        if (options.AudioStreamIndex != null) {
+                            m.DefaultAudioStreamIndex = parseInt(options.AudioStreamIndex);
+                        }
 
-                    if (options.SubtitleStreamIndex != null) {
-                        m.DefaultSubtitleStreamIndex = parseInt(options.SubtitleStreamIndex);
-                    }
+                        if (options.SubtitleStreamIndex != null) {
+                            m.DefaultSubtitleStreamIndex = parseInt(options.SubtitleStreamIndex);
+                        }
 
-                    m.SupportsDirectPlay = true;
-                    m.SupportsDirectStream = false;
-                    m.SupportsTranscoding = false;
-                    m.IsLocal = true;
+                        m.SupportsDirectPlay = true;
+                        m.SupportsDirectStream = false;
+                        m.SupportsTranscoding = false;
+                        m.IsLocal = true;
 
-                    if (!m.Name) {
-                        m.Name = 'Downloaded version';
-                    }
+                        if (!m.Name) {
+                            m.Name = 'Downloaded version';
+                        }
 
-                    m.Id += '_local';
+                        m.Id = localPrefix + m.Id;
 
-                    return m;
-                });
+                        return m;
+                    });
+
+                    return {
+                        MediaSources: mediaSources
+                    };
+                }
 
                 return {
-                    MediaSources: mediaSources
+                    MediaSources: []
                 };
-            }
-
-            return {
-                MediaSources: []
-            };
-        }));
+            }));
+        }
 
         return Promise.all(promises).then(results => {
 
