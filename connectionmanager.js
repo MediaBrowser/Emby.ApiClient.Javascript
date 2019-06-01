@@ -1480,7 +1480,11 @@ export default class ConnectionManager {
         for (let i = 0, length = servers.length; i < length; i++) {
             const server = servers[i];
             if (server.Id) {
-                this._getOrAddApiClient(server, getServerAddress(server, server.LastConnectionMode));
+
+                const serverUrl = getServerAddress(server, server.LastConnectionMode);
+                if (serverUrl) {
+                    this._getOrAddApiClient(server, serverUrl);
+                }
             }
         }
 
