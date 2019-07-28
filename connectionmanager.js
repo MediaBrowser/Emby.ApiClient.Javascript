@@ -552,7 +552,7 @@ export default class ConnectionManager {
 
                 const credentials = credentialProvider.credentials();
 
-                const servers = credentials.Servers.filter(u => u.UserLinkType !== "Guest");
+                const servers = credentials.Servers;
 
                 for (let j = 0, numServers = servers.length; j < numServers; j++) {
 
@@ -618,8 +618,8 @@ export default class ConnectionManager {
                 Id: i.SystemId,
                 Name: i.Name,
                 RemoteAddress: i.Url,
-                LocalAddress: i.LocalAddress,
-                UserLinkType: (i.UserType || '').toLowerCase() === "guest" ? "Guest" : "LinkedUser"
+                LocalAddress: i.LocalAddres
+
             })), () => credentials.Servers.slice(0).filter(s => s.ExchangeToken));
         }
 
