@@ -142,7 +142,7 @@ export default class ApiClientEx extends ApiClient {
 
                 if (item) {
 
-                    var mediaSources = item.Item.MediaSources.map(function (m) {
+                    const mediaSources = item.Item.MediaSources.map(function (m) {
 
                         if (options.AudioStreamIndex != null) {
                             m.DefaultAudioStreamIndex = parseInt(options.AudioStreamIndex);
@@ -157,9 +157,8 @@ export default class ApiClientEx extends ApiClient {
                         m.SupportsTranscoding = false;
                         m.IsLocal = true;
 
-                        if (!m.Name) {
-                            m.Name = 'Downloaded version';
-                        }
+                        // TODO: Should we actually replace the name, or just add an indicator that it is a downloaded copy?
+                        m.Name = 'Downloaded version';
 
                         m.Id = localPrefix + m.Id;
 
@@ -433,7 +432,7 @@ export default class ApiClientEx extends ApiClient {
         if (isLocalId(item.Id)) {
             if (item.MediaSources && item.MediaSources.length) {
 
-                var mediaSource = item.MediaSources[0];
+                const mediaSource = item.MediaSources[0];
                 return mediaSource.StreamUrl || mediaSource.Path;
             }
         }
