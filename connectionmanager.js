@@ -749,40 +749,29 @@ export default class ConnectionManager {
             });
         };
 
-        function getTryConnectPromise(url, connectionMode, state, resolve, reject) {
+        function tryReconnectToUrl(instance, url, connectionMode, delay) {
 
-            console.log('getTryConnectPromise ' + url);
+            var timeout = 15000;
 
-            ajax({
+            console.log('tryReconnectToUrl: ' + url);
 
-                url: self.getEmbyServerUrl(url, 'system/info/public'),
-                timeout: defaultTimeout,
-                type: 'GET',
-                dataType: 'json'
+            return setTimeoutPromise(delay).then(() => {
 
-            }).then((result) => {
+                return ajax({
 
-                if (!state.resolved) {
-                    state.resolved = true;
+                    url: instance.getEmbyServerUrl(url, 'system/info/public'),
+                    timeout: defaultTimeout,
+                    type: 'GET',
+                    dataType: 'json'
 
-                    console.log("Reconnect succeeded to " + url);
-                    resolve({
+                }).then((result) => {
+
+                    return {
                         url: url,
                         connectionMode: connectionMode,
                         data: result
-                    });
-                }
-
-            }, () => {
-
-                console.log("Reconnect failed to " + url);
-
-                if (!state.resolved) {
-                    state.rejects++;
-                    if (state.rejects >= state.numAddresses) {
-                        reject();
-                    }
-                }
+                    };
+                });
             });
         }
 
@@ -798,6 +787,14 @@ export default class ConnectionManager {
             return true;
         }
 
+        function setTimeoutPromise(timeout) {
+
+            return new Promise((resolve, reject) => {
+
+                setTimeout(resolve, timeout);
+            });
+        }
+
         function tryReconnect(instance, serverInfo) {
 
             const addresses = [];
@@ -806,15 +803,15 @@ export default class ConnectionManager {
             // the timeouts are a small hack to try and ensure the remote address doesn't resolve first
 
             // manualAddressOnly is used for the local web app that always connects to a fixed address
-            if (!serverInfo.manualAddressOnly && serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1 && allowAddress(instance, serverInfo.LocalAddress) {
+            if (!serverInfo.manualAddressOnly && serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1 && allowAddress(instance, serverInfo.LocalAddress)) {
                 addresses.push({ url: serverInfo.LocalAddress, mode: ConnectionMode.Local, timeout: 0 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
-            if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1 && allowAddress(instance, serverInfo.ManualAddress) {
+            if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1 && allowAddress(instance, serverInfo.ManualAddress)) {
                 addresses.push({ url: serverInfo.ManualAddress, mode: ConnectionMode.Manual, timeout: 100 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
-            if (!serverInfo.manualAddressOnly && serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1 && allowAddress(instance, serverInfo.RemoteAddress) {
+            if (!serverInfo.manualAddressOnly && serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1 && allowAddress(instance, serverInfo.RemoteAddress)) {
                 addresses.push({ url: serverInfo.RemoteAddress, mode: ConnectionMode.Remote, timeout: 200 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
@@ -825,21 +822,35 @@ export default class ConnectionManager {
                 return Promise.reject();
             }
 
+            const promises = [];
+
+            for (let i = 0, length = addresses.length; i < length; i++) {
+
+                promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].mode, addresses[i].timeout));
+            }
+
+            return onAnyResolveOrAllFail(promises);
+        }
+
+        function onAnyResolveOrAllFail(promises) {
+
             return new Promise((resolve, reject) => {
 
-                const state = {};
-                state.numAddresses = addresses.length;
-                state.rejects = 0;
+                let rejections = 0;
+                const numPromises = promises.length;
 
-                addresses.map((url) => {
+                const onReject = function (err) {
 
-                    setTimeout(() => {
-                        if (!state.resolved) {
-                            getTryConnectPromise(url.url, url.mode, state, resolve, reject);
-                        }
+                    rejections++;
+                    if (rejections >= numPromises) {
+                        reject(err);
+                    }
+                };
 
-                    }, url.timeout);
-                });
+                for (let i = 0; i < numPromises; i++) {
+
+                    promises[i].then(resolve, onReject);
+                }
             });
         }
 
