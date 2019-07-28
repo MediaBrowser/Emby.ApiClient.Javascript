@@ -945,8 +945,11 @@ export default class ConnectionManager {
             connectionMode,
             serverUrl,
             verifyLocalAuthentication,
-            options = {},
+            options,
             resolve) {
+
+            options = options || {};
+
             if (options.enableAutoLogin === false) {
 
                 server.UserId = null;
