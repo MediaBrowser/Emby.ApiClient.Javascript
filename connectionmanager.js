@@ -340,6 +340,8 @@ export default class ConnectionManager {
 
                 apiClient = new apiClientFactory(appStorage, wakeOnLanFn, serverUrl, appName, appVersion, deviceName, deviceId, devicePixelRatio);
 
+                apiClient.rejectInsecureAddresses = self.rejectInsecureAddresses;
+
                 self._apiClients.push(apiClient);
 
                 apiClient.serverInfo(server);
@@ -788,7 +790,19 @@ export default class ConnectionManager {
             });
         }
 
-        function tryReconnect(serverInfo) {
+        function allowAddress(instance, address) {
+
+            if (instance.rejectInsecureAddresses) {
+
+                if (address.indexOf('https:') !== 0) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        function tryReconnect(instance, serverInfo) {
 
             const addresses = [];
             const addressesStrings = [];
@@ -796,20 +810,24 @@ export default class ConnectionManager {
             // the timeouts are a small hack to try and ensure the remote address doesn't resolve first
 
             // manualAddressOnly is used for the local web app that always connects to a fixed address
-            if (!serverInfo.manualAddressOnly && serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1) {
+            if (!serverInfo.manualAddressOnly && serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1 && allowAddress(instance, serverInfo.LocalAddress) {
                 addresses.push({ url: serverInfo.LocalAddress, mode: ConnectionMode.Local, timeout: 0 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
-            if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1) {
+            if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1 && allowAddress(instance, serverInfo.ManualAddress) {
                 addresses.push({ url: serverInfo.ManualAddress, mode: ConnectionMode.Manual, timeout: 100 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
-            if (!serverInfo.manualAddressOnly && serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1) {
+            if (!serverInfo.manualAddressOnly && serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1 && allowAddress(instance, serverInfo.RemoteAddress) {
                 addresses.push({ url: serverInfo.RemoteAddress, mode: ConnectionMode.Remote, timeout: 200 });
                 addressesStrings.push(addresses[addresses.length - 1].url);
             }
 
             console.log('tryReconnect: ' + addressesStrings.join('|'));
+
+            if (!addressesStrings.length) {
+                return Promise.reject();
+            }
 
             return new Promise((resolve, reject) => {
 
@@ -852,13 +870,13 @@ export default class ConnectionManager {
 
                 options = options || {};
 
-                tryReconnect(server).then((result) => {
+                tryReconnect(self, server).then((result) => {
 
                     const serverUrl = result.url;
                     const connectionMode = result.connectionMode;
                     result = result.data;
 
-                    if (compareVersions(self.minServerVersion(), result.Version) === 1) {
+                    if (compareVersions(self.minServerVersion(), result.Version) === 1 || compareVersions(result.Version, '8.0') === 1) {
 
                         console.log('minServerVersion requirement not met. Server version: ' + result.Version);
                         resolve({
