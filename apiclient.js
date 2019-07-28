@@ -113,8 +113,9 @@ function onNetworkChanged(instance, resetAddress) {
     if (resetAddress) {
 
         const serverInfo = instance.serverInfo();
-        if (serverInfo.LocalAddress) {
-            instance._serverAddress = serverInfo.LocalAddress;
+        const newAddress = getFirstValidAddress(instance, serverInfo);
+        if (newAddress) {
+            instance._serverAddress = newAddress;
         }
     }
 
@@ -124,6 +125,20 @@ function onNetworkChanged(instance, resetAddress) {
 
     redetectBitrate(instance);
     refreshWakeOnLanInfoIfNeeded(instance);
+}
+
+function getFirstValidAddress(instance, serverInfo) {
+
+    if (serverInfo.LocalAddress && allowAddress(instance, serverInfo.LocalAddress)) {
+        return serverInfo.LocalAddress;
+    }
+    if (serverInfo.ManualAddress && allowAddress(instance, serverInfo.ManualAddress)) {
+        return serverInfo.ManualAddress;
+    }
+    if (serverInfo.RemoteAddress && allowAddress(instance, serverInfo.RemoteAddress)) {
+        return serverInfo.RemoteAddress;
+    }
+    return null;
 }
 
 function saveUserInCache(appStorage, user) {
@@ -658,7 +673,7 @@ class ApiClient {
         let list = this.messageListeners;
 
         if (list && list.indexOf(name) !== -1) {
-            this.messageListeners = list = list.filter(function (n) {
+            this.messageListeners = list = list.filter((n) => {
                 return n !== name;
             });
         }
@@ -2123,7 +2138,7 @@ class ApiClient {
         return this.getJSON(url);
     }
 
-    getItemDownloadUrl(itemId) {
+    getItemDownloadUrl(itemId, mediaSourceId) {
 
         if (!itemId) {
             throw new Error("itemId cannot be empty");
@@ -2132,7 +2147,8 @@ class ApiClient {
         const url = `Items/${itemId}/Download`;
 
         return this.getUrl(url, {
-            api_key: this.accessToken()
+            api_key: this.accessToken(),
+            mediaSourceId: mediaSourceId
         });
     }
 
@@ -3951,26 +3967,42 @@ function getTryConnectPromise(instance, url, state, resolve, reject) {
     });
 }
 
+function allowAddress(instance, address) {
+
+    if (instance.rejectInsecureAddresses) {
+
+        if (address.indexOf('https:') !== 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 function tryReconnectInternal(instance) {
 
     const addresses = [];
     const addressesStrings = [];
 
     const serverInfo = instance.serverInfo();
-    if (serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1) {
+    if (serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1 && allowAddress(instance, serverInfo.LocalAddress)) {
         addresses.push({ url: serverInfo.LocalAddress, timeout: 0 });
         addressesStrings.push(addresses[addresses.length - 1].url);
     }
-    if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1) {
+    if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1 && allowAddress(instance, serverInfo.ManualAddress)) {
         addresses.push({ url: serverInfo.ManualAddress, timeout: 100 });
         addressesStrings.push(addresses[addresses.length - 1].url);
     }
-    if (serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1) {
+    if (serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1 && allowAddress(instance, serverInfo.RemoteAddress)) {
         addresses.push({ url: serverInfo.RemoteAddress, timeout: 200 });
         addressesStrings.push(addresses[addresses.length - 1].url);
     }
 
     console.log('tryReconnect: ' + addressesStrings.join('|'));
+
+    if (!addressesStrings.length) {
+        return Promise.reject();
+    }
 
     return new Promise((resolve, reject) => {
 
