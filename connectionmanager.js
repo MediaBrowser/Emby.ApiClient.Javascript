@@ -165,10 +165,6 @@ function ajax(request) {
             return Promise.reject(response);
         }
 
-    }, err => {
-
-        console.log(`ConnectionManager request failed to url: ${request.url}`);
-        throw err;
     });
 }
 
@@ -1108,11 +1104,7 @@ export default class ConnectionManager {
 
             }).catch(response => {
 
-                try {
-                    return response.json();
-                } catch (err) {
-                    throw err;
-                }
+                return response.json();
 
             }).then(result => {
                 if (result && result.Status) {
