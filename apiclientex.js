@@ -457,11 +457,11 @@ export default class ApiClientEx extends ApiClient {
 
             return Promise.resolve({
                 ThemeVideosResult: {
-                    Items: {},
+                    Items: [],
                     TotalRecordCount: 0
                 },
                 ThemeSongsResult: {
-                    Items: {},
+                    Items: [],
                     TotalRecordCount: 0
                 }
             });

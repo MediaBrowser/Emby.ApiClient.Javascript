@@ -1,25 +1,5 @@
 ﻿import events from './events.js';
 
-function redetectBitrate(instance) {
-    stopBitrateDetection(instance);
-
-    if (instance.accessToken() && instance.enableAutomaticBitrateDetection !== false) {
-        setTimeout(redetectBitrateInternal.bind(instance), 6000);
-    }
-}
-
-function redetectBitrateInternal() {
-    if (this.accessToken()) {
-        this.detectBitrate();
-    }
-}
-
-function stopBitrateDetection(instance) {
-    if (instance.detectTimeout) {
-        clearTimeout(instance.detectTimeout);
-    }
-}
-
 function replaceAll(originalString, strReplace, strWith) {
     const reg = new RegExp(strReplace, 'ig');
     return originalString.replace(reg, strWith);
@@ -119,12 +99,7 @@ function onNetworkChanged(instance, resetAddress) {
         }
     }
 
-    instance.lastDetectedBitrate = 0;
-    instance.lastDetectedBitrateTime = 0;
     setSavedEndpointInfo(instance, null);
-
-    redetectBitrate(instance);
-    refreshWakeOnLanInfoIfNeeded(instance);
 }
 
 function getFirstValidAddress(instance, serverInfo) {
@@ -312,8 +287,6 @@ class ApiClient {
 
         return getFetchPromise(request).then(response => {
 
-            instance.lastFetch = new Date().getTime();
-
             if (response.status < 400) {
 
                 if (request.dataType === 'json' || request.headers.accept === 'application/json') {
@@ -330,9 +303,9 @@ class ApiClient {
         }, error => {
 
             if (error) {
-                console.log(`Request failed to ${request.url} ${error.toString()}`);
+                console.log("Request failed to " + request.url + ' ' + (error.status || '') + ' ' + error.toString());
             } else {
-                console.log(`Request timed out to ${request.url}`);
+                console.log("Request timed out to " + request.url);
             }
 
             // http://api.jquery.com/jQuery.ajax/		     
@@ -341,17 +314,13 @@ class ApiClient {
 
                 const previousServerAddress = instance.serverAddress();
 
-                return tryReconnect(instance).then(() => {
+                return tryReconnect(instance).then((newServerAddress) => {
 
-                    console.log("Reconnect succeesed");
-                    request.url = request.url.replace(previousServerAddress, instance.serverAddress());
+                    console.log("Reconnect succeeded");
+
+                    request.url = request.url.replace(previousServerAddress, newServerAddress);
 
                     return instance.fetchWithFailover(request, false);
-
-                }, innerError => {
-
-                    console.log("Reconnect failed");
-                    throw innerError;
                 });
 
             } else {
@@ -385,8 +354,6 @@ class ApiClient {
             const instance = this;
             return getFetchPromise(request).then(response => {
 
-                instance.lastFetch = new Date().getTime();
-
                 if (response.status < 400) {
 
                     if (request.dataType === 'json' || request.headers.accept === 'application/json') {
@@ -400,8 +367,6 @@ class ApiClient {
                     return Promise.reject(response);
                 }
 
-            }, error => {
-                throw error;
             });
         }
 
@@ -416,7 +381,6 @@ class ApiClient {
         }
 
         this._serverInfo.UserId = userId;
-        redetectBitrate(this);
         refreshWakeOnLanInfoIfNeeded(this);
     }
 
@@ -508,7 +472,6 @@ class ApiClient {
 
     logout() {
 
-        stopBitrateDetection(this);
         this.closeWebSocket();
 
         const done = () => {
@@ -563,7 +526,6 @@ class ApiClient {
                 saveUserInCache(instance.appStorage, result.User);
 
                 const afterOnAuthenticated = () => {
-                    redetectBitrate(instance);
                     refreshWakeOnLanInfoIfNeeded(instance);
                     resolve(result);
                 };
@@ -781,40 +743,17 @@ class ApiClient {
         return this.getJSON(url);
     }
 
-    getDownloadSpeed(byteSize) {
-
-        const url = this.getUrl('Playback/BitrateTest', {
-
-            Size: byteSize
-        });
-
-        const now = new Date().getTime();
-
-        return this.ajax({
-
-            type: "GET",
-            url,
-            timeout: 5000
-
-        }).then(() => {
-
-            const responseTimeSeconds = (new Date().getTime() - now) / 1000;
-            const bytesPerSecond = byteSize / responseTimeSeconds;
-            const bitrate = Math.round(bytesPerSecond * 8);
-
-            return bitrate;
-        });
-    }
-
     detectBitrate(force) {
-
-        if (!force && this.lastDetectedBitrate && (new Date().getTime() - (this.lastDetectedBitrateTime || 0)) <= 3600000) {
-            return Promise.resolve(this.lastDetectedBitrate);
-        }
 
         const instance = this;
 
-        return this.getEndpointInfo().then(info => detectBitrateWithEndpointInfo(instance, info), info => detectBitrateWithEndpointInfo(instance, {}));
+        return this.getEndpointInfo().then((info) => {
+
+            return detectBitrateWithEndpointInfo(instance, info);
+        }, () => {
+
+            return detectBitrateWithEndpointInfo(instance, {});
+        });
     }
 
     /**
@@ -1268,7 +1207,7 @@ class ApiClient {
         });
     }
 
-    getSyncStatus() {
+    getSyncStatus(itemId) {
 
         const url = this.getUrl("Sync/" + itemId + "/Status");
 
@@ -1683,7 +1622,7 @@ class ApiClient {
         const url = this.getUrl("Encoding/HardwareAccelerations");
 
         return this.getJSON(url);
-    };
+    }
 
     /**
        Gets available video codecs
@@ -1693,7 +1632,7 @@ class ApiClient {
         const url = this.getUrl("Encoding/CodecInformation/Video");
 
         return this.getJSON(url);
-    };
+    }
 
     /**
      * Gets the server's scheduled tasks
@@ -2317,7 +2256,7 @@ class ApiClient {
         }, response => {
 
             // if timed out, look for cached value
-            if (!response.status) {
+            if (!response || !response.status) {
 
                 if (instance.accessToken()) {
                     const user = getCachedUser(instance, id);
@@ -3015,7 +2954,7 @@ class ApiClient {
         return this.getJSON(this.getUrl('Shows/Upcoming', options));
     }
 
-    getUserViews(options = {}, userId) {
+    getUserViews(options, userId) {
 
         const currentUserId = this.getCurrentUserId();
         userId = userId || currentUserId;
@@ -3579,7 +3518,6 @@ class ApiClient {
 
         this.lastPlaybackProgressReport = 0;
         this.lastPlaybackProgressReportTicks = null;
-        stopBitrateDetection(this);
 
         const url = this.getUrl("Sessions/Playing");
 
@@ -3731,7 +3669,6 @@ class ApiClient {
 
         this.lastPlaybackProgressReport = 0;
         this.lastPlaybackProgressReportTicks = null;
-        redetectBitrate(this);
 
         const url = this.getUrl("Sessions/Playing/Stopped");
 
@@ -3932,38 +3869,25 @@ function setSavedEndpointInfo(instance, info) {
     instance._endPointInfo = info;
 }
 
-function getTryConnectPromise(instance, url, state, resolve, reject) {
+function tryReconnectToUrl(instance, url, delay) {
 
-    console.log('getTryConnectPromise ' + url);
+    const timeout = 15000;
 
-    fetchWithTimeout(instance.getUrl('system/info/public', null, url), {
+    console.log('tryReconnectToUrl: ' + url);
 
-        method: 'GET',
-        accept: 'application/json'
+    return setTimeoutPromise(delay).then(() => {
+        return fetchWithTimeout(instance.getUrl('system/info/public', null, url), {
 
-        // Commenting this out since the fetch api doesn't have a timeout option yet
-        //timeout: timeout
+            method: 'GET',
+            accept: 'application/json'
 
-    }, 15000).then(() => {
+            // Commenting this out since the fetch api doesn't have a timeout option yet
+            //timeout: timeout
 
-        if (!state.resolved) {
-            state.resolved = true;
+        }, timeout).then(() => {
 
-            console.log("Reconnect succeeded to " + url);
-            instance.serverAddress(url);
-            resolve();
-        }
-
-    }, () => {
-
-        if (!state.resolved) {
-            console.log("Reconnect failed to " + url);
-
-            state.rejects++;
-            if (state.rejects >= state.numAddresses) {
-                reject();
-            }
-        }
+            return url;
+        });
     });
 }
 
@@ -3977,6 +3901,14 @@ function allowAddress(instance, address) {
     }
 
     return true;
+}
+
+function setTimeoutPromise(timeout) {
+
+    return new Promise((resolve, reject) => {
+
+        setTimeout(resolve, timeout);
+    });
 }
 
 function tryReconnectInternal(instance) {
@@ -4004,22 +3936,38 @@ function tryReconnectInternal(instance) {
         return Promise.reject();
     }
 
+    const promises = [];
+
+    for (let i = 0, length = addresses.length; i < length; i++) {
+
+        promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].timeout));
+    }
+
+    return onAnyResolveOrAllFail(promises).then((url) => {
+        instance.serverAddress(url);
+        return Promise.resolve(url);
+    });
+}
+
+function onAnyResolveOrAllFail(promises) {
+
     return new Promise((resolve, reject) => {
 
-        const state = {};
-        state.numAddresses = addresses.length;
-        state.rejects = 0;
+        let rejections = 0;
+        const numPromises = promises.length;
 
-        addresses.map((url) => {
+        const onReject = function (err) {
 
-            setTimeout(() => {
+            rejections++;
+            if (rejections >= numPromises) {
+                reject(err);
+            }
+        };
 
-                if (!state.resolved) {
-                    getTryConnectPromise(instance, url.url, state, resolve, reject);
-                }
+        for (let i = 0; i < numPromises; i++) {
 
-            }, url.timeout);
-        });
+            promises[i].then(resolve, onReject);
+        }
     });
 }
 
@@ -4027,19 +3975,18 @@ function tryReconnect(instance, retryCount) {
 
     retryCount = retryCount || 0;
 
-    if (retryCount >= 5) {
-        return Promise.reject();
+    const promise = tryReconnectInternal(instance);
+
+    if (retryCount >= 4) {
+        return promise;
     }
 
-    return tryReconnectInternal(instance).catch((err) => {
+    return promise.catch((err) => {
 
         console.log('error in tryReconnectInternal: ' + (err || ''));
 
-        return new Promise((resolve, reject) => {
-
-            setTimeout(() => {
-                tryReconnect(instance, retryCount + 1).then(resolve, reject);
-            }, 500);
+        return setTimeoutPromise(500).then(() => {
+            return tryReconnect(instance, retryCount + 1);
         });
     });
 }
@@ -4144,78 +4091,22 @@ function setSocketOnClose(apiClient, socket) {
     };
 }
 
-function normalizeReturnBitrate(instance, bitrate) {
-
-    if (!bitrate) {
-
-        if (instance.lastDetectedBitrate) {
-            return instance.lastDetectedBitrate;
-        }
-
-        return Promise.reject();
-    }
-
-    let result = Math.round(bitrate * 0.7);
-
-    // allow configuration of this
-    if (instance.getMaxBandwidth) {
-
-        const maxRate = instance.getMaxBandwidth();
-        if (maxRate) {
-            result = Math.min(result, maxRate);
-        }
-    }
-
-    instance.lastDetectedBitrate = result;
-    instance.lastDetectedBitrateTime = new Date().getTime();
-
-    return result;
-}
-
-function detectBitrateInternal(instance, tests, index, currentBitrate) {
-
-    if (index >= tests.length) {
-
-        return normalizeReturnBitrate(instance, currentBitrate);
-    }
-
-    const test = tests[index];
-
-    return instance.getDownloadSpeed(test.bytes).then(bitrate => {
-
-        if (bitrate < test.threshold) {
-
-            return normalizeReturnBitrate(instance, bitrate);
-        } else {
-            return detectBitrateInternal(instance, tests, index + 1, bitrate);
-        }
-
-    }, () => normalizeReturnBitrate(instance, currentBitrate));
-}
-
 function detectBitrateWithEndpointInfo(instance, endpointInfo) {
 
     if (endpointInfo.IsInNetwork) {
 
-        const result = 140000000;
-        instance.lastDetectedBitrate = result;
-        instance.lastDetectedBitrateTime = new Date().getTime();
-        return result;
+        return 140000000;
     }
 
-    return detectBitrateInternal(instance, [
-        {
-            bytes: 500000,
-            threshold: 500000
-        },
-        {
-            bytes: 1000000,
-            threshold: 20000000
-        },
-        {
-            bytes: 3000000,
-            threshold: 50000000
-        }], 0);
+    if (instance.getMaxBandwidth) {
+
+        const maxRate = instance.getMaxBandwidth();
+        if (maxRate) {
+            return maxRate;
+        }
+    }
+
+    return 1500000;
 }
 
 function getRemoteImagePrefix(instance, options) {
