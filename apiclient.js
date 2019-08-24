@@ -2250,7 +2250,7 @@ class ApiClient {
 
         const serverPromise = this.getJSON(url).then(user => {
 
-            saveUserInCache(user);
+            saveUserInCache(this.appStorage, user);
             return user;
 
         }, response => {
