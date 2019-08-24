@@ -55,8 +55,6 @@ export default class Credentials {
                 server.DateLastAccessed || 0
             );
 
-            existing.UserLinkType = server.UserLinkType;
-
             if (server.AccessToken) {
                 existing.AccessToken = server.AccessToken;
                 existing.UserId = server.UserId;
