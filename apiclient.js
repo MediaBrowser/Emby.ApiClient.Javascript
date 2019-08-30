@@ -92,6 +92,8 @@ function onNetworkChanged(instance, resetAddress) {
 
     if (resetAddress) {
 
+        instance.connected = false;
+
         const serverInfo = instance.serverInfo();
         const newAddress = getFirstValidAddress(instance, serverInfo);
         if (newAddress) {
@@ -117,6 +119,9 @@ function getFirstValidAddress(instance, serverInfo) {
 }
 
 function saveUserInCache(appStorage, user) {
+
+    setUserProperties(user);
+
     user.DateLastFetched = new Date().getTime();
     appStorage.setItem(getUserCacheKey(user.Id, user.ServerId), JSON.stringify(user));
 }
@@ -126,6 +131,23 @@ function removeCachedUser(appStorage, userId, serverId) {
 }
 
 let startingPlaySession = new Date().getTime();
+
+function mapVirtualFolder(item) {
+
+    item.Type = 'VirtualFolder';
+    item.Id = item.ItemId;
+    item.IsFolder = true;
+}
+
+function setUsersProperties(response) {
+
+    response.forEach(setUserProperties);
+    return Promise.resolve(response);
+}
+
+function setUserProperties(user) {
+    user.Type = 'User';
+}
 
 /**
  * Creates a new api client instance
@@ -287,6 +309,8 @@ class ApiClient {
 
         return getFetchPromise(request).then(response => {
 
+            instance.connected = true;
+
             if (response.status < 400) {
 
                 if (request.dataType === 'json' || request.headers.accept === 'application/json') {
@@ -317,6 +341,11 @@ class ApiClient {
                 return tryReconnect(instance).then((newServerAddress) => {
 
                     console.log("Reconnect succeeded");
+                    instance.connected = true;
+
+                    if (instance.enableWebSocketAutoConnect) {
+                        instance.ensureWebSocket();
+                    }
 
                     request.url = request.url.replace(previousServerAddress, newServerAddress);
 
@@ -541,6 +570,10 @@ class ApiClient {
     }
 
     ensureWebSocket() {
+
+        if (!this.connected) {
+            return;
+        }
 
         if (this.isWebSocketOpenOrConnecting() || !this.isWebSocketSupported()) {
             return;
@@ -1561,8 +1594,18 @@ class ApiClient {
         let url = "Library/VirtualFolders";
 
         url = this.getUrl(url);
+        const serverId = this.serverId();
 
-        return this.getJSON(url);
+        return this.getJSON(url).then((items) => {
+
+            for (let i = 0, length = items.length; i < length; i++) {
+                let item = items[i];
+
+                mapVirtualFolder(item);
+                item.ServerId = serverId;
+            }
+            return items;
+        });
     }
 
     /**
@@ -2401,7 +2444,7 @@ class ApiClient {
             url,
             dataType: "json"
 
-        }, true, false);
+        }, true, false).then(setUsersProperties);
     }
 
     /**
@@ -2411,7 +2454,7 @@ class ApiClient {
 
         const url = this.getUrl("users", options || {});
 
-        return this.getJSON(url);
+        return this.getJSON(url).then(setUsersProperties);
     }
 
     /**
@@ -4006,7 +4049,13 @@ function getCachedUser(instance, userId) {
     const json = instance.appStorage.getItem(getUserCacheKey(userId, serverId));
 
     if (json) {
-        return JSON.parse(json);
+        const user = JSON.parse(json);
+
+        if (user) {
+            setUserProperties(user);
+        }
+
+        return user;
     }
 
     return null;

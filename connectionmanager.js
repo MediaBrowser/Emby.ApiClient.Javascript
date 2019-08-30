@@ -405,10 +405,12 @@ export default class ConnectionManager {
                 apiClient.reportCapabilities(capabilities);
             }
             apiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
+            apiClient.enableWebSocketAutoConnect = options.enableWebSocket !== false;
 
-            if (options.enableWebSocket !== false) {
+            if (apiClient.enableWebSocketAutoConnect) {
                 console.log('calling apiClient.ensureWebSocket');
 
+                apiClient.connected = true;
                 apiClient.ensureWebSocket();
             }
         }
@@ -1485,6 +1487,14 @@ export default class ConnectionManager {
         const apiClients = this._apiClients;
         for (let i = 0, length = apiClients.length; i < length; i++) {
             apiClients[i].onNetworkChanged();
+        }
+    }
+
+    onAppResume() {
+
+        const apiClients = this._apiClients;
+        for (let i = 0, length = apiClients.length; i < length; i++) {
+            apiClients[i].ensureWebSocket();
         }
     }
 
