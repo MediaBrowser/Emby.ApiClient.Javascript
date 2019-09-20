@@ -108,6 +108,16 @@ function getFetchPromise(request) {
     return fetchWithTimeout(request.url, fetchRequest, request.timeout);
 }
 
+function sortServers(a, b) {
+    return (b.DateLastAccessed || 0) - (a.DateLastAccessed || 0);
+}
+
+function setServerProperties(server) {
+
+    // These are convenience properties for the UI
+    server.Type = 'Server';
+}
+
 function fetchWithTimeout(url, options, timeoutMs) {
 
     console.log(`fetchWithTimeout: timeoutMs: ${timeoutMs}, url: ${url}`);
@@ -244,7 +254,7 @@ export default class ConnectionManager {
         let connectUser;
         self.connectUser = () => connectUser;
 
-        self._minServerVersion = '3.5.2';
+        self._minServerVersion = '3.5.3';
 
         self.appVersion = () => appVersion;
 
@@ -271,7 +281,7 @@ export default class ConnectionManager {
 
             const servers = credentialProvider.credentials().Servers;
 
-            servers.sort((a, b) => (b.DateLastAccessed || 0) - (a.DateLastAccessed || 0));
+            servers.sort(sortServers);
 
             if (!servers.length) {
                 return null;
@@ -280,13 +290,18 @@ export default class ConnectionManager {
             return servers[0];
         };
 
-        self.addApiClient = apiClient => {
+        self.addApiClient = (apiClient, isOnlyServer) => {
 
             self._apiClients.push(apiClient);
 
-            const existingServers = credentialProvider.credentials().Servers.filter(s => stringEqualsIgnoreCase(s.ManualAddress, apiClient.serverAddress()) ||
-                stringEqualsIgnoreCase(s.LocalAddress, apiClient.serverAddress()) ||
-                stringEqualsIgnoreCase(s.RemoteAddress, apiClient.serverAddress()));
+            const currentServers = credentialProvider.credentials().Servers;
+            const existingServers = currentServers.filter(function (s) {
+
+                return stringEqualsIgnoreCase(s.ManualAddress, apiClient.serverAddress()) ||
+                    stringEqualsIgnoreCase(s.LocalAddress, apiClient.serverAddress()) ||
+                    stringEqualsIgnoreCase(s.RemoteAddress, apiClient.serverAddress());
+
+            });
 
             const existingServer = existingServers.length ? existingServers[0] : apiClient.serverInfo();
             existingServer.DateLastAccessed = new Date().getTime();
@@ -301,7 +316,7 @@ export default class ConnectionManager {
 
             apiClient.onAuthenticated = onAuthenticated;
 
-            if (!existingServers.length) {
+            if (!existingServers.length || isOnlyServer) {
                 const credentials = credentialProvider.credentials();
                 credentials.Servers = [existingServer];
                 credentialProvider.credentials(credentials);
@@ -629,7 +644,8 @@ export default class ConnectionManager {
 
             const servers = credentials.Servers.slice(0);
 
-            servers.sort((a, b) => (b.DateLastAccessed || 0) - (a.DateLastAccessed || 0));
+            servers.forEach(setServerProperties);
+            servers.sort(sortServers);
 
             return servers;
         };
@@ -652,7 +668,8 @@ export default class ConnectionManager {
 
                 servers = filterServers(servers, connectServers);
 
-                servers.sort((a, b) => (b.DateLastAccessed || 0) - (a.DateLastAccessed || 0));
+                servers.forEach(setServerProperties);
+                servers.sort(sortServers);
 
                 credentials.Servers = servers;
 
@@ -752,8 +769,6 @@ export default class ConnectionManager {
         };
 
         function tryReconnectToUrl(instance, url, connectionMode, delay) {
-
-            var timeout = 15000;
 
             console.log('tryReconnectToUrl: ' + url);
 
@@ -894,7 +909,7 @@ export default class ConnectionManager {
                         });
 
                     }
-                    else if (server.Id && result.Id !== server.Id) {
+                    else if (server.Id && result.Id !== server.Id && self.validateServerIds !== false) {
 
                         console.log('http request succeeded, but found a different server Id than what was expected');
                         resolveFailure(self, resolve);
@@ -1531,19 +1546,32 @@ export default class ConnectionManager {
             throw new Error('item or serverId cannot be null');
         }
 
+        let serverId;
+
         // Accept string + object
         if (item.ServerId) {
-            item = item.ServerId;
+            serverId = item.ServerId;
+        }
+        else if (item.Id && item.Type === 'Server') {
+            serverId = item.Id;
+        } else {
+            serverId = item;
         }
 
-        return this._apiClients.filter(a => {
+        const apiClients = this._apiClients;
 
-            const serverInfo = a.serverInfo();
+        for (var i = 0, length = apiClients.length; i < length; i++) {
+
+            let apiClient = apiClients[i];
+            let serverInfo = apiClient.serverInfo();
 
             // We have to keep this hack in here because of the addApiClient method
-            return !serverInfo || serverInfo.Id === item;
+            if (!serverInfo || serverInfo.Id === serverId) {
+                return apiClient;
+            }
+        }
 
-        })[0];
+        return null;
     }
 
     minServerVersion(val) {

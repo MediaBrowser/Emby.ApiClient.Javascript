@@ -4020,7 +4020,7 @@ function tryReconnect(instance, retryCount) {
 
     const promise = tryReconnectInternal(instance);
 
-    if (retryCount >= 4) {
+    if (retryCount >= 2) {
         return promise;
     }
 
