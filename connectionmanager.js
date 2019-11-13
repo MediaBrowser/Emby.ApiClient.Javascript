@@ -232,6 +232,11 @@ function compareVersions(a, b) {
     return 0;
 }
 
+function onCredentialsSaved(e, data) {
+
+    events.trigger(this, 'credentialsupdated', [data]);
+}
+
 export default class ConnectionManager {
     constructor(
         credentialProvider,
@@ -247,6 +252,8 @@ export default class ConnectionManager {
         devicePixelRatio) {
 
         console.log('Begin ConnectionManager constructor');
+
+        events.on(credentialProvider, 'credentialsupdated', onCredentialsSaved.bind(this));
 
         const self = this;
         this._apiClients = [];
@@ -1371,7 +1378,7 @@ export default class ConnectionManager {
                     return Promise.reject('overlimit');
                 }
 
-                if (status) {
+                if (status && status < 500) {
                     return Promise.reject();
                 }
                 return onFailure(response);
