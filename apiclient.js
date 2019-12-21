@@ -4155,7 +4155,7 @@ function detectBitrateWithEndpointInfo(instance, endpointInfo) {
         }
     }
 
-    return 1500000;
+    return 3000000;
 }
 
 function getRemoteImagePrefix(instance, options) {
