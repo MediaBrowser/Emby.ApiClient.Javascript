@@ -69,7 +69,7 @@ function updateServerInfo(server, systemInfo) {
     }
 }
 
-function getFetchPromise(request) {
+function getFetchPromise(request, signal) {
 
     const headers = request.headers || {};
 
@@ -78,10 +78,29 @@ function getFetchPromise(request) {
     }
 
     const fetchRequest = {
-        headers,
+        headers: headers,
         method: request.type,
         credentials: 'same-origin'
     };
+
+    if (request.timeout) {
+
+        const abortController = new AbortController();
+
+        const boundAbort = abortController.abort.bind(abortController);
+
+        if (signal) {
+            signal.addEventListener('abort', boundAbort);
+        }
+
+        setTimeout(boundAbort, request.timeout);
+
+        signal = abortController.signal;
+    }
+
+    if (signal) {
+        fetchRequest.signal = signal;
+    }
 
     let contentType = request.contentType;
 
@@ -101,11 +120,7 @@ function getFetchPromise(request) {
         headers['Content-Type'] = contentType;
     }
 
-    if (!request.timeout) {
-        return fetch(request.url, fetchRequest);
-    }
-
-    return fetchWithTimeout(request.url, fetchRequest, request.timeout);
+    return fetch(request.url, fetchRequest);
 }
 
 function sortServers(a, b) {
@@ -118,35 +133,7 @@ function setServerProperties(server) {
     server.Type = 'Server';
 }
 
-function fetchWithTimeout(url, options, timeoutMs) {
-
-    console.log(`fetchWithTimeout: timeoutMs: ${timeoutMs}, url: ${url}`);
-
-    return new Promise((resolve, reject) => {
-
-        const timeout = setTimeout(reject, timeoutMs);
-
-        options = options || {};
-        options.credentials = 'same-origin';
-
-        fetch(url, options).then(response => {
-            clearTimeout(timeout);
-
-            console.log(`fetchWithTimeout: succeeded connecting to url: ${url}`);
-
-            resolve(response);
-        }, error => {
-
-            clearTimeout(timeout);
-
-            console.log(`fetchWithTimeout: timed out connecting to url: ${url}`);
-
-            reject();
-        });
-    });
-}
-
-function ajax(request) {
+function ajax(request, signal) {
 
     if (!request) {
         throw new Error("Request cannot be null");
@@ -156,7 +143,7 @@ function ajax(request) {
 
     console.log(`ConnectionManager requesting url: ${request.url}`);
 
-    return getFetchPromise(request).then(response => {
+    return getFetchPromise(request, signal).then(response => {
 
         console.log(`ConnectionManager response status: ${response.status}, url: ${request.url}`);
 
@@ -239,10 +226,10 @@ function onCredentialsSaved(e, data) {
 
 function onUserDataUpdated(userData) {
 
-    var obj = this;
-    var instance = obj.instance;
-    var itemId = obj.itemId;
-    var userId = obj.userId;
+    const obj = this;
+    const instance = obj.instance;
+    const itemId = obj.itemId;
+    const userId = obj.userId;
 
     userData.ItemId = itemId;
 
@@ -257,6 +244,14 @@ function onUserDataUpdated(userData) {
         }
 
     }]);
+}
+
+function setTimeoutPromise(timeout) {
+
+    return new Promise(function (resolve, reject) {
+
+        setTimeout(resolve, timeout);
+    });
 }
 
 export default class ConnectionManager {
@@ -795,7 +790,7 @@ export default class ConnectionManager {
             });
         };
 
-        function tryReconnectToUrl(instance, url, connectionMode, delay) {
+        function tryReconnectToUrl(instance, url, connectionMode, delay, signal) {
 
             console.log('tryReconnectToUrl: ' + url);
 
@@ -808,7 +803,7 @@ export default class ConnectionManager {
                     type: 'GET',
                     dataType: 'json'
 
-                }).then((result) => {
+                }, signal).then((result) => {
 
                     return {
                         url: url,
@@ -839,7 +834,7 @@ export default class ConnectionManager {
             });
         }
 
-        function tryReconnect(instance, serverInfo) {
+        function tryReconnect(instance, serverInfo, signal) {
 
             const addresses = [];
             const addressesStrings = [];
@@ -870,7 +865,7 @@ export default class ConnectionManager {
 
             for (let i = 0, length = addresses.length; i < length; i++) {
 
-                promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].mode, addresses[i].timeout));
+                promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].mode, addresses[i].timeout, signal));
             }
 
             return onAnyResolveOrAllFail(promises);
@@ -1211,42 +1206,37 @@ export default class ConnectionManager {
             let server = credentialProvider.credentials().Servers.filter(s => s.Id === serverId);
             server = server.length ? server[0] : null;
 
-            return new Promise((resolve, reject) => {
+            function onDone() {
+                const credentials = credentialProvider.credentials();
 
-                function onDone() {
-                    const credentials = credentialProvider.credentials();
+                credentials.Servers = credentials.Servers.filter(s => s.Id !== serverId);
 
-                    credentials.Servers = credentials.Servers.filter(s => s.Id !== serverId);
+                credentialProvider.credentials(credentials);
+                return Promise.resolve();
+            }
 
-                    credentialProvider.credentials(credentials);
-                    resolve();
+            if (!server.ConnectServerId) {
+                return onDone();
+            }
+
+            const connectToken = self.connectToken();
+            const connectUserId = self.connectUserId();
+
+            if (!connectToken || !connectUserId) {
+                return onDone();
+            }
+
+            const url = `https://connect.emby.media/service/serverAuthorizations?serverId=${server.ConnectServerId}&userId=${connectUserId}`;
+
+            return ajax({
+                type: "DELETE",
+                url,
+                headers: {
+                    "X-Connect-UserToken": connectToken,
+                    "X-Application": `${appName}/${appVersion}`
                 }
 
-                if (!server.ConnectServerId) {
-                    onDone();
-                    return;
-                }
-
-                const connectToken = self.connectToken();
-                const connectUserId = self.connectUserId();
-
-                if (!connectToken || !connectUserId) {
-                    onDone();
-                    return;
-                }
-
-                const url = `https://connect.emby.media/service/serverAuthorizations?serverId=${server.ConnectServerId}&userId=${connectUserId}`;
-
-                ajax({
-                    type: "DELETE",
-                    url,
-                    headers: {
-                        "X-Connect-UserToken": connectToken,
-                        "X-Application": `${appName}/${appVersion}`
-                    }
-
-                }).then(onDone, onDone);
-            });
+            }).then(onDone, onDone);
         };
 
         self.rejectServer = serverId => {

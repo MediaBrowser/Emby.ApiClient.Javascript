@@ -20,26 +20,7 @@ function paramsToString(params) {
     return values.join('&');
 }
 
-function fetchWithTimeout(url, options, timeoutMs) {
-
-    return new Promise((resolve, reject) => {
-
-        const timeout = setTimeout(reject, timeoutMs);
-
-        options = options || {};
-        options.credentials = 'same-origin';
-
-        fetch(url, options).then(response => {
-            clearTimeout(timeout);
-            resolve(response);
-        }, error => {
-            clearTimeout(timeout);
-            reject(error);
-        });
-    });
-}
-
-function getFetchPromise(request) {
+function getFetchPromise(request, signal) {
 
     const headers = request.headers || {};
 
@@ -48,10 +29,29 @@ function getFetchPromise(request) {
     }
 
     const fetchRequest = {
-        headers,
+        headers: headers,
         method: request.type,
         credentials: 'same-origin'
     };
+
+    if (request.timeout) {
+
+        const abortController = new AbortController();
+
+        const boundAbort = abortController.abort.bind(abortController);
+
+        if (signal) {
+            signal.addEventListener('abort', boundAbort);
+        }
+
+        setTimeout(boundAbort, request.timeout);
+
+        signal = abortController.signal;
+    }
+
+    if (signal) {
+        fetchRequest.signal = signal;
+    }
 
     let contentType = request.contentType;
 
@@ -71,11 +71,7 @@ function getFetchPromise(request) {
         headers['Content-Type'] = contentType;
     }
 
-    if (!request.timeout) {
-        return fetch(request.url, fetchRequest);
-    }
-
-    return fetchWithTimeout(request.url, fetchRequest, request.timeout);
+    return fetch(request.url, fetchRequest);
 }
 
 function clearCurrentUserCacheIfNeeded(apiClient) {
@@ -330,14 +326,14 @@ class ApiClient {
         return url;
     }
 
-    fetchWithFailover(request, enableReconnection) {
+    fetchWithFailover(request, enableReconnection, signal) {
 
         console.log(`Requesting ${request.url}`);
 
         request.timeout = 30000;
         const instance = this;
 
-        return getFetchPromise(request).then(response => {
+        return getFetchPromise(request, signal).then(response => {
 
             instance.connected = true;
 
@@ -356,10 +352,14 @@ class ApiClient {
 
         }, error => {
 
-            if (error) {
-                console.log("Request failed to " + request.url + ' ' + (error.status || '') + ' ' + error.toString());
-            } else {
+            if (!error) {
                 console.log("Request timed out to " + request.url);
+            }
+            else if (error.name === 'AbortError') {
+                console.log("AbortError: " + request.url);
+            }
+            else {
+                console.log("Request failed to " + request.url + ' ' + (error.status || '') + ' ' + error.toString());
             }
 
             // http://api.jquery.com/jQuery.ajax/		     
@@ -368,9 +368,9 @@ class ApiClient {
 
                 const previousServerAddress = instance.serverAddress();
 
-                return tryReconnect(instance).then((newServerAddress) => {
+                return tryReconnect(instance, null, signal).then(function (newServerAddress) {
 
-                    console.log("Reconnect succeeded");
+                    console.log("Reconnect succeeded to " + newServerAddress);
                     instance.connected = true;
 
                     if (instance.enableWebSocketAutoConnect) {
@@ -379,7 +379,9 @@ class ApiClient {
 
                     request.url = request.url.replace(previousServerAddress, newServerAddress);
 
-                    return instance.fetchWithFailover(request, false);
+                    console.log("Retrying request with new url: " + request.url);
+
+                    return instance.fetchWithFailover(request, false, signal);
                 });
 
             } else {
@@ -394,7 +396,7 @@ class ApiClient {
     /**
      * Wraps around jQuery ajax methods to add additional info to the request.
      */
-    fetch(request, includeAuthorization, includeAccessToken) {
+    fetch(request, includeAccessToken, signal) {
 
         if (!request) {
             throw new Error("Request cannot be null");
@@ -402,16 +404,11 @@ class ApiClient {
 
         request.headers = request.headers || {};
 
-        if (includeAuthorization !== false) {
-
-            this.setRequestHeaders(request.headers, includeAccessToken);
-        }
+        this.setRequestHeaders(request.headers, includeAccessToken);
 
         if (this.enableAutomaticNetworking === false || request.type !== "GET") {
-            console.log(`Requesting url without automatic networking: ${request.url}`);
 
-            const instance = this;
-            return getFetchPromise(request).then(response => {
+            return getFetchPromise(request, signal).then(function (response) {
 
                 if (response.status < 400) {
 
@@ -429,7 +426,7 @@ class ApiClient {
             });
         }
 
-        return this.fetchWithFailover(request, true);
+        return this.fetchWithFailover(request, true, signal);
     }
 
     setAuthenticationInfo(accessKey, userId) {
@@ -494,13 +491,13 @@ class ApiClient {
     /**
      * Wraps around jQuery ajax methods to add additional info to the request.
      */
-    ajax(request, includeAuthorization, includeAccessToken) {
+    ajax(request, includeAccessToken) {
 
         if (!request) {
             throw new Error("Request cannot be null");
         }
 
-        return this.fetch(request, includeAuthorization, includeAccessToken);
+        return this.fetch(request, includeAccessToken);
     }
 
     /**
@@ -737,7 +734,7 @@ class ApiClient {
         });
     }
 
-    getJSON(url, includeAuthorization) {
+    getJSON(url, signal) {
 
         return this.fetch({
 
@@ -748,10 +745,10 @@ class ApiClient {
                 accept: 'application/json'
             }
 
-        }, includeAuthorization);
+        }, signal);
     }
 
-    getText(url, includeAuthorization) {
+    getText(url, signal) {
 
         return this.fetch({
 
@@ -759,7 +756,7 @@ class ApiClient {
             type: 'GET',
             dataType: 'text'
 
-        }, includeAuthorization);
+        }, signal);
     }
 
     updateServerInfo(server, serverUrl) {
@@ -1015,34 +1012,16 @@ class ApiClient {
         });
     }
 
-    getLiveTvRecordings(options) {
+    getLiveTvRecordings(options, signal) {
 
         const url = this.getUrl("LiveTv/Recordings", options || {});
 
-        return this.getJSON(url);
+        return this.getJSON(url, signal);
     }
 
     getLiveTvRecordingSeries(options) {
 
         const url = this.getUrl("LiveTv/Recordings/Series", options || {});
-
-        return this.getJSON(url);
-    }
-
-    getLiveTvRecordingGroups(options) {
-
-        const url = this.getUrl("LiveTv/Recordings/Groups", options || {});
-
-        return this.getJSON(url);
-    }
-
-    getLiveTvRecordingGroup(id) {
-
-        if (!id) {
-            throw new Error("null id");
-        }
-
-        const url = this.getUrl(`LiveTv/Recordings/Groups/${id}`);
 
         return this.getJSON(url);
     }
@@ -2480,11 +2459,11 @@ class ApiClient {
     /**
      * Gets all users from the server
      */
-    getUsers(options) {
+    getUsers(options, signal) {
 
         const url = this.getUrl("users", options || {});
 
-        return this.getJSON(url).then(setUsersProperties);
+        return this.getJSON(url, signal).then(setUsersProperties);
     }
 
     /**
@@ -2998,7 +2977,7 @@ class ApiClient {
      * recursive - Whether or not the query should be recursive
      * searchTerm - search term to use as a filter
      */
-    getItems(userId, options) {
+    getItems(userId, options, signal) {
 
         let url;
 
@@ -3009,7 +2988,7 @@ class ApiClient {
             url = this.getUrl("Items", options);
         }
 
-        return this.getJSON(url);
+        return this.getJSON(url, signal);
     }
 
     getResumableItems(userId, options) {
@@ -3877,39 +3856,6 @@ class ApiClient {
         });
     }
 
-    createPackageReview(review) {
-
-        const url = this.getUrl(`Packages/Reviews/${review.id}`, review);
-
-        return this.ajax({
-            type: "POST",
-            url,
-        });
-    }
-
-    getPackageReviews(packageId, minRating, maxRating, limit) {
-
-        if (!packageId) {
-            throw new Error("null packageId");
-        }
-
-        const options = {};
-
-        if (minRating) {
-            options.MinRating = minRating;
-        }
-        if (maxRating) {
-            options.MaxRating = maxRating;
-        }
-        if (limit) {
-            options.Limit = limit;
-        }
-
-        const url = this.getUrl(`Packages/${packageId}/Reviews`, options);
-
-        return this.getJSON(url);
-    }
-
     getSavedEndpointInfo() {
 
         return this._endPointInfo;
@@ -3984,22 +3930,20 @@ function setSavedEndpointInfo(instance, info) {
     instance._endPointInfo = info;
 }
 
-function tryReconnectToUrl(instance, url, delay) {
-
-    const timeout = 15000;
+function tryReconnectToUrl(instance, url, delay, signal) {
 
     console.log('tryReconnectToUrl: ' + url);
 
     return setTimeoutPromise(delay).then(() => {
-        return fetchWithTimeout(instance.getUrl('system/info/public', null, url), {
 
-            method: 'GET',
-            accept: 'application/json'
+        return getFetchPromise({
 
-            // Commenting this out since the fetch api doesn't have a timeout option yet
-            //timeout: timeout
+            url: instance.getUrl('system/info/public', null, url),
+            type: 'GET',
+            dataType: 'json',
+            timeout: 15000
 
-        }, timeout).then(() => {
+        }, signal).then(() => {
 
             return url;
         });
@@ -4026,7 +3970,7 @@ function setTimeoutPromise(timeout) {
     });
 }
 
-function tryReconnectInternal(instance) {
+function tryReconnectInternal(instance, signal) {
 
     const addresses = [];
     const addressesStrings = [];
@@ -4055,7 +3999,7 @@ function tryReconnectInternal(instance) {
 
     for (let i = 0, length = addresses.length; i < length; i++) {
 
-        promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].timeout));
+        promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].timeout, signal));
     }
 
     return onAnyResolveOrAllFail(promises).then((url) => {
@@ -4086,11 +4030,11 @@ function onAnyResolveOrAllFail(promises) {
     });
 }
 
-function tryReconnect(instance, retryCount) {
+function tryReconnect(instance, retryCount, signal) {
 
     retryCount = retryCount || 0;
 
-    const promise = tryReconnectInternal(instance);
+    const promise = tryReconnectInternal(instance, signal);
 
     if (retryCount >= 2) {
         return promise;
@@ -4101,7 +4045,7 @@ function tryReconnect(instance, retryCount) {
         console.log('error in tryReconnectInternal: ' + (err || ''));
 
         return setTimeoutPromise(500).then(() => {
-            return tryReconnect(instance, retryCount + 1);
+            return tryReconnect(instance, retryCount + 1, signal);
         });
     });
 }
