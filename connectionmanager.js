@@ -311,7 +311,7 @@ export default class ConnectionManager {
             });
 
             const existingServer = existingServers.length ? existingServers[0] : apiClient.serverInfo();
-            existingServer.DateLastAccessed = new Date().getTime();
+            existingServer.DateLastAccessed = Date.now();
             existingServer.LastConnectionMode = ConnectionMode.Manual;
             existingServer.ManualAddress = apiClient.serverAddress();
 
@@ -398,7 +398,7 @@ export default class ConnectionManager {
             const server = servers.length ? servers[0] : apiClient.serverInfo();
 
             if (options.updateDateLastAccessed !== false) {
-                server.DateLastAccessed = new Date().getTime();
+                server.DateLastAccessed = Date.now();
             }
             server.Id = result.ServerId;
 
@@ -994,7 +994,7 @@ export default class ConnectionManager {
             server.LastConnectionMode = connectionMode;
 
             if (options.updateDateLastAccessed !== false) {
-                server.DateLastAccessed = new Date().getTime();
+                server.DateLastAccessed = Date.now();
             }
             credentialProvider.addOrUpdateServer(credentials.Servers, server);
             credentialProvider.credentials(credentials);
@@ -1325,7 +1325,7 @@ export default class ConnectionManager {
 
             const regInfo = JSON.parse(appStorage.getItem(cacheKey) || '{}');
 
-            const timeSinceLastValidation = (new Date().getTime() - (regInfo.lastValidDate || 0));
+            const timeSinceLastValidation = (Date.now() - (regInfo.lastValidDate || 0));
 
             // Cache for 1 day
             if (timeSinceLastValidation <= 86400000) {
@@ -1363,7 +1363,7 @@ export default class ConnectionManager {
             }).then(response => {
 
                 appStorage.setItem(cacheKey, JSON.stringify({
-                    lastValidDate: new Date().getTime(),
+                    lastValidDate: Date.now(),
                     deviceId: params.deviceId,
                     cacheExpirationDays: response.cacheExpirationDays
                 }));

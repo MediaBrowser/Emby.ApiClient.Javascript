@@ -122,7 +122,7 @@ function saveUserInCache(appStorage, user) {
 
     setUserProperties(user);
 
-    user.DateLastFetched = new Date().getTime();
+    user.DateLastFetched = Date.now();
     appStorage.setItem(getUserCacheKey(user.Id, user.ServerId), JSON.stringify(user));
 }
 
@@ -130,7 +130,7 @@ function removeCachedUser(appStorage, userId, serverId) {
     appStorage.removeItem(getUserCacheKey(userId, serverId));
 }
 
-let startingPlaySession = new Date().getTime();
+let startingPlaySession = Date.now();
 
 function mapVirtualFolder(item) {
 
@@ -2282,7 +2282,7 @@ class ApiClient {
             cachedUser = getCachedUser(this, id);
 
             // time based cache is not ideal, try to improve in the future
-            if (cachedUser && (new Date().getTime() - (cachedUser.DateLastFetched || 0)) <= 60000) {
+            if (cachedUser && (Date.now() - (cachedUser.DateLastFetched || 0)) <= 60000) {
                 return Promise.resolve(cachedUser);
             }
         }
@@ -3587,7 +3587,7 @@ class ApiClient {
 
         if ((options.EventName || 'timeupdate') === 'timeupdate') {
 
-            const now = new Date().getTime();
+            const now = Date.now();
             const msSinceLastReport = now - (this.lastPlaybackProgressReport || 0);
 
             if (msSinceLastReport <= 10000) {
