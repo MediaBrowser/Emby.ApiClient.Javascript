@@ -149,6 +149,36 @@ function setUserProperties(user) {
     user.Type = 'User';
 }
 
+function fillServerIdIntoItems(result) {
+
+    const serverId = this.serverId();
+    const items = result.Items || result;
+
+    for (let i = 0, length = items.length; i < length; i++) {
+        items[i].ServerId = serverId;
+    }
+
+    return result;
+}
+
+function fillTagProperties(result) {
+
+    const serverId = this.serverId();
+    const items = result.Items || result;
+
+    const type = 'Tag';
+
+    for (let i = 0, length = items.length; i < length; i++) {
+
+        const item = items[i];
+
+        item.ServerId = serverId;
+        item.Type = type;
+    }
+
+    return result;
+}
+
 /**
  * Creates a new api client instance
  * @param {String} serverAddress
@@ -3070,7 +3100,7 @@ class ApiClient {
 
         const url = this.getUrl("Tags", options);
 
-        return this.getJSON(url);
+        return this.getJSON(url.then(fillTagProperties.bind(this)));
     }
 
     getYears(userId, options) {
@@ -3136,6 +3166,28 @@ class ApiClient {
             EnableRedirection: true,
             EnableRemoteMedia: enableRemoteMedia
         });
+    }
+
+    getAudioStreamUrls(items, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia) {
+
+        const streamUrls = [];
+        for (let i = 0, length = items.length; i < length; i++) {
+
+            const item = items[i];
+            const streamUrl;
+
+            if (item.MediaType === 'Audio') {
+                streamUrl = this.getAudioStreamUrl(item, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia);
+            }
+
+            streamUrls.push(streamUrl || '');
+
+            if (i === 0) {
+                startPosition = 0;
+            }
+        }
+
+        return Promise.resolve(streamUrls);
     }
 
     getAudioCodecs(userId, options) {
@@ -3435,7 +3487,11 @@ class ApiClient {
             type: "POST",
             url,
             dataType: "json"
-        });
+        }).then(onUserDataUpdated.bind({
+            instance: this,
+            userId: userId,
+            itemId: itemId
+        }));
     }
 
     markUnplayed(userId, itemId) {
@@ -3454,7 +3510,11 @@ class ApiClient {
             type: "DELETE",
             url,
             dataType: "json"
-        });
+        }).then(onUserDataUpdated.bind({
+            instance: this,
+            userId: userId,
+            itemId: itemId
+        }));
     }
 
     /**
@@ -3481,7 +3541,11 @@ class ApiClient {
             type: method,
             url,
             dataType: "json"
-        });
+        }).then(onUserDataUpdated.bind({
+            instance: this,
+            userId: userId,
+            itemId: itemId
+        }));
     }
 
     /**
@@ -3508,7 +3572,11 @@ class ApiClient {
             type: "POST",
             url,
             dataType: "json"
-        });
+        }).then(onUserDataUpdated.bind({
+            instance: this,
+            userId: userId,
+            itemId: itemId
+        }));
     }
 
     getItemCounts(userId) {
@@ -3545,7 +3613,11 @@ class ApiClient {
             type: "DELETE",
             url,
             dataType: "json"
-        });
+        }).then(onUserDataUpdated.bind({
+            instance: this,
+            userId: userId,
+            itemId: itemId
+        }));
     }
 
     /**

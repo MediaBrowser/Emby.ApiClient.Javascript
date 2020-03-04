@@ -237,6 +237,28 @@ function onCredentialsSaved(e, data) {
     events.trigger(this, 'credentialsupdated', [data]);
 }
 
+function onUserDataUpdated(userData) {
+
+    var obj = this;
+    var instance = obj.instance;
+    var itemId = obj.itemId;
+    var userId = obj.userId;
+
+    userData.ItemId = itemId;
+
+    events.trigger(instance, 'message', [{
+
+        MessageType: 'UserDataChanged',
+        Data: {
+            UserId: userId,
+            UserDataList: [
+                userData
+            ]
+        }
+
+    }]);
+}
+
 export default class ConnectionManager {
     constructor(
         credentialProvider,
@@ -257,11 +279,12 @@ export default class ConnectionManager {
 
         const self = this;
         this._apiClients = [];
+        this._apiClientsMap = {};
 
         let connectUser;
         self.connectUser = () => connectUser;
 
-        self._minServerVersion = '3.5.3';
+        self._minServerVersion = '4.0.3';
 
         self.appVersion = () => appVersion;
 
@@ -320,6 +343,9 @@ export default class ConnectionManager {
             }
 
             apiClient.serverInfo(existingServer);
+            if (existingServer.Id) {
+                self._apiClientsMap[existingServer.Id] = apiClient;
+            }
 
             apiClient.onAuthenticated = onAuthenticated;
 
@@ -390,7 +416,6 @@ export default class ConnectionManager {
         function onAuthenticated(apiClient, result) {
 
             const options = {};
-            const saveCredentials = true;
 
             const credentials = credentialProvider.credentials();
             const servers = credentials.Servers.filter(s => s.Id === result.ServerId);
@@ -402,13 +427,8 @@ export default class ConnectionManager {
             }
             server.Id = result.ServerId;
 
-            if (saveCredentials) {
-                server.UserId = result.User.Id;
-                server.AccessToken = result.AccessToken;
-            } else {
-                server.UserId = null;
-                server.AccessToken = null;
-            }
+            server.UserId = result.User.Id;
+            server.AccessToken = result.AccessToken;
 
             credentialProvider.addOrUpdateServer(credentials.Servers, server);
             credentialProvider.credentials(credentials);
@@ -976,8 +996,8 @@ export default class ConnectionManager {
 
             if (options.enableAutoLogin === false) {
 
-                server.UserId = null;
-                server.AccessToken = null;
+                //server.UserId = null;
+                //server.AccessToken = null;
 
             } else if (verifyLocalAuthentication && server.AccessToken && options.enableAutoLogin !== false) {
 
@@ -1355,7 +1375,7 @@ export default class ConnectionManager {
                 return Promise.reject();
             }
 
-            var getRegPromise = ajax({
+            const getRegPromise = ajax({
                 url: 'https://mb3admin.com/admin/service/registration/validateDevice?' + paramsToString(params),
                 type: 'POST',
                 dataType: 'json'
@@ -1553,24 +1573,33 @@ export default class ConnectionManager {
             throw new Error('item or serverId cannot be null');
         }
 
-        let serverId;
+        let serverId = item.ServerId;
 
         // Accept string + object
-        if (item.ServerId) {
-            serverId = item.ServerId;
+
+        if (!serverId) {
+            if (item.Id && item.Type === 'Server') {
+                serverId = item.Id;
+            } else {
+                serverId = item;
+            }
         }
-        else if (item.Id && item.Type === 'Server') {
-            serverId = item.Id;
-        } else {
-            serverId = item;
+
+        let apiClient;
+
+        if (serverId) {
+            apiClient = this._apiClientsMap[serverId];
+            if (apiClient) {
+                return apiClient;
+            }
         }
 
         const apiClients = this._apiClients;
 
-        for (var i = 0, length = apiClients.length; i < length; i++) {
+        for (let i = 0, length = apiClients.length; i < length; i++) {
 
-            let apiClient = apiClients[i];
-            let serverInfo = apiClient.serverInfo();
+            apiClient = apiClients[i];
+            const serverInfo = apiClient.serverInfo();
 
             // We have to keep this hack in here because of the addApiClient method
             if (!serverInfo || serverInfo.Id === serverId) {
