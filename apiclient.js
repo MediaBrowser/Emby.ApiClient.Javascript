@@ -3192,7 +3192,7 @@ class ApiClient {
         for (let i = 0, length = items.length; i < length; i++) {
 
             const item = items[i];
-            const streamUrl;
+            let streamUrl;
 
             if (item.MediaType === 'Audio') {
                 streamUrl = this.getAudioStreamUrl(item, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia);
