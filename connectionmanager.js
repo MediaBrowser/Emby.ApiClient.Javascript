@@ -510,7 +510,7 @@ export default class ConnectionManager {
             });
         }
 
-        function addAuthenticationInfoFromConnect(server, serverUrl, credentials) {
+        function addAuthenticationInfoFromConnect(server, systemInfo, serverUrl, credentials) {
 
             if (!server.ExchangeToken) {
                 throw new Error("server.ExchangeToken cannot be null");
@@ -521,16 +521,37 @@ export default class ConnectionManager {
 
             const url = self.getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
 
-            const auth = `MediaBrowser Client="${appName}", Device="${deviceName}", DeviceId="${deviceId}", Version="${appVersion}"`;
+            var headers = {
+                "X-Emby-Token": server.ExchangeToken
+            };
+
+            if (compareVersions(systemInfo.Version, '4.4.0.21') >= 0) {
+
+                if (appName) {
+                    headers['X-Emby-Client'] = appName;
+                }
+
+                if (deviceName) {
+                    headers['X-Emby-Device-Name'] = encodeURIComponent(deviceName);
+                }
+
+                if (deviceId) {
+                    headers['X-Emby-Device-Id'] = deviceId;
+                }
+
+                if (appVersion) {
+                    headers['X-Emby-Client-Version'] = appVersion;
+                }
+            }
+            else {
+                headers["X-Emby-Authorization"] = 'MediaBrowser Client="' + appName + '", Device="' + deviceName + '", DeviceId="' + deviceId + '", Version="' + appVersion + '"';
+            }
 
             return ajax({
                 type: "GET",
-                url,
+                url: url,
                 dataType: "json",
-                headers: {
-                    "X-MediaBrowser-Token": server.ExchangeToken,
-                    "X-Emby-Authorization": auth
-                }
+                headers: headers
 
             }).then(auth => {
 
@@ -957,7 +978,7 @@ export default class ConnectionManager {
                 ensureConnectUser(credentials).then(() => {
 
                     if (server.ExchangeToken) {
-                        addAuthenticationInfoFromConnect(server, serverUrl, credentials).then(() => {
+                        addAuthenticationInfoFromConnect(server, systemInfo, serverUrl, credentials).then(() => {
 
                             afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
 

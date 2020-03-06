@@ -217,7 +217,9 @@ class ApiClient {
         return this._appName;
     }
 
-    setRequestHeaders(headers, includeAccessToken) {
+    setAuthorizationInfoIntoRequest(request, includeAccessToken) {
+
+        const headers = request.headers;
 
         const currentServerInfo = this.serverInfo();
         const appName = this._appName;
@@ -225,30 +227,67 @@ class ApiClient {
 
         const values = [];
 
+        const queryStringAuth = this._queryStringAuth && request.type === 'GET';
+        const separateHeaderValues = this._separateHeaderValues;
+        const authValues = queryStringAuth ? {} : (separateHeaderValues ? headers : null);
+
         if (appName) {
-            values.push(`Client="${appName}"`);
+            if (authValues) {
+                authValues['X-Emby-Client'] = appName;
+            } else {
+                values.push('Client="' + appName + '"');
+            }
         }
 
         if (this._deviceName) {
-            values.push(`Device="${this._deviceName}"`);
+            if (authValues) {
+                authValues['X-Emby-Device-Name'] = queryStringAuth ? this._deviceName : encodeURIComponent(this._deviceName);
+            } else {
+                values.push('Device="' + this._deviceName + '"');
+            }
         }
 
         if (this._deviceId) {
-            values.push(`DeviceId="${this._deviceId}"`);
+            if (authValues) {
+                authValues['X-Emby-Device-Id'] = this._deviceId;
+            } else {
+                values.push('DeviceId="' + this._deviceId + '"');
+            }
         }
 
         if (this._appVersion) {
-            values.push(`Version="${this._appVersion}"`);
+            if (authValues) {
+                authValues['X-Emby-Client-Version'] = this._appVersion;
+            } else {
+                values.push('Version="' + this._appVersion + '"');
+            }
         }
 
         if (accessToken && includeAccessToken !== false) {
-            values.push(`Token="${accessToken}"`);
+            if (authValues) {
+                authValues['X-Emby-Token'] = accessToken;
+            } else {
+                values.push('Token="' + accessToken + '"');
+            }
         }
 
-        if (values.length) {
+        if (authValues) {
+            if (queryStringAuth) {
+                const queryParams = paramsToString(authValues);
+                if (queryParams) {
 
-            const auth = `MediaBrowser ${values.join(', ')}`;
-            //headers.Authorization = auth;
+                    let url = request.url;
+
+                    url += url.indexOf('?') === -1 ? '?' : '&';
+                    url += queryParams;
+
+                    request.url = url;
+                }
+            }
+        }
+        else if (values.length) {
+
+            const auth = 'MediaBrowser ' + values.join(', ');
             headers['X-Emby-Authorization'] = auth;
         }
     }
@@ -404,7 +443,7 @@ class ApiClient {
 
         request.headers = request.headers || {};
 
-        this.setRequestHeaders(request.headers, includeAccessToken);
+        this.setAuthorizationInfoIntoRequest(request, includeAccessToken);
 
         if (this.enableAutomaticNetworking === false || request.type !== "GET") {
 
@@ -745,7 +784,7 @@ class ApiClient {
                 accept: 'application/json'
             }
 
-        }, signal);
+        }, null, signal);
     }
 
     getText(url, signal) {
@@ -756,7 +795,7 @@ class ApiClient {
             type: 'GET',
             dataType: 'text'
 
-        }, signal);
+        }, null, signal);
     }
 
     updateServerInfo(server, serverUrl) {
@@ -3903,6 +3942,8 @@ class ApiClient {
 
     setSystemInfo(info) {
         this._serverVersion = info.Version;
+        //this._queryStringAuth = this.isMinServerVersion('4.4.0.21');
+        this._separateHeaderValues = this.isMinServerVersion('4.4.0.21');
     }
 
     serverVersion() {
@@ -4275,7 +4316,7 @@ function refreshWakeOnLanInfo() {
         return info;
 
     }, err => // could be an older server that doesn't have this api
-            []);
+        []);
 }
 
 function sendNextWakeOnLan(instance, infos, index, resolve) {
