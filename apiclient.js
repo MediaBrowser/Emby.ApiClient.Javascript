@@ -175,6 +175,28 @@ function fillTagProperties(result) {
     return result;
 }
 
+function onUserDataUpdated(userData) {
+
+    var obj = this;
+    var instance = obj.instance;
+    var itemId = obj.itemId;
+    var userId = obj.userId;
+
+    userData.ItemId = itemId;
+
+    events.trigger(instance, 'message', [{
+
+        MessageType: 'UserDataChanged',
+        Data: {
+            UserId: userId,
+            UserDataList: [
+                userData
+            ]
+        }
+
+    }]);
+}
+
 /**
  * Creates a new api client instance
  * @param {String} serverAddress
