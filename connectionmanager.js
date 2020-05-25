@@ -37,14 +37,6 @@ function paramsToString(params) {
     return values.join('&');
 }
 
-function resolveFailure(instance, resolve) {
-
-    resolve({
-        State: 'Unavailable',
-        ConnectUser: instance.connectUser()
-    });
-}
-
 function mergeServers(credentialProvider, list1, list2) {
 
     for (let i = 0, length = list2.length; i < length; i++) {
@@ -521,7 +513,7 @@ export default class ConnectionManager {
 
             const url = self.getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
 
-            var headers = {
+            const headers = {
                 "X-Emby-Token": server.ExchangeToken
             };
 
@@ -544,7 +536,7 @@ export default class ConnectionManager {
                 }
             }
             else {
-                headers["X-Emby-Authorization"] = 'MediaBrowser Client="' + appName + '", Device="' + deviceName + '", DeviceId="' + deviceId + '", Version="' + appVersion + '"';
+                headers["X-Emby-Authorization"] = 'MediaBrowser Client="' + appName + '", Device="' + encodeURIComponent(deviceName) + '", DeviceId="' + deviceId + '", Version="' + appVersion + '"';
             }
 
             return ajax({
@@ -737,29 +729,25 @@ export default class ConnectionManager {
 
         function findServers() {
 
-            return new Promise((resolve, reject) => {
+            const onFinish = function (foundServers) {
+                const servers = foundServers.map(function (foundServer) {
 
-                const onFinish = foundServers => {
-                    const servers = foundServers.map(foundServer => {
+                    const info = {
+                        Id: foundServer.Id,
+                        LocalAddress: convertEndpointAddressToManualAddress(foundServer) || foundServer.Address,
+                        Name: foundServer.Name
+                    };
 
-                        const info = {
-                            Id: foundServer.Id,
-                            LocalAddress: convertEndpointAddressToManualAddress(foundServer) || foundServer.Address,
-                            Name: foundServer.Name
-                        };
+                    info.LastConnectionMode = info.ManualAddress ? ConnectionMode.Manual : ConnectionMode.Local;
 
-                        info.LastConnectionMode = info.ManualAddress ? ConnectionMode.Manual : ConnectionMode.Local;
+                    return info;
+                });
+                return servers;
+            };
 
-                        return info;
-                    });
-                    resolve(servers);
-                };
-
-                serverDiscoveryFn().then(serverDiscovery => {
-                    serverDiscovery.default.findServers(1000).then(onFinish, () => {
-                        onFinish([]);
-                    });
-
+            return serverDiscoveryFn().then(serverDiscovery => {
+                return serverDiscovery.default.findServers(1000).then(onFinish, () => {
+                    return onFinish([]);
                 });
             });
         }
@@ -914,18 +902,21 @@ export default class ConnectionManager {
             });
         }
 
-        function resolveIfAvailable(url, server, result, connectionMode, serverUrl, options, resolve) {
+        function resolveIfAvailable(url, server, result, connectionMode, serverUrl, options) {
 
             const promise = self.validateServerAddress ? self.validateServerAddress(self, ajax, url) : Promise.resolve();
 
-            promise.then(() => {
-                onSuccessfulConnection(server, result, connectionMode, serverUrl, options, resolve);
+            return promise.then(() => {
+                return new Promise(function (resolve, reject) {
+
+                    onSuccessfulConnection(server, result, connectionMode, serverUrl, options, resolve);
+                });
             }, () => {
                 console.log('minServerVersion requirement not met. Server version: ' + result.Version);
-                resolve({
+                return {
                     State: 'ServerUpdateNeeded',
                     Servers: [server]
-                });
+                };
             });
         }
 
@@ -933,39 +924,43 @@ export default class ConnectionManager {
 
             console.log('begin connectToServer');
 
-            return new Promise((resolve, reject) => {
+            options = options || {};
 
-                options = options || {};
+            return tryReconnect(self, server).then((result) => {
 
-                tryReconnect(self, server).then((result) => {
+                const serverUrl = result.url;
+                const connectionMode = result.connectionMode;
+                result = result.data;
 
-                    const serverUrl = result.url;
-                    const connectionMode = result.connectionMode;
-                    result = result.data;
+                if (compareVersions(self.minServerVersion(), result.Version) === 1 ||
+                    compareVersions(result.Version, '8.0') === 1) {
 
-                    if (compareVersions(self.minServerVersion(), result.Version) === 1 || compareVersions(result.Version, '8.0') === 1) {
+                    console.log('minServerVersion requirement not met. Server version: ' + result.Version);
+                    return {
+                        State: 'ServerUpdateNeeded',
+                        Servers: [server]
+                    };
 
-                        console.log('minServerVersion requirement not met. Server version: ' + result.Version);
-                        resolve({
-                            State: 'ServerUpdateNeeded',
-                            Servers: [server]
-                        });
+                }
+                else if (server.Id && result.Id !== server.Id && self.validateServerIds !== false) {
 
-                    }
-                    else if (server.Id && result.Id !== server.Id && self.validateServerIds !== false) {
+                    console.log('http request succeeded, but found a different server Id than what was expected');
+                    return {
+                        State: 'Unavailable',
+                        ConnectUser: self.connectUser()
+                    };
 
-                        console.log('http request succeeded, but found a different server Id than what was expected');
-                        resolveFailure(self, resolve);
+                }
+                else {
+                    return resolveIfAvailable(serverUrl, server, result, connectionMode, serverUrl, options);
+                }
 
-                    }
-                    else {
-                        resolveIfAvailable(serverUrl, server, result, connectionMode, serverUrl, options, resolve);
-                    }
+            }, function () {
 
-                }, () => {
-
-                    resolveFailure(self, resolve);
-                });
+                return {
+                    State: 'Unavailable',
+                    ConnectUser: self.connectUser()
+                };
             });
         };
 
