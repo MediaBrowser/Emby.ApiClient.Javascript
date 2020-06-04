@@ -48,8 +48,9 @@ function mergeServers(credentialProvider, list1, list2) {
 
 function updateServerInfo(server, systemInfo) {
 
-    server.Name = systemInfo.ServerName;
-
+    if (systemInfo.ServerName) {
+        server.Name = systemInfo.ServerName;
+    }
     if (systemInfo.Id) {
         server.Id = systemInfo.Id;
     }
@@ -426,7 +427,14 @@ export default class ConnectionManager {
             apiClient.serverInfo(server);
             afterConnected(apiClient, options);
 
-            return onLocalUserSignIn(server, apiClient.serverAddress());
+            return apiClient.getPublicSystemInfo().then(function (systemInfo) {
+
+                updateServerInfo(server, systemInfo);
+                credentialProvider.addOrUpdateServer(credentials.Servers, server);
+                credentialProvider.credentials(credentials);
+
+                return onLocalUserSignIn(server, apiClient.serverAddress());
+            });
         }
 
         function afterConnected(apiClient, options = {}) {
@@ -574,7 +582,7 @@ export default class ConnectionManager {
             }).then(systemInfo => {
 
                 updateServerInfo(server, systemInfo);
-                return Promise.resolve();
+                return systemInfo;
 
             }, () => {
 
@@ -1005,16 +1013,11 @@ export default class ConnectionManager {
 
             options = options || {};
 
-            if (options.enableAutoLogin === false) {
+            if (verifyLocalAuthentication && server.AccessToken) {
 
-                //server.UserId = null;
-                //server.AccessToken = null;
+                validateAuthentication(server, serverUrl).then((fullSystemInfo) => {
 
-            } else if (verifyLocalAuthentication && server.AccessToken && options.enableAutoLogin !== false) {
-
-                validateAuthentication(server, serverUrl).then(() => {
-
-                    afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, false, options, resolve);
+                    afterConnectValidated(server, credentials, fullSystemInfo || systemInfo, connectionMode, serverUrl, false, options, resolve);
                 });
 
                 return;
