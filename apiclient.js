@@ -177,10 +177,10 @@ function fillTagProperties(result) {
 
 function onUserDataUpdated(userData) {
 
-    var obj = this;
-    var instance = obj.instance;
-    var itemId = obj.itemId;
-    var userId = obj.userId;
+    const obj = this;
+    const instance = obj.instance;
+    const itemId = obj.itemId;
+    const userId = obj.userId;
 
     userData.ItemId = itemId;
 
@@ -265,7 +265,7 @@ class ApiClient {
             if (authValues) {
                 authValues['X-Emby-Device-Name'] = queryStringAuth ? this._deviceName : encodeURIComponent(this._deviceName);
             } else {
-                values.push('Device="' + this._deviceName + '"');
+                values.push('Device="' + encodeURIComponent(this._deviceName) + '"');
             }
         }
 
@@ -1872,9 +1872,13 @@ class ApiClient {
             name
         });
 
+        const instance = this;
+
         return this.ajax({
             type: "DELETE",
             url
+        }).then(function () {
+            instance._userViewsPromise = null;
         });
     }
 
@@ -1901,6 +1905,8 @@ class ApiClient {
 
         url = this.getUrl(url, options);
 
+        const instance = this;
+
         return this.ajax({
             type: "POST",
             url,
@@ -1908,6 +1914,8 @@ class ApiClient {
                 LibraryOptions: libraryOptions
             }),
             contentType: 'application/json'
+        }).then(function () {
+            instance._userViewsPromise = null;
         });
     }
 
@@ -1921,6 +1929,8 @@ class ApiClient {
 
         url = this.getUrl(url);
 
+        const instance = this;
+
         return this.ajax({
             type: "POST",
             url,
@@ -1929,6 +1939,8 @@ class ApiClient {
                 LibraryOptions: libraryOptions
             }),
             contentType: 'application/json'
+        }).then(function () {
+            instance._userViewsPromise = null;
         });
     }
 
@@ -1950,9 +1962,13 @@ class ApiClient {
             name
         });
 
+        const instance = this;
+
         return this.ajax({
             type: "POST",
             url
+        }).then(function () {
+            instance._userViewsPromise = null;
         });
     }
 
@@ -1983,6 +1999,8 @@ class ApiClient {
             refreshLibrary: refreshLibrary ? true : false
         });
 
+        const instance = this;
+
         return this.ajax({
             type: "POST",
             url,
@@ -1991,6 +2009,8 @@ class ApiClient {
                 PathInfo: pathInfo
             }),
             contentType: 'application/json'
+        }).then(function () {
+            instance._userViewsPromise = null;
         });
     }
 
@@ -2008,6 +2028,8 @@ class ApiClient {
 
         url = this.getUrl(url);
 
+        const instance = this;
+
         return this.ajax({
             type: "POST",
             url,
@@ -2016,6 +2038,8 @@ class ApiClient {
                 PathInfo: pathInfo
             }),
             contentType: 'application/json'
+        }).then(function () {
+            instance._userViewsPromise = null;
         });
     }
 
@@ -2041,9 +2065,13 @@ class ApiClient {
             name: virtualFolderName
         });
 
+        const instance = this;
+
         return this.ajax({
             type: "DELETE",
             url
+        }).then(function () {
+            instance._userViewsPromise = null;
         });
     }
 
@@ -2059,9 +2087,13 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${id}`);
 
+        const instance = this;
+
         return this.ajax({
             type: "DELETE",
             url
+        }).then(function () {
+            instance._userViewsPromise = null;
         });
     }
 
@@ -2537,10 +2569,6 @@ class ApiClient {
         return this.getJSON(url);
     }
 
-    getDefaultImageQuality(imageType) {
-        return imageType.toLowerCase() === 'backdrop' ? 80 : 90;
-    }
-
     /**
      * Constructs a url for a user image
      * @param {String} userId
@@ -2598,37 +2626,10 @@ class ApiClient {
 
         options = options || {};
 
-        let url = `Items/${itemId}/Images/${options.type}`;
+        let url = "Items/" + itemId + "/Images/" + options.type;
 
         if (options.index != null) {
-            url += `/${options.index}`;
-        }
-
-        options.quality = options.quality || this.getDefaultImageQuality(options.type);
-
-        if (this.normalizeImageOptions) {
-            this.normalizeImageOptions(options);
-        }
-
-        // Don't put these on the query string
-        delete options.type;
-        delete options.index;
-
-        return this.getUrl(url, options);
-    }
-
-    getScaledImageUrl(itemId, options) {
-
-        if (!itemId) {
-            throw new Error("itemId cannot be empty");
-        }
-
-        options = options || {};
-
-        let url = `Items/${itemId}/Images/${options.type}`;
-
-        if (options.index != null) {
-            url += `/${options.index}`;
+            url += "/" + options.index;
         }
 
         normalizeImageOptions(this, options);
@@ -2636,10 +2637,11 @@ class ApiClient {
         // Don't put these on the query string
         delete options.type;
         delete options.index;
-        delete options.minScale;
-
+        
         return this.getUrl(url, options);
     }
+
+    getScaledImageUrl: getImageUrl
 
     getThumbImageUrl(item, options) {
 
@@ -3986,6 +3988,26 @@ class ApiClient {
 
         onMessageReceivedInternal(this, msg);
     }
+
+    getActivityLog(options) {
+
+        const url = this.getUrl("System/ActivityLog/Entries", options || {});
+
+        const serverId = this.serverId();
+
+        return this.getJSON(url).then(function (result) {
+
+            const items = result.Items;
+
+            for (let i = 0, length = items.length; i < length; i++) {
+                const item = items[i];
+
+                item.Type = 'ActivityLogEntry';
+                item.ServerId = serverId;
+            }
+            return result;
+        });
+    }
 }
 
 function setSavedEndpointInfo(instance, info) {
@@ -4273,10 +4295,6 @@ function normalizeImageOptions(instance, options) {
 
     if (ratio) {
 
-        if (options.minScale) {
-            ratio = Math.max(options.minScale, ratio);
-        }
-
         if (options.width) {
             options.width = Math.round(options.width * ratio);
         }
@@ -4291,10 +4309,14 @@ function normalizeImageOptions(instance, options) {
         }
     }
 
-    options.quality = options.quality || instance.getDefaultImageQuality(options.type);
+    if (!options.quality) {
 
-    if (instance.normalizeImageOptions) {
-        instance.normalizeImageOptions(options);
+        // TODO: In low bandwidth situations we could do 60/50
+        if (options.type === 'Backdrop') {
+            options.quality = 70;
+        } else {
+            options.quality = 90;
+        }
     }
 }
 
