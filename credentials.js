@@ -1,4 +1,6 @@
-﻿import events from './events.js';
+﻿/* jshint module: true */
+
+import events from './events.js';
 
 function ensure(instance, data) {
     if (!instance._credentials) {
@@ -11,14 +13,14 @@ function ensure(instance, data) {
 }
 
 function set(instance, data) {
-    if (data) {
-        instance._credentials = data;
-        instance.appStorage.setItem(instance.key, JSON.stringify(data));
-    } else {
-        instance.clear();
-    }
+    instance._credentials = data;
+    const json = JSON.stringify(data);
+    instance.appStorage.setItem(instance.key, json);
 
-    events.trigger(instance, 'credentialsupdated');
+    events.trigger(instance, 'credentialsupdated', [{
+        credentials: data,
+        credentialsJson: json
+    }]);
 }
 
 export default class Credentials {

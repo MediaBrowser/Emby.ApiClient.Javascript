@@ -1,4 +1,6 @@
-﻿function send(info) {
+﻿/* jshint module: true */
+
+function send(info) {
 
     return Promise.reject();
 }

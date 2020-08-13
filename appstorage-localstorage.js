@@ -1,4 +1,6 @@
-﻿function onCachePutFail(e) {
+﻿/* jshint module: true */
+
+function onCachePutFail(e) {
     console.log(e);
 }
 

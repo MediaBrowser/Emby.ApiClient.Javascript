@@ -1,4 +1,6 @@
-﻿function getCallbacks(obj, name) {
+﻿/* jshint module: true */
+
+function getCallbacks(obj, name) {
 
     if (!obj) {
         throw new Error("obj cannot be null!");
@@ -45,14 +47,16 @@ export default {
         eventArgs.push(eventObject);
 
         const additionalArgs = arguments[2] || [];
-        for (let i = 0, length = additionalArgs.length; i < length; i++) {
+        let i, length;
+        for (i = 0, length = additionalArgs.length; i < length; i++) {
             eventArgs.push(additionalArgs[i]);
         }
 
         const callbacks = getCallbacks(obj, eventName).slice(0);
 
-        callbacks.forEach(c => {
-            c.apply(obj, eventArgs);
-        });
+        for (i = 0, length = callbacks.length; i < length; i++) {
+
+            callbacks[i].apply(obj, eventArgs);
+        }
     }
 };

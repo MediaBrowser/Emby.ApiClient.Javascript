@@ -1,4 +1,6 @@
-﻿export default {
+﻿/* jshint module: true */
+
+export default {
 
     findServers(timeoutMs) {
 

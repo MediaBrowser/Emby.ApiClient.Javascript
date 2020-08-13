@@ -1,4 +1,6 @@
-﻿export default class MyStore {
+﻿/* jshint module: true */
+
+export default class MyStore {
     constructor() {
 
         this.localData = {};

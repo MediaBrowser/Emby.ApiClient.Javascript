@@ -1,4 +1,6 @@
-﻿function updateCache(instance) {
+﻿/* jshint module: true */
+
+function updateCache(instance) {
     instance.cache.put('data', new Response(JSON.stringify(instance.localData)));
 }
 
