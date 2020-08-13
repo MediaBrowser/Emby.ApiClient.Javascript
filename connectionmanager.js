@@ -272,7 +272,7 @@ export default class ConnectionManager {
         let connectUser;
         self.connectUser = () => connectUser;
 
-        self._minServerVersion = '4.0.3';
+        self._minServerVersion = '4.1.1';
 
         self.appVersion = () => appVersion;
 
@@ -885,29 +885,7 @@ export default class ConnectionManager {
                 promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].mode, addresses[i].timeout, signal));
             }
 
-            return onAnyResolveOrAllFail(promises);
-        }
-
-        function onAnyResolveOrAllFail(promises) {
-
-            return new Promise((resolve, reject) => {
-
-                let rejections = 0;
-                const numPromises = promises.length;
-
-                const onReject = function (err) {
-
-                    rejections++;
-                    if (rejections >= numPromises) {
-                        reject(err);
-                    }
-                };
-
-                for (let i = 0; i < numPromises; i++) {
-
-                    promises[i].then(resolve, onReject);
-                }
-            });
+            return Promise.any(promises);
         }
 
         function resolveIfAvailable(url, server, result, connectionMode, serverUrl, options) {
