@@ -1,4 +1,6 @@
-﻿import events from './events.js';
+﻿/* jshint module: true */
+
+import events from './events.js';
 
 const defaultTimeout = 20000;
 
@@ -183,6 +185,40 @@ function normalizeAddress(address) {
     return address;
 }
 
+function convertEndpointAddressToManualAddress(info) {
+
+    if (info.Address && info.EndpointAddress) {
+        let address = info.EndpointAddress.split(":")[0];
+
+        // Determine the port, if any
+        const parts = info.Address.split(":");
+        if (parts.length > 1) {
+            const portString = parts[parts.length - 1];
+
+            if (!isNaN(parseInt(portString))) {
+                address += `:${portString}`;
+            }
+        }
+
+        return normalizeAddress(address);
+    }
+
+    return null;
+}
+
+function filterServers(servers, connectServers) {
+
+    return servers.filter(server => {
+
+        // It's not a connect server, so assume it's still valid
+        if (!server.ExchangeToken) {
+            return true;
+        }
+
+        return connectServers.filter(connectServer => server.Id === connectServer.Id).length > 0;
+    });
+}
+
 function stringEqualsIgnoreCase(str1, str2) {
 
     return (str1 || '').toLowerCase() === (str2 || '').toLowerCase();
@@ -247,6 +283,515 @@ function setTimeoutPromise(timeout) {
     });
 }
 
+function addAppInfoToConnectRequest(instance, request) {
+    request.headers = request.headers || {};
+    request.headers['X-Application'] = `${instance.appName()}/${instance.appVersion()}`;
+}
+
+function exchangePinInternal(instance, pinInfo) {
+
+    if (!pinInfo) {
+        throw new Error('pinInfo cannot be null');
+    }
+
+    const request = {
+        type: 'POST',
+        url: getConnectUrl('pin/authenticate'),
+        data: {
+            deviceId: pinInfo.DeviceId,
+            pin: pinInfo.Pin
+        },
+        dataType: 'json'
+    };
+
+    addAppInfoToConnectRequest(instance, request);
+
+    return ajax(request);
+}
+
+function getCacheKey(feature, apiClient, options = {}) {
+    const viewOnly = options.viewOnly;
+
+    let cacheKey = `regInfo-${apiClient.serverId()}`;
+
+    if (viewOnly) {
+        cacheKey += '-viewonly';
+    }
+
+    return cacheKey;
+}
+
+function allowAddress(instance, address) {
+
+    if (instance.rejectInsecureAddresses) {
+
+        if (address.indexOf('https:') !== 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function getConnectUser(instance, userId, accessToken) {
+
+    if (!userId) {
+        throw new Error("null userId");
+    }
+    if (!accessToken) {
+        throw new Error("null accessToken");
+    }
+
+    const url = `https://connect.emby.media/service/user?id=${userId}`;
+
+    return ajax({
+        type: "GET",
+        url,
+        dataType: "json",
+        headers: {
+            "X-Application": `${instance.appName()}/${instance.appVersion()}`,
+            "X-Connect-UserToken": accessToken
+        }
+
+    });
+}
+
+function onConnectUserSignIn(instance, user) {
+
+    instance._connectUser = user;
+    events.trigger(instance, 'connectusersignedin', [user]);
+}
+
+function ensureConnectUser(instance, credentials) {
+
+    const connectUser = instance.connectUser();
+
+    if (connectUser && connectUser.Id === credentials.ConnectUserId) {
+        return Promise.resolve();
+    }
+
+    else if (credentials.ConnectUserId && credentials.ConnectAccessToken) {
+
+        instance._connectUser = null;
+
+        return getConnectUser(instance, credentials.ConnectUserId, credentials.ConnectAccessToken).then(user => {
+
+            onConnectUserSignIn(instance, user);
+            return Promise.resolve();
+
+        }, () => Promise.resolve());
+
+    } else {
+        return Promise.resolve();
+    }
+}
+
+function validateAuthentication(instance, server, serverUrl) {
+
+    return ajax({
+
+        type: "GET",
+        url: instance.getEmbyServerUrl(serverUrl, "System/Info"),
+        dataType: "json",
+        headers: {
+            "X-MediaBrowser-Token": server.AccessToken
+        }
+
+    }).then(systemInfo => {
+
+        updateServerInfo(server, systemInfo);
+        return systemInfo;
+
+    }, () => {
+
+        server.UserId = null;
+        server.AccessToken = null;
+        return Promise.resolve();
+    });
+}
+
+function findServers(serverDiscoveryFn) {
+
+    const onFinish = function (foundServers) {
+        const servers = foundServers.map(function (foundServer) {
+
+            const info = {
+                Id: foundServer.Id,
+                LocalAddress: convertEndpointAddressToManualAddress(foundServer) || foundServer.Address,
+                Name: foundServer.Name
+            };
+
+            info.LastConnectionMode = info.ManualAddress ? ConnectionMode.Manual : ConnectionMode.Local;
+
+            return info;
+        });
+        return servers;
+    };
+
+    return serverDiscoveryFn().then(serverDiscovery => {
+        return serverDiscovery.findServers(1000).then(onFinish, () => {
+            return onFinish([]);
+        });
+    });
+}
+
+function onAuthenticated(apiClient, result) {
+
+    const options = {};
+
+    const instance = this;
+
+    const credentialProvider = instance.credentialProvider();
+
+    const credentials = credentialProvider.credentials();
+    const servers = credentials.Servers.filter(s => s.Id === result.ServerId);
+
+    const server = servers.length ? servers[0] : apiClient.serverInfo();
+
+    if (options.updateDateLastAccessed !== false) {
+        server.DateLastAccessed = Date.now();
+    }
+    server.Id = result.ServerId;
+
+    server.UserId = result.User.Id;
+    server.AccessToken = result.AccessToken;
+
+    credentialProvider.addOrUpdateServer(credentials.Servers, server);
+    credentialProvider.credentials(credentials);
+
+    // set this now before updating server info, otherwise it won't be set in time
+    apiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
+
+    apiClient.serverInfo(server);
+    afterConnected(instance, apiClient, options);
+
+    return apiClient.getPublicSystemInfo().then(function (systemInfo) {
+
+        updateServerInfo(server, systemInfo);
+        credentialProvider.addOrUpdateServer(credentials.Servers, server);
+        credentialProvider.credentials(credentials);
+
+        return onLocalUserSignIn(instance, server, apiClient.serverAddress());
+    });
+}
+
+function afterConnected(instance, apiClient, options = {}) {
+    if (options.reportCapabilities !== false) {
+        apiClient.reportCapabilities(instance.capabilities());
+    }
+    apiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
+    apiClient.enableWebSocketAutoConnect = options.enableWebSocket !== false;
+
+    if (apiClient.enableWebSocketAutoConnect) {
+        console.log('calling apiClient.ensureWebSocket');
+
+        apiClient.connected = true;
+        apiClient.ensureWebSocket();
+    }
+}
+
+function onLocalUserSignIn(instance, server, serverUrl) {
+
+    // Ensure this is created so that listeners of the event can get the apiClient instance
+    instance._getOrAddApiClient(server, serverUrl);
+
+    // This allows the app to have a single hook that fires before any other
+    const promise = instance.onLocalUserSignedIn ? instance.onLocalUserSignedIn.call(instance, server.Id, server.UserId) : Promise.resolve();
+
+    return promise.then(() => {
+        events.trigger(instance, 'localusersignedin', [server.Id, server.UserId]);
+    });
+}
+
+function addAuthenticationInfoFromConnect(instance, server, systemInfo, serverUrl, credentials) {
+
+    if (!server.ExchangeToken) {
+        throw new Error("server.ExchangeToken cannot be null");
+    }
+    if (!credentials.ConnectUserId) {
+        throw new Error("credentials.ConnectUserId cannot be null");
+    }
+
+    const url = instance.getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
+
+    const headers = {
+        "X-Emby-Token": server.ExchangeToken
+    };
+
+    const appName = instance.appName();
+    const appVersion = instance.appVersion();
+    const deviceName = instance.deviceName();
+    const deviceId = instance.deviceId();
+
+    if (compareVersions(systemInfo.Version, '4.4.0.21') >= 0) {
+
+        if (appName) {
+            headers['X-Emby-Client'] = appName;
+        }
+
+        if (deviceName) {
+            headers['X-Emby-Device-Name'] = encodeURIComponent(deviceName);
+        }
+
+        if (deviceId) {
+            headers['X-Emby-Device-Id'] = deviceId;
+        }
+
+        if (appVersion) {
+            headers['X-Emby-Client-Version'] = appVersion;
+        }
+    }
+    else {
+        headers["X-Emby-Authorization"] = 'MediaBrowser Client="' + appName + '", Device="' + encodeURIComponent(deviceName) + '", DeviceId="' + deviceId + '", Version="' + appVersion + '"';
+    }
+
+    return ajax({
+        type: "GET",
+        url: url,
+        dataType: "json",
+        headers: headers
+
+    }).then(auth => {
+
+        server.UserId = auth.LocalUserId;
+        server.AccessToken = auth.AccessToken;
+        return auth;
+
+    }, () => {
+
+        server.UserId = null;
+        server.AccessToken = null;
+        return Promise.reject();
+
+    });
+}
+
+function logoutOfServer(instance, apiClient) {
+
+    const serverInfo = apiClient.serverInfo() || {};
+
+    const logoutInfo = {
+        serverId: serverInfo.Id
+    };
+
+    return apiClient.logout().then(() => {
+
+        events.trigger(instance, 'localusersignedout', [logoutInfo]);
+    }, () => {
+
+        events.trigger(instance, 'localusersignedout', [logoutInfo]);
+    });
+}
+
+function getConnectServers(instance, credentials) {
+
+    console.log('Begin getConnectServers');
+
+    if (!credentials.ConnectAccessToken || !credentials.ConnectUserId) {
+        return Promise.resolve([]);
+    }
+
+    const url = `https://connect.emby.media/service/servers?userId=${credentials.ConnectUserId}`;
+
+    return ajax({
+        type: "GET",
+        url,
+        dataType: "json",
+        headers: {
+            "X-Application": `${instance.appName()}/${instance.appVersion()}`,
+            "X-Connect-UserToken": credentials.ConnectAccessToken
+        }
+
+    }).then(servers => servers.map(i => ({
+        ExchangeToken: i.AccessKey,
+        ConnectServerId: i.Id,
+        Id: i.SystemId,
+        Name: i.Name,
+        RemoteAddress: i.Url,
+        LocalAddress: i.LocalAddres
+
+    })), () => credentials.Servers.slice(0).filter(s => s.ExchangeToken));
+}
+
+function tryReconnectToUrl(instance, url, connectionMode, delay, signal) {
+
+    console.log('tryReconnectToUrl: ' + url);
+
+    return setTimeoutPromise(delay).then(() => {
+
+        return ajax({
+
+            url: instance.getEmbyServerUrl(url, 'system/info/public'),
+            timeout: defaultTimeout,
+            type: 'GET',
+            dataType: 'json'
+
+        }, signal).then((result) => {
+
+            return {
+                url: url,
+                connectionMode: connectionMode,
+                data: result
+            };
+        });
+    });
+}
+
+function tryReconnect(instance, serverInfo, signal) {
+
+    const addresses = [];
+    const addressesStrings = [];
+
+    // the timeouts are a small hack to try and ensure the remote address doesn't resolve first
+
+    // manualAddressOnly is used for the local web app that always connects to a fixed address
+    if (!serverInfo.manualAddressOnly && serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1 && allowAddress(instance, serverInfo.LocalAddress)) {
+        addresses.push({ url: serverInfo.LocalAddress, mode: ConnectionMode.Local, timeout: 0 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+    if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1 && allowAddress(instance, serverInfo.ManualAddress)) {
+        addresses.push({ url: serverInfo.ManualAddress, mode: ConnectionMode.Manual, timeout: 100 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+    if (!serverInfo.manualAddressOnly && serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1 && allowAddress(instance, serverInfo.RemoteAddress)) {
+        addresses.push({ url: serverInfo.RemoteAddress, mode: ConnectionMode.Remote, timeout: 200 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+
+    console.log('tryReconnect: ' + addressesStrings.join('|'));
+
+    if (!addressesStrings.length) {
+        return Promise.reject();
+    }
+
+    const promises = [];
+
+    for (let i = 0, length = addresses.length; i < length; i++) {
+
+        promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].mode, addresses[i].timeout, signal));
+    }
+
+    return Promise.any(promises);
+}
+
+function afterConnectValidated(
+    instance,
+    server,
+    credentials,
+    systemInfo,
+    connectionMode,
+    serverUrl,
+    verifyLocalAuthentication,
+    options,
+    resolve) {
+
+    options = options || {};
+
+    if (verifyLocalAuthentication && server.AccessToken) {
+
+        validateAuthentication(instance, server, serverUrl).then((fullSystemInfo) => {
+
+            afterConnectValidated(instance, server, credentials, fullSystemInfo || systemInfo, connectionMode, serverUrl, false, options, resolve);
+        });
+
+        return;
+    }
+
+    updateServerInfo(server, systemInfo);
+
+    server.LastConnectionMode = connectionMode;
+
+    if (options.updateDateLastAccessed !== false) {
+        server.DateLastAccessed = Date.now();
+    }
+
+    const credentialProvider = instance.credentialProvider();
+
+    credentialProvider.addOrUpdateServer(credentials.Servers, server);
+    credentialProvider.credentials(credentials);
+
+    const result = {
+        Servers: []
+    };
+
+    result.ApiClient = instance._getOrAddApiClient(server, serverUrl);
+
+    result.ApiClient.setSystemInfo(systemInfo);
+
+    result.State = server.AccessToken && options.enableAutoLogin !== false ?
+        'SignedIn' :
+        'ServerSignIn';
+
+    result.Servers.push(server);
+
+    // set this now before updating server info, otherwise it won't be set in time
+    result.ApiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
+
+    result.ApiClient.updateServerInfo(server, serverUrl);
+
+    const resolveActions = function () {
+        resolve(result);
+
+        events.trigger(instance, 'connected', [result]);
+    };
+
+    if (result.State === 'SignedIn') {
+        afterConnected(instance, result.ApiClient, options);
+
+        onLocalUserSignIn(instance, server, serverUrl).then(resolveActions, resolveActions);
+    }
+    else {
+        resolveActions();
+    }
+}
+
+function onSuccessfulConnection(instance, server, systemInfo, connectionMode, serverUrl, options, resolve) {
+
+    const credentials = instance.credentialProvider().credentials();
+    options = options || {};
+    if (credentials.ConnectAccessToken && options.enableAutoLogin !== false) {
+
+        ensureConnectUser(instance, credentials).then(() => {
+
+            if (server.ExchangeToken) {
+                addAuthenticationInfoFromConnect(instance, server, systemInfo, serverUrl, credentials).then(() => {
+
+                    afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
+
+                }, () => {
+
+                    afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
+                });
+
+            } else {
+
+                afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
+            }
+        });
+    }
+    else {
+        afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
+    }
+}
+
+function resolveIfAvailable(instance, url, server, result, connectionMode, serverUrl, options) {
+
+    const promise = instance.validateServerAddress ? instance.validateServerAddress(instance, ajax, url) : Promise.resolve();
+
+    return promise.then(() => {
+        return new Promise(function (resolve, reject) {
+
+            onSuccessfulConnection(instance, server, result, connectionMode, serverUrl, options, resolve);
+        });
+    }, () => {
+        console.log('minServerVersion requirement not met. Server version: ' + result.Version);
+        return {
+            State: 'ServerUpdateNeeded',
+            Servers: [server]
+        };
+    });
+}
+
 export default class ConnectionManager {
     constructor(
         credentialProvider,
@@ -258,1228 +803,739 @@ export default class ConnectionManager {
         appVersion,
         deviceName,
         deviceId,
-        capabilities,
+        capabilitiesFn,
         devicePixelRatio) {
 
         console.log('Begin ConnectionManager constructor');
 
         events.on(credentialProvider, 'credentialsupdated', onCredentialsSaved.bind(this));
 
-        const self = this;
+        this.appStorage = appStorage;
+        this._credentialProvider = credentialProvider;
+
         this._apiClients = [];
         this._apiClientsMap = {};
 
-        let connectUser;
-        self.connectUser = () => connectUser;
+        this._minServerVersion = '4.1.1';
 
-        self._minServerVersion = '4.1.1';
+        this.appVersion = () => appVersion;
 
-        self.appVersion = () => appVersion;
+        this.appName = () => appName;
 
-        self.appName = () => appName;
+        this.deviceName = () => deviceName;
 
-        self.capabilities = () => capabilities;
+        this.capabilities = () => capabilitiesFn();
 
-        self.deviceId = () => deviceId;
+        this.deviceId = () => deviceId;
 
-        self.credentialProvider = () => credentialProvider;
+        this.apiClientFactory = apiClientFactory;
+        this.wakeOnLanFn = wakeOnLanFn;
+        this.serverDiscoveryFn = serverDiscoveryFn;
+        this.devicePixelRatio = devicePixelRatio;
+    }
 
-        self.connectUserId = () => credentialProvider.credentials().ConnectUserId;
+    minServerVersion(val) {
 
-        self.connectToken = () => credentialProvider.credentials().ConnectAccessToken;
-
-        self.getServerInfo = id => {
-
-            const servers = credentialProvider.credentials().Servers;
-
-            return servers.filter(s => s.Id === id)[0];
-        };
-
-        self.getLastUsedServer = () => {
-
-            const servers = credentialProvider.credentials().Servers;
-
-            servers.sort(sortServers);
-
-            if (!servers.length) {
-                return null;
-            }
-
-            return servers[0];
-        };
-
-        self.addApiClient = (apiClient, isOnlyServer) => {
-
-            self._apiClients.push(apiClient);
-
-            const currentServers = credentialProvider.credentials().Servers;
-            const existingServers = currentServers.filter(function (s) {
-
-                return stringEqualsIgnoreCase(s.ManualAddress, apiClient.serverAddress()) ||
-                    stringEqualsIgnoreCase(s.LocalAddress, apiClient.serverAddress()) ||
-                    stringEqualsIgnoreCase(s.RemoteAddress, apiClient.serverAddress());
-
-            });
-
-            const existingServer = existingServers.length ? existingServers[0] : apiClient.serverInfo();
-            existingServer.DateLastAccessed = Date.now();
-            existingServer.LastConnectionMode = ConnectionMode.Manual;
-            existingServer.ManualAddress = apiClient.serverAddress();
-
-            if (apiClient.manualAddressOnly) {
-                existingServer.manualAddressOnly = true;
-            }
-
-            apiClient.serverInfo(existingServer);
-            if (existingServer.Id) {
-                self._apiClientsMap[existingServer.Id] = apiClient;
-            }
-
-            apiClient.onAuthenticated = onAuthenticated;
-
-            if (!existingServers.length || isOnlyServer) {
-                const credentials = credentialProvider.credentials();
-                credentials.Servers = [existingServer];
-                credentialProvider.credentials(credentials);
-            }
-
-            events.trigger(self, 'apiclientcreated', [apiClient]);
-        };
-
-        self.clearData = () => {
-
-            console.log('connection manager clearing data');
-
-            connectUser = null;
-            const credentials = credentialProvider.credentials();
-            credentials.ConnectAccessToken = null;
-            credentials.ConnectUserId = null;
-            credentials.Servers = [];
-            credentialProvider.credentials(credentials);
-        };
-
-        function onConnectUserSignIn(user) {
-
-            connectUser = user;
-            events.trigger(self, 'connectusersignedin', [user]);
+        if (val) {
+            this._minServerVersion = val;
         }
 
-        self._getOrAddApiClient = (server, serverUrl) => {
+        return this._minServerVersion;
+    }
 
-            let apiClient = self.getApiClient(server.Id);
+    connectUser() {
+        return this._connectUser;
+    }
 
-            if (!apiClient) {
+    credentialProvider() {
+        return this._credentialProvider;
+    }
 
-                apiClient = new apiClientFactory(appStorage, wakeOnLanFn, serverUrl, appName, appVersion, deviceName, deviceId, devicePixelRatio);
+    connectUserId() {
+        return this.credentialProvider().credentials().ConnectUserId;
+    }
 
-                apiClient.rejectInsecureAddresses = self.rejectInsecureAddresses;
+    connectToken() {
+        return this.credentialProvider().credentials().ConnectAccessToken;
+    }
 
-                self._apiClients.push(apiClient);
+    getServerInfo(id) {
 
-                apiClient.serverInfo(server);
+        const servers = this.credentialProvider().credentials().Servers;
 
-                apiClient.onAuthenticated = onAuthenticated;
+        return servers.filter(s => s.Id === id)[0];
+    }
 
-                events.trigger(self, 'apiclientcreated', [apiClient]);
-            }
+    getLastUsedServer() {
 
-            console.log('returning instance from getOrAddApiClient');
-            return apiClient;
-        };
+        const servers = this.credentialProvider().credentials().Servers;
 
-        self.getOrCreateApiClient = serverId => {
+        servers.sort(sortServers);
 
+        if (!servers.length) {
+            return null;
+        }
+
+        return servers[0];
+    }
+
+    addApiClient(apiClient, isOnlyServer) {
+
+        this._apiClients.push(apiClient);
+
+        const credentialProvider = this.credentialProvider();
+
+        const currentServers = credentialProvider.credentials().Servers;
+        const existingServers = currentServers.filter(function (s) {
+
+            return stringEqualsIgnoreCase(s.ManualAddress, apiClient.serverAddress()) ||
+                stringEqualsIgnoreCase(s.LocalAddress, apiClient.serverAddress()) ||
+                stringEqualsIgnoreCase(s.RemoteAddress, apiClient.serverAddress());
+
+        });
+
+        const existingServer = existingServers.length ? existingServers[0] : apiClient.serverInfo();
+        existingServer.DateLastAccessed = Date.now();
+        existingServer.LastConnectionMode = ConnectionMode.Manual;
+        existingServer.ManualAddress = apiClient.serverAddress();
+
+        if (apiClient.manualAddressOnly) {
+            existingServer.manualAddressOnly = true;
+        }
+
+        apiClient.serverInfo(existingServer);
+        if (existingServer.Id) {
+            this._apiClientsMap[existingServer.Id] = apiClient;
+        }
+
+        apiClient.onAuthenticated = onAuthenticated.bind(this);
+
+        if (!existingServers.length || isOnlyServer) {
             const credentials = credentialProvider.credentials();
-            const servers = credentials.Servers.filter(s => stringEqualsIgnoreCase(s.Id, serverId));
-
-            if (!servers.length) {
-                throw new Error(`Server not found: ${serverId}`);
-            }
-
-            const server = servers[0];
-
-            return self._getOrAddApiClient(server, getServerAddress(server, server.LastConnectionMode));
-        };
-
-        function onAuthenticated(apiClient, result) {
-
-            const options = {};
-
-            const credentials = credentialProvider.credentials();
-            const servers = credentials.Servers.filter(s => s.Id === result.ServerId);
-
-            const server = servers.length ? servers[0] : apiClient.serverInfo();
-
-            if (options.updateDateLastAccessed !== false) {
-                server.DateLastAccessed = Date.now();
-            }
-            server.Id = result.ServerId;
-
-            server.UserId = result.User.Id;
-            server.AccessToken = result.AccessToken;
-
-            credentialProvider.addOrUpdateServer(credentials.Servers, server);
+            credentials.Servers = [existingServer];
             credentialProvider.credentials(credentials);
+        }
 
-            // set this now before updating server info, otherwise it won't be set in time
-            apiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
+        events.trigger(this, 'apiclientcreated', [apiClient]);
+    }
+
+    clearData() {
+
+        console.log('connection manager clearing data');
+
+        this._connectUser = null;
+        const credentialProvider = this.credentialProvider();
+        const credentials = credentialProvider.credentials();
+        credentials.ConnectAccessToken = null;
+        credentials.ConnectUserId = null;
+        credentials.Servers = [];
+        credentialProvider.credentials(credentials);
+    }
+
+    _getOrAddApiClient(server, serverUrl) {
+
+        let apiClient = this.getApiClient(server.Id);
+
+        if (!apiClient) {
+
+            const ApiClient = this.apiClientFactory;
+
+            apiClient = new ApiClient(this.appStorage, this.wakeOnLanFn, serverUrl, this.appName(), this.appVersion(), this.deviceName(), this.deviceId(), this.devicePixelRatio);
+
+            apiClient.rejectInsecureAddresses = this.rejectInsecureAddresses;
+
+            this._apiClients.push(apiClient);
 
             apiClient.serverInfo(server);
-            afterConnected(apiClient, options);
 
-            return apiClient.getPublicSystemInfo().then(function (systemInfo) {
+            apiClient.onAuthenticated = onAuthenticated.bind(this);
 
-                updateServerInfo(server, systemInfo);
-                credentialProvider.addOrUpdateServer(credentials.Servers, server);
-                credentialProvider.credentials(credentials);
-
-                return onLocalUserSignIn(server, apiClient.serverAddress());
-            });
+            events.trigger(this, 'apiclientcreated', [apiClient]);
         }
 
-        function afterConnected(apiClient, options = {}) {
-            if (options.reportCapabilities !== false) {
-                apiClient.reportCapabilities(capabilities);
-            }
-            apiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
-            apiClient.enableWebSocketAutoConnect = options.enableWebSocket !== false;
+        console.log('returning instance from getOrAddApiClient');
+        return apiClient;
+    }
 
-            if (apiClient.enableWebSocketAutoConnect) {
-                console.log('calling apiClient.ensureWebSocket');
+    getOrCreateApiClient(serverId) {
 
-                apiClient.connected = true;
-                apiClient.ensureWebSocket();
-            }
+        const credentials = this.credentialProvider().credentials();
+        const servers = credentials.Servers.filter(s => stringEqualsIgnoreCase(s.Id, serverId));
+
+        if (!servers.length) {
+            throw new Error(`Server not found: ${serverId}`);
         }
 
-        function onLocalUserSignIn(server, serverUrl) {
+        const server = servers[0];
 
-            // Ensure this is created so that listeners of the event can get the apiClient instance
-            self._getOrAddApiClient(server, serverUrl);
+        return this._getOrAddApiClient(server, getServerAddress(server, server.LastConnectionMode));
+    }
 
-            // This allows the app to have a single hook that fires before any other
-            const promise = self.onLocalUserSignedIn ? self.onLocalUserSignedIn.call(self, server.Id, server.UserId) : Promise.resolve();
+    logout() {
 
-            return promise.then(() => {
-                events.trigger(self, 'localusersignedin', [server.Id, server.UserId]);
-            });
-        }
+        console.log('begin connectionManager loguot');
+        const promises = [];
 
-        function ensureConnectUser(credentials) {
+        for (let i = 0, length = this._apiClients.length; i < length; i++) {
 
-            if (connectUser && connectUser.Id === credentials.ConnectUserId) {
-                return Promise.resolve();
-            }
+            const apiClient = this._apiClients[i];
 
-            else if (credentials.ConnectUserId && credentials.ConnectAccessToken) {
-
-                connectUser = null;
-
-                return getConnectUser(credentials.ConnectUserId, credentials.ConnectAccessToken).then(user => {
-
-                    onConnectUserSignIn(user);
-                    return Promise.resolve();
-
-                }, () => Promise.resolve());
-
-            } else {
-                return Promise.resolve();
+            if (apiClient.accessToken()) {
+                promises.push(logoutOfServer(this, apiClient));
             }
         }
 
-        function getConnectUser(userId, accessToken) {
+        const instance = this;
 
-            if (!userId) {
-                throw new Error("null userId");
-            }
-            if (!accessToken) {
-                throw new Error("null accessToken");
-            }
+        return Promise.all(promises).then(() => {
 
-            const url = `https://connect.emby.media/service/user?id=${userId}`;
-
-            return ajax({
-                type: "GET",
-                url,
-                dataType: "json",
-                headers: {
-                    "X-Application": `${appName}/${appVersion}`,
-                    "X-Connect-UserToken": accessToken
-                }
-
-            });
-        }
-
-        function addAuthenticationInfoFromConnect(server, systemInfo, serverUrl, credentials) {
-
-            if (!server.ExchangeToken) {
-                throw new Error("server.ExchangeToken cannot be null");
-            }
-            if (!credentials.ConnectUserId) {
-                throw new Error("credentials.ConnectUserId cannot be null");
-            }
-
-            const url = self.getEmbyServerUrl(serverUrl, `Connect/Exchange?format=json&ConnectUserId=${credentials.ConnectUserId}`);
-
-            const headers = {
-                "X-Emby-Token": server.ExchangeToken
-            };
-
-            if (compareVersions(systemInfo.Version, '4.4.0.21') >= 0) {
-
-                if (appName) {
-                    headers['X-Emby-Client'] = appName;
-                }
-
-                if (deviceName) {
-                    headers['X-Emby-Device-Name'] = encodeURIComponent(deviceName);
-                }
-
-                if (deviceId) {
-                    headers['X-Emby-Device-Id'] = deviceId;
-                }
-
-                if (appVersion) {
-                    headers['X-Emby-Client-Version'] = appVersion;
-                }
-            }
-            else {
-                headers["X-Emby-Authorization"] = 'MediaBrowser Client="' + appName + '", Device="' + encodeURIComponent(deviceName) + '", DeviceId="' + deviceId + '", Version="' + appVersion + '"';
-            }
-
-            return ajax({
-                type: "GET",
-                url: url,
-                dataType: "json",
-                headers: headers
-
-            }).then(auth => {
-
-                server.UserId = auth.LocalUserId;
-                server.AccessToken = auth.AccessToken;
-                return auth;
-
-            }, () => {
-
-                server.UserId = null;
-                server.AccessToken = null;
-                return Promise.reject();
-
-            });
-        }
-
-        function validateAuthentication(server, serverUrl) {
-
-            return ajax({
-
-                type: "GET",
-                url: self.getEmbyServerUrl(serverUrl, "System/Info"),
-                dataType: "json",
-                headers: {
-                    "X-MediaBrowser-Token": server.AccessToken
-                }
-
-            }).then(systemInfo => {
-
-                updateServerInfo(server, systemInfo);
-                return systemInfo;
-
-            }, () => {
-
-                server.UserId = null;
-                server.AccessToken = null;
-                return Promise.resolve();
-            });
-        }
-
-        self.logout = () => {
-
-            console.log('begin connectionManager loguot');
-            const promises = [];
-
-            for (let i = 0, length = self._apiClients.length; i < length; i++) {
-
-                const apiClient = self._apiClients[i];
-
-                if (apiClient.accessToken()) {
-                    promises.push(logoutOfServer(apiClient));
-                }
-            }
-
-            return Promise.all(promises).then(() => {
-
-                const credentials = credentialProvider.credentials();
-
-                const servers = credentials.Servers;
-
-                for (let j = 0, numServers = servers.length; j < numServers; j++) {
-
-                    const server = servers[j];
-
-                    server.UserId = null;
-                    server.AccessToken = null;
-                    server.ExchangeToken = null;
-                }
-
-                credentials.Servers = servers;
-                credentials.ConnectAccessToken = null;
-                credentials.ConnectUserId = null;
-
-                credentialProvider.credentials(credentials);
-
-                if (connectUser) {
-                    connectUser = null;
-                    events.trigger(self, 'connectusersignedout');
-                }
-            });
-        };
-
-        function logoutOfServer(apiClient) {
-
-            const serverInfo = apiClient.serverInfo() || {};
-
-            const logoutInfo = {
-                serverId: serverInfo.Id
-            };
-
-            return apiClient.logout().then(() => {
-
-                events.trigger(self, 'localusersignedout', [logoutInfo]);
-            }, () => {
-
-                events.trigger(self, 'localusersignedout', [logoutInfo]);
-            });
-        }
-
-        function getConnectServers(credentials) {
-
-            console.log('Begin getConnectServers');
-
-            if (!credentials.ConnectAccessToken || !credentials.ConnectUserId) {
-                return Promise.resolve([]);
-            }
-
-            const url = `https://connect.emby.media/service/servers?userId=${credentials.ConnectUserId}`;
-
-            return ajax({
-                type: "GET",
-                url,
-                dataType: "json",
-                headers: {
-                    "X-Application": `${appName}/${appVersion}`,
-                    "X-Connect-UserToken": credentials.ConnectAccessToken
-                }
-
-            }).then(servers => servers.map(i => ({
-                ExchangeToken: i.AccessKey,
-                ConnectServerId: i.Id,
-                Id: i.SystemId,
-                Name: i.Name,
-                RemoteAddress: i.Url,
-                LocalAddress: i.LocalAddres
-
-            })), () => credentials.Servers.slice(0).filter(s => s.ExchangeToken));
-        }
-
-        self.getSavedServers = () => {
+            const credentialProvider = instance.credentialProvider();
 
             const credentials = credentialProvider.credentials();
 
-            const servers = credentials.Servers.slice(0);
+            const servers = credentials.Servers;
+
+            for (let j = 0, numServers = servers.length; j < numServers; j++) {
+
+                const server = servers[j];
+
+                server.UserId = null;
+                server.AccessToken = null;
+                server.ExchangeToken = null;
+            }
+
+            credentials.Servers = servers;
+            credentials.ConnectAccessToken = null;
+            credentials.ConnectUserId = null;
+
+            credentialProvider.credentials(credentials);
+
+            if (instance._connectUser) {
+                instance._connectUser = null;
+                events.trigger(instance, 'connectusersignedout');
+            }
+        });
+    }
+
+    getSavedServers() {
+
+        const credentialProvider = this.credentialProvider();
+
+        const credentials = credentialProvider.credentials();
+
+        const servers = credentials.Servers.slice(0);
+
+        servers.forEach(setServerProperties);
+        servers.sort(sortServers);
+
+        return servers;
+    }
+
+    getAvailableServers() {
+
+        console.log('Begin getAvailableServers');
+
+        const credentialProvider = this.credentialProvider();
+
+        // Clone the array
+        const credentials = credentialProvider.credentials();
+
+        return Promise.all([getConnectServers(this, credentials), findServers(this.serverDiscoveryFn)]).then(responses => {
+
+            const connectServers = responses[0];
+            const foundServers = responses[1];
+
+            let servers = credentials.Servers.slice(0);
+            mergeServers(credentialProvider, servers, foundServers);
+            mergeServers(credentialProvider, servers, connectServers);
+
+            servers = filterServers(servers, connectServers);
 
             servers.forEach(setServerProperties);
             servers.sort(sortServers);
 
+            credentials.Servers = servers;
+
+            credentialProvider.credentials(credentials);
+
             return servers;
-        };
+        });
+    }
 
-        self.getAvailableServers = () => {
+    connectToServers(servers, options) {
 
-            console.log('Begin getAvailableServers');
+        console.log(`Begin connectToServers, with ${servers.length} servers`);
 
-            // Clone the array
-            const credentials = credentialProvider.credentials();
+        const firstServer = servers.length ? servers[0] : null;
+        // See if we have any saved credentials and can auto sign in
+        if (firstServer) {
+            return this.connectToServer(firstServer, options).then((result) => {
 
-            return Promise.all([getConnectServers(credentials), findServers()]).then(responses => {
+                if (result.State === 'Unavailable') {
 
-                const connectServers = responses[0];
-                const foundServers = responses[1];
-
-                let servers = credentials.Servers.slice(0);
-                mergeServers(credentialProvider, servers, foundServers);
-                mergeServers(credentialProvider, servers, connectServers);
-
-                servers = filterServers(servers, connectServers);
-
-                servers.forEach(setServerProperties);
-                servers.sort(sortServers);
-
-                credentials.Servers = servers;
-
-                credentialProvider.credentials(credentials);
-
-                return servers;
-            });
-        };
-
-        function filterServers(servers, connectServers) {
-
-            return servers.filter(server => {
-
-                // It's not a connect server, so assume it's still valid
-                if (!server.ExchangeToken) {
-                    return true;
+                    result.State = 'ServerSelection';
                 }
 
-                return connectServers.filter(connectServer => server.Id === connectServer.Id).length > 0;
+                console.log('resolving connectToServers with result.State: ' + result.State);
+                return result;
             });
         }
 
-        function findServers() {
+        return Promise.resolve({
+            Servers: servers,
+            State: (!servers.length && !this.connectUser()) ? 'ConnectSignIn' : 'ServerSelection',
+            ConnectUser: this.connectUser()
+        });
+    }
 
-            const onFinish = function (foundServers) {
-                const servers = foundServers.map(function (foundServer) {
+    connectToServer(server, options) {
 
-                    const info = {
-                        Id: foundServer.Id,
-                        LocalAddress: convertEndpointAddressToManualAddress(foundServer) || foundServer.Address,
-                        Name: foundServer.Name
-                    };
+        console.log('begin connectToServer');
 
-                    info.LastConnectionMode = info.ManualAddress ? ConnectionMode.Manual : ConnectionMode.Local;
+        options = options || {};
 
-                    return info;
-                });
-                return servers;
-            };
+        const instance = this;
 
-            return serverDiscoveryFn().then(serverDiscovery => {
-                return serverDiscovery.default.findServers(1000).then(onFinish, () => {
-                    return onFinish([]);
-                });
-            });
-        }
+        return tryReconnect(this, server).then((result) => {
 
-        function convertEndpointAddressToManualAddress(info) {
+            const serverUrl = result.url;
+            const connectionMode = result.connectionMode;
+            result = result.data;
 
-            if (info.Address && info.EndpointAddress) {
-                let address = info.EndpointAddress.split(":")[0];
+            if (compareVersions(instance.minServerVersion(), result.Version) === 1 ||
+                compareVersions(result.Version, '8.0') === 1) {
 
-                // Determine the port, if any
-                const parts = info.Address.split(":");
-                if (parts.length > 1) {
-                    const portString = parts[parts.length - 1];
-
-                    if (!isNaN(parseInt(portString))) {
-                        address += `:${portString}`;
-                    }
-                }
-
-                return normalizeAddress(address);
-            }
-
-            return null;
-        }
-
-        self.connectToServers = (servers, options) => {
-
-            console.log(`Begin connectToServers, with ${servers.length} servers`);
-
-            const firstServer = servers.length ? servers[0] : null;
-            // See if we have any saved credentials and can auto sign in
-            if (firstServer) {
-                return self.connectToServer(firstServer, options).then((result) => {
-
-                    if (result.State === 'Unavailable') {
-
-                        result.State = 'ServerSelection';
-                    }
-
-                    console.log('resolving connectToServers with result.State: ' + result.State);
-                    return result;
-                });
-            }
-
-            return Promise.resolve({
-                Servers: servers,
-                State: (!servers.length && !self.connectUser()) ? 'ConnectSignIn' : 'ServerSelection',
-                ConnectUser: self.connectUser()
-            });
-        };
-
-        function tryReconnectToUrl(instance, url, connectionMode, delay, signal) {
-
-            console.log('tryReconnectToUrl: ' + url);
-
-            return setTimeoutPromise(delay).then(() => {
-
-                return ajax({
-
-                    url: instance.getEmbyServerUrl(url, 'system/info/public'),
-                    timeout: defaultTimeout,
-                    type: 'GET',
-                    dataType: 'json'
-
-                }, signal).then((result) => {
-
-                    return {
-                        url: url,
-                        connectionMode: connectionMode,
-                        data: result
-                    };
-                });
-            });
-        }
-
-        function allowAddress(instance, address) {
-
-            if (instance.rejectInsecureAddresses) {
-
-                if (address.indexOf('https:') !== 0) {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        function setTimeoutPromise(timeout) {
-
-            return new Promise((resolve, reject) => {
-
-                setTimeout(resolve, timeout);
-            });
-        }
-
-        function tryReconnect(instance, serverInfo, signal) {
-
-            const addresses = [];
-            const addressesStrings = [];
-
-            // the timeouts are a small hack to try and ensure the remote address doesn't resolve first
-
-            // manualAddressOnly is used for the local web app that always connects to a fixed address
-            if (!serverInfo.manualAddressOnly && serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1 && allowAddress(instance, serverInfo.LocalAddress)) {
-                addresses.push({ url: serverInfo.LocalAddress, mode: ConnectionMode.Local, timeout: 0 });
-                addressesStrings.push(addresses[addresses.length - 1].url);
-            }
-            if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1 && allowAddress(instance, serverInfo.ManualAddress)) {
-                addresses.push({ url: serverInfo.ManualAddress, mode: ConnectionMode.Manual, timeout: 100 });
-                addressesStrings.push(addresses[addresses.length - 1].url);
-            }
-            if (!serverInfo.manualAddressOnly && serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1 && allowAddress(instance, serverInfo.RemoteAddress)) {
-                addresses.push({ url: serverInfo.RemoteAddress, mode: ConnectionMode.Remote, timeout: 200 });
-                addressesStrings.push(addresses[addresses.length - 1].url);
-            }
-
-            console.log('tryReconnect: ' + addressesStrings.join('|'));
-
-            if (!addressesStrings.length) {
-                return Promise.reject();
-            }
-
-            const promises = [];
-
-            for (let i = 0, length = addresses.length; i < length; i++) {
-
-                promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].mode, addresses[i].timeout, signal));
-            }
-
-            return Promise.any(promises);
-        }
-
-        function resolveIfAvailable(url, server, result, connectionMode, serverUrl, options) {
-
-            const promise = self.validateServerAddress ? self.validateServerAddress(self, ajax, url) : Promise.resolve();
-
-            return promise.then(() => {
-                return new Promise(function (resolve, reject) {
-
-                    onSuccessfulConnection(server, result, connectionMode, serverUrl, options, resolve);
-                });
-            }, () => {
                 console.log('minServerVersion requirement not met. Server version: ' + result.Version);
                 return {
                     State: 'ServerUpdateNeeded',
                     Servers: [server]
                 };
-            });
-        }
 
-        self.connectToServer = (server, options) => {
+            }
+            else if (server.Id && result.Id !== server.Id && instance.validateServerIds !== false) {
 
-            console.log('begin connectToServer');
-
-            options = options || {};
-
-            return tryReconnect(self, server).then((result) => {
-
-                const serverUrl = result.url;
-                const connectionMode = result.connectionMode;
-                result = result.data;
-
-                if (compareVersions(self.minServerVersion(), result.Version) === 1 ||
-                    compareVersions(result.Version, '8.0') === 1) {
-
-                    console.log('minServerVersion requirement not met. Server version: ' + result.Version);
-                    return {
-                        State: 'ServerUpdateNeeded',
-                        Servers: [server]
-                    };
-
-                }
-                else if (server.Id && result.Id !== server.Id && self.validateServerIds !== false) {
-
-                    console.log('http request succeeded, but found a different server Id than what was expected');
-                    return {
-                        State: 'Unavailable',
-                        ConnectUser: self.connectUser()
-                    };
-
-                }
-                else {
-                    return resolveIfAvailable(serverUrl, server, result, connectionMode, serverUrl, options);
-                }
-
-            }, function () {
-
+                console.log('http request succeeded, but found a different server Id than what was expected');
                 return {
                     State: 'Unavailable',
-                    ConnectUser: self.connectUser()
+                    ConnectUser: instance.connectUser()
                 };
+
+            }
+            else {
+                return resolveIfAvailable(instance, serverUrl, server, result, connectionMode, serverUrl, options);
+            }
+
+        }, function () {
+
+            return {
+                State: 'Unavailable',
+                ConnectUser: instance.connectUser()
+            };
+        });
+    }
+
+    connectToAddress(address, options) {
+
+        if (!address) {
+            return Promise.reject();
+        }
+
+        address = normalizeAddress(address);
+        const instance = this;
+
+        function onFail() {
+            console.log(`connectToAddress ${address} failed`);
+            return Promise.resolve({
+                State: 'Unavailable',
+                ConnectUser: instance.connectUser()
             });
+        }
+
+        const server = {
+            ManualAddress: address,
+            LastConnectionMode: ConnectionMode.Manual
         };
 
-        function onSuccessfulConnection(server, systemInfo, connectionMode, serverUrl, options, resolve) {
+        return this.connectToServer(server, options).catch(onFail);
+    }
+
+    loginToConnect(username, password) {
+
+        if (!username) {
+            return Promise.reject();
+        }
+        if (!password) {
+            return Promise.reject();
+        }
+
+        const credentialProvider = this.credentialProvider();
+        const instance = this;
+
+        return ajax({
+            type: "POST",
+            url: "https://connect.emby.media/service/user/authenticate",
+            data: {
+                nameOrEmail: username,
+                rawpw: password
+            },
+            dataType: "json",
+            contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+            headers: {
+                "X-Application": `${this.appName()}/${this.appVersion()}`
+            }
+
+        }).then(result => {
 
             const credentials = credentialProvider.credentials();
-            options = options || {};
-            if (credentials.ConnectAccessToken && options.enableAutoLogin !== false) {
 
-                ensureConnectUser(credentials).then(() => {
+            credentials.ConnectAccessToken = result.AccessToken;
+            credentials.ConnectUserId = result.User.Id;
 
-                    if (server.ExchangeToken) {
-                        addAuthenticationInfoFromConnect(server, systemInfo, serverUrl, credentials).then(() => {
-
-                            afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
-
-                        }, () => {
-
-                            afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
-                        });
-
-                    } else {
-
-                        afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
-                    }
-                });
-            }
-            else {
-                afterConnectValidated(server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
-            }
-        }
-
-        function afterConnectValidated(
-            server,
-            credentials,
-            systemInfo,
-            connectionMode,
-            serverUrl,
-            verifyLocalAuthentication,
-            options,
-            resolve) {
-
-            options = options || {};
-
-            if (verifyLocalAuthentication && server.AccessToken) {
-
-                validateAuthentication(server, serverUrl).then((fullSystemInfo) => {
-
-                    afterConnectValidated(server, credentials, fullSystemInfo || systemInfo, connectionMode, serverUrl, false, options, resolve);
-                });
-
-                return;
-            }
-
-            updateServerInfo(server, systemInfo);
-
-            server.LastConnectionMode = connectionMode;
-
-            if (options.updateDateLastAccessed !== false) {
-                server.DateLastAccessed = Date.now();
-            }
-            credentialProvider.addOrUpdateServer(credentials.Servers, server);
             credentialProvider.credentials(credentials);
 
-            const result = {
-                Servers: []
-            };
+            onConnectUserSignIn(instance, result.User);
 
-            result.ApiClient = self._getOrAddApiClient(server, serverUrl);
+            return result;
+        });
+    }
 
-            result.ApiClient.setSystemInfo(systemInfo);
+    signupForConnect(options) {
 
-            result.State = server.AccessToken && options.enableAutoLogin !== false ?
-                'SignedIn' :
-                'ServerSignIn';
+        const email = options.email;
+        const username = options.username;
+        const password = options.password;
+        const passwordConfirm = options.passwordConfirm;
 
-            result.Servers.push(server);
-
-            // set this now before updating server info, otherwise it won't be set in time
-            result.ApiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
-
-            result.ApiClient.updateServerInfo(server, serverUrl);
-
-            const resolveActions = function () {
-                resolve(result);
-
-                events.trigger(self, 'connected', [result]);
-            };
-
-            if (result.State === 'SignedIn') {
-                afterConnected(result.ApiClient, options);
-
-                onLocalUserSignIn(server, serverUrl).then(resolveActions, resolveActions);
-            }
-            else {
-                resolveActions();
-            }
+        if (!email) {
+            return Promise.reject({ errorCode: 'invalidinput' });
+        }
+        if (!username) {
+            return Promise.reject({ errorCode: 'invalidinput' });
+        }
+        if (!password) {
+            return Promise.reject({ errorCode: 'invalidinput' });
+        }
+        if (!passwordConfirm) {
+            return Promise.reject({ errorCode: 'passwordmatch' });
+        }
+        if (password !== passwordConfirm) {
+            return Promise.reject({ errorCode: 'passwordmatch' });
         }
 
-        self.connectToAddress = function (address, options) {
-
-            if (!address) {
-                return Promise.reject();
-            }
-
-            address = normalizeAddress(address);
-            const instance = this;
-
-            function onFail() {
-                console.log(`connectToAddress ${address} failed`);
-                return Promise.resolve({
-                    State: 'Unavailable',
-                    ConnectUser: instance.connectUser()
-                });
-            }
-
-            const server = {
-                ManualAddress: address,
-                LastConnectionMode: ConnectionMode.Manual
-            };
-
-            return self.connectToServer(server, options).catch(onFail);
+        const data = {
+            email,
+            userName: username,
+            rawpw: password
         };
 
-        self.loginToConnect = (username, password) => {
-
-            if (!username) {
-                return Promise.reject();
-            }
-            if (!password) {
-                return Promise.reject();
-            }
-
-            return ajax({
-                type: "POST",
-                url: "https://connect.emby.media/service/user/authenticate",
-                data: {
-                    nameOrEmail: username,
-                    rawpw: password
-                },
-                dataType: "json",
-                contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
-                headers: {
-                    "X-Application": `${appName}/${appVersion}`
-                }
-
-            }).then(result => {
-
-                const credentials = credentialProvider.credentials();
-
-                credentials.ConnectAccessToken = result.AccessToken;
-                credentials.ConnectUserId = result.User.Id;
-
-                credentialProvider.credentials(credentials);
-
-                onConnectUserSignIn(result.User);
-
-                return result;
-            });
-        };
-
-        self.signupForConnect = options => {
-
-            const email = options.email;
-            const username = options.username;
-            const password = options.password;
-            const passwordConfirm = options.passwordConfirm;
-
-            if (!email) {
-                return Promise.reject({ errorCode: 'invalidinput' });
-            }
-            if (!username) {
-                return Promise.reject({ errorCode: 'invalidinput' });
-            }
-            if (!password) {
-                return Promise.reject({ errorCode: 'invalidinput' });
-            }
-            if (!passwordConfirm) {
-                return Promise.reject({ errorCode: 'passwordmatch' });
-            }
-            if (password !== passwordConfirm) {
-                return Promise.reject({ errorCode: 'passwordmatch' });
-            }
-
-            const data = {
-                email,
-                userName: username,
-                rawpw: password
-            };
-
-            if (options.grecaptcha) {
-                data.grecaptcha = options.grecaptcha;
-            }
-
-            return ajax({
-                type: "POST",
-                url: "https://connect.emby.media/service/register",
-                data,
-                dataType: "json",
-                contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
-                headers: {
-                    "X-Application": `${appName}/${appVersion}`,
-                    "X-CONNECT-TOKEN": "CONNECT-REGISTER"
-                }
-
-            }).catch(response => {
-
-                return response.json();
-
-            }).then(result => {
-                if (result && result.Status) {
-
-                    if (result.Status === 'SUCCESS') {
-                        return Promise.resolve(result);
-                    }
-                    return Promise.reject({ errorCode: result.Status });
-                } else {
-                    Promise.reject();
-                }
-            });
-        };
-
-        self.getUserInvitations = () => {
-
-            const connectToken = self.connectToken();
-
-            if (!connectToken) {
-                throw new Error("null connectToken");
-            }
-            if (!self.connectUserId()) {
-                throw new Error("null connectUserId");
-            }
-
-            const url = `https://connect.emby.media/service/servers?userId=${self.connectUserId()}&status=Waiting`;
-
-            return ajax({
-                type: "GET",
-                url,
-                dataType: "json",
-                headers: {
-                    "X-Connect-UserToken": connectToken,
-                    "X-Application": `${appName}/${appVersion}`
-                }
-
-            });
-        };
-
-        self.deleteServer = serverId => {
-
-            if (!serverId) {
-                throw new Error("null serverId");
-            }
-
-            let server = credentialProvider.credentials().Servers.filter(s => s.Id === serverId);
-            server = server.length ? server[0] : null;
-
-            function onDone() {
-                const credentials = credentialProvider.credentials();
-
-                credentials.Servers = credentials.Servers.filter(s => s.Id !== serverId);
-
-                credentialProvider.credentials(credentials);
-                return Promise.resolve();
-            }
-
-            if (!server.ConnectServerId) {
-                return onDone();
-            }
-
-            const connectToken = self.connectToken();
-            const connectUserId = self.connectUserId();
-
-            if (!connectToken || !connectUserId) {
-                return onDone();
-            }
-
-            const url = `https://connect.emby.media/service/serverAuthorizations?serverId=${server.ConnectServerId}&userId=${connectUserId}`;
-
-            return ajax({
-                type: "DELETE",
-                url,
-                headers: {
-                    "X-Connect-UserToken": connectToken,
-                    "X-Application": `${appName}/${appVersion}`
-                }
-
-            }).then(onDone, onDone);
-        };
-
-        self.rejectServer = serverId => {
-
-            const connectToken = self.connectToken();
-
-            if (!serverId) {
-                throw new Error("null serverId");
-            }
-            if (!connectToken) {
-                throw new Error("null connectToken");
-            }
-            if (!self.connectUserId()) {
-                throw new Error("null connectUserId");
-            }
-
-            const url = `https://connect.emby.media/service/serverAuthorizations?serverId=${serverId}&userId=${self.connectUserId()}`;
-
-            return fetch(url, {
-                method: "DELETE",
-                headers: {
-                    "X-Connect-UserToken": connectToken,
-                    "X-Application": `${appName}/${appVersion}`
-                }
-            });
-        };
-
-        self.acceptServer = serverId => {
-
-            const connectToken = self.connectToken();
-
-            if (!serverId) {
-                throw new Error("null serverId");
-            }
-            if (!connectToken) {
-                throw new Error("null connectToken");
-            }
-            if (!self.connectUserId()) {
-                throw new Error("null connectUserId");
-            }
-
-            const url = `https://connect.emby.media/service/ServerAuthorizations/accept?serverId=${serverId}&userId=${self.connectUserId()}`;
-
-            return ajax({
-                type: "GET",
-                url,
-                headers: {
-                    "X-Connect-UserToken": connectToken,
-                    "X-Application": `${appName}/${appVersion}`
-                }
-
-            });
-        };
-
-        function getCacheKey(feature, apiClient, options = {}) {
-            const viewOnly = options.viewOnly;
-
-            let cacheKey = `regInfo-${apiClient.serverId()}`;
-
-            if (viewOnly) {
-                cacheKey += '-viewonly';
-            }
-
-            return cacheKey;
+        if (options.grecaptcha) {
+            data.grecaptcha = options.grecaptcha;
         }
 
-        self.resetRegistrationInfo = apiClient => {
+        return ajax({
+            type: "POST",
+            url: "https://connect.emby.media/service/register",
+            data,
+            dataType: "json",
+            contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+            headers: {
+                "X-Application": `${this.appName()}/${this.appVersion()}`,
+                "X-CONNECT-TOKEN": "CONNECT-REGISTER"
+            }
 
-            let cacheKey = getCacheKey('themes', apiClient, { viewOnly: true });
-            appStorage.removeItem(cacheKey);
+        }).catch(response => {
 
-            cacheKey = getCacheKey('themes', apiClient, { viewOnly: false });
-            appStorage.removeItem(cacheKey);
+            return response.json();
 
-            events.trigger(self, 'resetregistrationinfo');
+        }).then(result => {
+            if (result && result.Status) {
+
+                if (result.Status === 'SUCCESS') {
+                    return Promise.resolve(result);
+                }
+                return Promise.reject({ errorCode: result.Status });
+            } else {
+                Promise.reject();
+            }
+        });
+    }
+
+    getUserInvitations() {
+
+        const connectToken = this.connectToken();
+
+        if (!connectToken) {
+            throw new Error("null connectToken");
+        }
+        if (!this.connectUserId()) {
+            throw new Error("null connectUserId");
+        }
+
+        const url = `https://connect.emby.media/service/servers?userId=${this.connectUserId()}&status=Waiting`;
+
+        return ajax({
+            type: "GET",
+            url,
+            dataType: "json",
+            headers: {
+                "X-Connect-UserToken": connectToken,
+                "X-Application": `${this.appName()}/${this.appVersion()}`
+            }
+
+        });
+    }
+
+    deleteServer(serverId) {
+
+        if (!serverId) {
+            throw new Error("null serverId");
+        }
+
+        const credentialProvider = this.credentialProvider();
+        let server = credentialProvider.credentials().Servers.filter(s => s.Id === serverId);
+        server = server.length ? server[0] : null;
+
+        function onDone() {
+            const credentials = credentialProvider.credentials();
+
+            credentials.Servers = credentials.Servers.filter(s => s.Id !== serverId);
+
+            credentialProvider.credentials(credentials);
+            return Promise.resolve();
+        }
+
+        if (!server.ConnectServerId) {
+            return onDone();
+        }
+
+        const connectToken = this.connectToken();
+        const connectUserId = this.connectUserId();
+
+        if (!connectToken || !connectUserId) {
+            return onDone();
+        }
+
+        const url = `https://connect.emby.media/service/serverAuthorizations?serverId=${server.ConnectServerId}&userId=${connectUserId}`;
+
+        return ajax({
+            type: "DELETE",
+            url,
+            headers: {
+                "X-Connect-UserToken": connectToken,
+                "X-Application": `${this.appName()}/${this.appVersion()}`
+            }
+
+        }).then(onDone, onDone);
+    }
+
+    rejectServer(serverId) {
+
+        const connectToken = this.connectToken();
+
+        if (!serverId) {
+            throw new Error("null serverId");
+        }
+        if (!connectToken) {
+            throw new Error("null connectToken");
+        }
+        if (!this.connectUserId()) {
+            throw new Error("null connectUserId");
+        }
+
+        const url = `https://connect.emby.media/service/serverAuthorizations?serverId=${serverId}&userId=${this.connectUserId()}`;
+
+        return fetch(url, {
+            method: "DELETE",
+            headers: {
+                "X-Connect-UserToken": connectToken,
+                "X-Application": `${this.appName()}/${this.appVersion()}`
+            }
+        });
+    }
+
+    acceptServer(serverId) {
+
+        const connectToken = this.connectToken();
+
+        if (!serverId) {
+            throw new Error("null serverId");
+        }
+        if (!connectToken) {
+            throw new Error("null connectToken");
+        }
+        if (!this.connectUserId()) {
+            throw new Error("null connectUserId");
+        }
+
+        const url = `https://connect.emby.media/service/ServerAuthorizations/accept?serverId=${serverId}&userId=${this.connectUserId()}`;
+
+        return ajax({
+            type: "GET",
+            url,
+            headers: {
+                "X-Connect-UserToken": connectToken,
+                "X-Application": `${this.appName()}/${this.appVersion()}`
+            }
+
+        });
+    }
+
+    resetRegistrationInfo(apiClient) {
+
+        let cacheKey = getCacheKey('themes', apiClient, { viewOnly: true });
+        this.appStorage.removeItem(cacheKey);
+
+        cacheKey = getCacheKey('themes', apiClient, { viewOnly: false });
+        this.appStorage.removeItem(cacheKey);
+
+        events.trigger(this, 'resetregistrationinfo');
+    }
+
+    getRegistrationInfo(feature, apiClient, options) {
+
+        const params = {
+            serverId: apiClient.serverId(),
+            deviceId: this.deviceId(),
+            deviceName: this.deviceName(),
+            appName: this.appName(),
+            appVersion: this.appVersion(),
+            embyUserName: ''
         };
 
-        self.getRegistrationInfo = (feature, apiClient, options) => {
+        options = options || {};
 
-            const params = {
-                serverId: apiClient.serverId(),
-                deviceId: self.deviceId(),
-                deviceName,
-                appName,
-                appVersion,
-                embyUserName: ''
-            };
+        if (options.viewOnly) {
+            params.viewOnly = options.viewOnly;
+        }
 
-            options = options || {};
+        const cacheKey = getCacheKey(feature, apiClient, options);
 
-            if (options.viewOnly) {
-                params.viewOnly = options.viewOnly;
-            }
+        const regInfo = JSON.parse(this.appStorage.getItem(cacheKey) || '{}');
 
-            const cacheKey = getCacheKey(feature, apiClient, options);
+        const timeSinceLastValidation = (Date.now() - (regInfo.lastValidDate || 0));
 
-            const regInfo = JSON.parse(appStorage.getItem(cacheKey) || '{}');
+        // Cache for 1 day
+        if (timeSinceLastValidation <= 86400000) {
+            console.log('getRegistrationInfo returning cached info');
+            return Promise.resolve();
+        }
 
-            const timeSinceLastValidation = (Date.now() - (regInfo.lastValidDate || 0));
+        const regCacheValid = timeSinceLastValidation <= (regInfo.cacheExpirationDays || 7) * 86400000;
 
-            // Cache for 1 day
-            if (timeSinceLastValidation <= 86400000) {
-                console.log('getRegistrationInfo returning cached info');
-                return Promise.resolve();
-            }
+        const onFailure = err => {
+            console.log('getRegistrationInfo failed: ' + err);
 
-            const regCacheValid = timeSinceLastValidation <= (regInfo.cacheExpirationDays || 7) * 86400000;
-
-            const onFailure = err => {
-                console.log('getRegistrationInfo failed: ' + err);
-
-                // Allow for up to 7 days
-                if (regCacheValid) {
-
-                    console.log('getRegistrationInfo returning cached info');
-                    return Promise.resolve();
-                }
-
-                throw err;
-            };
-
-            params.embyUserName = apiClient.getCurrentUserName();
-
-            const currentUserId = apiClient.getCurrentUserId();
-            if (currentUserId && currentUserId.toLowerCase() === '81f53802ea0247ad80618f55d9b4ec3c' && params.serverId.toLowerCase() === '21585256623b4beeb26d5d3b09dec0ac') {
-                return Promise.reject();
-            }
-
-            const getRegPromise = ajax({
-                url: 'https://mb3admin.com/admin/service/registration/validateDevice?' + paramsToString(params),
-                type: 'POST',
-                dataType: 'json'
-
-            }).then(response => {
-
-                appStorage.setItem(cacheKey, JSON.stringify({
-                    lastValidDate: Date.now(),
-                    deviceId: params.deviceId,
-                    cacheExpirationDays: response.cacheExpirationDays
-                }));
-                return Promise.resolve();
-
-            }, response => {
-
-                const status = (response || {}).status;
-                console.log('getRegistrationInfo response: ' + status);
-
-                if (status === 403) {
-                    return Promise.reject('overlimit');
-                }
-
-                if (status && status < 500) {
-                    return Promise.reject();
-                }
-                return onFailure(response);
-            });
-
+            // Allow for up to 7 days
             if (regCacheValid) {
+
                 console.log('getRegistrationInfo returning cached info');
                 return Promise.resolve();
             }
 
-            return getRegPromise;
+            throw err;
         };
 
-        function addAppInfoToConnectRequest(request) {
-            request.headers = request.headers || {};
-            request.headers['X-Application'] = `${appName}/${appVersion}`;
+        params.embyUserName = apiClient.getCurrentUserName();
+
+        const currentUserId = apiClient.getCurrentUserId();
+        if (currentUserId && currentUserId.toLowerCase() === '81f53802ea0247ad80618f55d9b4ec3c' && params.serverId.toLowerCase() === '21585256623b4beeb26d5d3b09dec0ac') {
+            return Promise.reject();
         }
 
-        self.createPin = () => {
+        const appStorage = this.appStorage;
 
-            const request = {
-                type: 'POST',
-                url: getConnectUrl('pin'),
-                data: {
-                    deviceId
-                },
-                dataType: 'json'
-            };
+        const getRegPromise = ajax({
+            url: 'https://mb3admin.com/admin/service/registration/validateDevice?' + paramsToString(params),
+            type: 'POST',
+            dataType: 'json'
 
-            addAppInfoToConnectRequest(request);
+        }).then(response => {
 
-            return ajax(request);
-        };
+            appStorage.setItem(cacheKey, JSON.stringify({
+                lastValidDate: Date.now(),
+                deviceId: params.deviceId,
+                cacheExpirationDays: response.cacheExpirationDays
+            }));
+            return Promise.resolve();
 
-        self.getPinStatus = pinInfo => {
+        }, response => {
 
-            if (!pinInfo) {
-                throw new Error('pinInfo cannot be null');
+            const status = (response || {}).status;
+            console.log('getRegistrationInfo response: ' + status);
+
+            if (status === 403) {
+                return Promise.reject('overlimit');
             }
 
-            const queryString = {
-                deviceId: pinInfo.DeviceId,
-                pin: pinInfo.Pin
-            };
-
-            const request = {
-                type: 'GET',
-                url: `${getConnectUrl('pin')}?${paramsToString(queryString)}`,
-                dataType: 'json'
-            };
-
-            addAppInfoToConnectRequest(request);
-
-            return ajax(request);
-
-        };
-
-        function exchangePin(pinInfo) {
-
-            if (!pinInfo) {
-                throw new Error('pinInfo cannot be null');
+            if (status && status < 500) {
+                return Promise.reject();
             }
+            return onFailure(response);
+        });
 
-            const request = {
-                type: 'POST',
-                url: getConnectUrl('pin/authenticate'),
-                data: {
-                    deviceId: pinInfo.DeviceId,
-                    pin: pinInfo.Pin
-                },
-                dataType: 'json'
-            };
-
-            addAppInfoToConnectRequest(request);
-
-            return ajax(request);
+        if (regCacheValid) {
+            console.log('getRegistrationInfo returning cached info');
+            return Promise.resolve();
         }
 
-        self.exchangePin = pinInfo => {
+        return getRegPromise;
+    }
 
-            if (!pinInfo) {
-                throw new Error('pinInfo cannot be null');
-            }
+    createPin() {
 
-            return exchangePin(pinInfo).then(result => {
-
-                const credentials = credentialProvider.credentials();
-                credentials.ConnectAccessToken = result.AccessToken;
-                credentials.ConnectUserId = result.UserId;
-                credentialProvider.credentials(credentials);
-
-                return ensureConnectUser(credentials);
-            });
+        const request = {
+            type: 'POST',
+            url: getConnectUrl('pin'),
+            data: {
+                deviceId: this.deviceId()
+            },
+            dataType: 'json'
         };
+
+        addAppInfoToConnectRequest(this, request);
+
+        return ajax(request);
+    }
+
+    getPinStatus(pinInfo) {
+
+        if (!pinInfo) {
+            throw new Error('pinInfo cannot be null');
+        }
+
+        const queryString = {
+            deviceId: pinInfo.DeviceId,
+            pin: pinInfo.Pin
+        };
+
+        const request = {
+            type: 'GET',
+            url: `${getConnectUrl('pin')}?${paramsToString(queryString)}`,
+            dataType: 'json'
+        };
+
+        addAppInfoToConnectRequest(this, request);
+
+        return ajax(request);
+    }
+
+    exchangePin(pinInfo) {
+
+        if (!pinInfo) {
+            throw new Error('pinInfo cannot be null');
+        }
+
+        const credentialProvider = this.credentialProvider();
+
+        return exchangePinInternal(this, pinInfo).then(result => {
+
+            const credentials = credentialProvider.credentials();
+            credentials.ConnectAccessToken = result.AccessToken;
+            credentials.ConnectUserId = result.UserId;
+            credentialProvider.credentials(credentials);
+
+            return ensureConnectUser(credentials);
+        });
     }
 
     connect(options) {
@@ -1595,15 +1651,6 @@ export default class ConnectionManager {
         }
 
         return null;
-    }
-
-    minServerVersion(val) {
-
-        if (val) {
-            this._minServerVersion = val;
-        }
-
-        return this._minServerVersion;
     }
 
     getEmbyServerUrl(baseUrl, handler) {
