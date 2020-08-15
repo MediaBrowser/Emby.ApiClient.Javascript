@@ -813,6 +813,19 @@ export default class ConnectionManager {
         capabilitiesFn,
         devicePixelRatio) {
 
+        if (!appName) {
+            throw new Error("Must supply a appName");
+        }
+        if (!appVersion) {
+            throw new Error("Must supply a appVersion");
+        }
+        if (!deviceName) {
+            throw new Error("Must supply a deviceName");
+        }
+        if (!deviceId) {
+            throw new Error("Must supply a deviceId");
+        }
+
         console.log('Begin ConnectionManager constructor');
 
         events.on(credentialProvider, 'credentialsupdated', onCredentialsSaved.bind(this));
@@ -825,20 +838,33 @@ export default class ConnectionManager {
 
         this._minServerVersion = '4.1.1';
 
-        this.appVersion = () => appVersion;
+        this._appName = appName;
+        this._appVersion = appVersion;
+        this._deviceName = deviceName;
+        this._deviceId = deviceId;
 
-        this.appName = () => appName;
-
-        this.deviceName = () => deviceName;
-
-        this.capabilities = () => capabilitiesFn();
-
-        this.deviceId = () => deviceId;
+        this.capabilities = capabilitiesFn;
 
         this.apiClientFactory = apiClientFactory;
         this.wakeOnLanFn = wakeOnLanFn;
         this.serverDiscoveryFn = serverDiscoveryFn;
         this.devicePixelRatio = devicePixelRatio;
+    }
+
+    appName() {
+        return this._appName;
+    }
+
+    appVersion() {
+        return this._appVersion;
+    }
+
+    deviceName() {
+        return this._deviceName;
+    }
+
+    deviceId() {
+        return this._deviceId;
     }
 
     minServerVersion(val) {
