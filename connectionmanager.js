@@ -1145,16 +1145,16 @@ export default class ConnectionManager {
                 };
 
             }
-            else if (server.Id && result.Id !== server.Id && instance.validateServerIds !== false) {
-
-                console.log('http request succeeded, but found a different server Id than what was expected');
-                return {
-                    State: 'Unavailable',
-                    ConnectUser: instance.connectUser()
-                };
-
-            }
             else {
+
+                if (server.Id && result.Id !== server.Id && instance.validateServerIds !== false) {
+                    server = {
+                        Id: result.Id,
+                        ManualAddress: serverUrl
+                    };
+                    updateServerInfo(server, result);
+                }
+
                 return resolveIfAvailable(instance, serverUrl, server, result, connectionMode, serverUrl, options);
             }
 
