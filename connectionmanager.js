@@ -475,9 +475,16 @@ function onAuthenticated(apiClient, result) {
     });
 }
 
+function reportCapabilities(instance, apiClient) {
+
+    return instance.capabilities().then(function (capabilities) {
+        return apiClient.reportCapabilities(capabilities);
+    });
+}
+
 function afterConnected(instance, apiClient, options = {}) {
     if (options.reportCapabilities !== false) {
-        apiClient.reportCapabilities(instance.capabilities());
+        reportCapabilities(instance, apiClient);
     }
     apiClient.enableAutomaticBitrateDetection = options.enableAutomaticBitrateDetection;
     apiClient.enableWebSocketAutoConnect = options.enableWebSocket !== false;
