@@ -689,19 +689,16 @@ function afterConnectValidated(
     connectionMode,
     serverUrl,
     verifyLocalAuthentication,
-    options,
-    resolve) {
+    options) {
 
     options = options || {};
 
     if (verifyLocalAuthentication && server.AccessToken) {
 
-        validateAuthentication(instance, server, serverUrl).then((fullSystemInfo) => {
+        return validateAuthentication(instance, server, serverUrl).then((fullSystemInfo) => {
 
-            afterConnectValidated(instance, server, credentials, fullSystemInfo || systemInfo, connectionMode, serverUrl, false, options, resolve);
+            return afterConnectValidated(instance, server, credentials, fullSystemInfo || systemInfo, connectionMode, serverUrl, false, options);
         });
-
-        return;
     }
 
     updateServerInfo(server, systemInfo);
@@ -737,47 +734,48 @@ function afterConnectValidated(
     result.ApiClient.updateServerInfo(server, serverUrl);
 
     const resolveActions = function () {
-        resolve(result);
 
         events.trigger(instance, 'connected', [result]);
+
+        return Promise.resolve(result);
     };
 
     if (result.State === 'SignedIn') {
         afterConnected(instance, result.ApiClient, options);
 
-        onLocalUserSignIn(instance, server, serverUrl).then(resolveActions, resolveActions);
+        return onLocalUserSignIn(instance, server, serverUrl).then(resolveActions, resolveActions);
     }
     else {
-        resolveActions();
+        return resolveActions();
     }
 }
 
-function onSuccessfulConnection(instance, server, systemInfo, connectionMode, serverUrl, options, resolve) {
+function onSuccessfulConnection(instance, server, systemInfo, connectionMode, serverUrl, options) {
 
     const credentials = instance.credentialProvider().credentials();
     options = options || {};
     if (credentials.ConnectAccessToken && options.enableAutoLogin !== false) {
 
-        ensureConnectUser(instance, credentials).then(() => {
+        return ensureConnectUser(instance, credentials).then(() => {
 
             if (server.ExchangeToken) {
-                addAuthenticationInfoFromConnect(instance, server, systemInfo, serverUrl, credentials).then(() => {
+                return addAuthenticationInfoFromConnect(instance, server, systemInfo, serverUrl, credentials).then(() => {
 
-                    afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
+                    return afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options);
 
                 }, () => {
 
-                    afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
+                    return afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options);
                 });
 
             } else {
 
-                afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
+                return afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options);
             }
         });
     }
     else {
-        afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options, resolve);
+        return afterConnectValidated(instance, server, credentials, systemInfo, connectionMode, serverUrl, true, options);
     }
 }
 
@@ -786,10 +784,7 @@ function resolveIfAvailable(instance, url, server, result, connectionMode, serve
     const promise = instance.validateServerAddress ? instance.validateServerAddress(instance, ajax, url) : Promise.resolve();
 
     return promise.then(() => {
-        return new Promise(function (resolve, reject) {
-
-            onSuccessfulConnection(instance, server, result, connectionMode, serverUrl, options, resolve);
-        });
+        return onSuccessfulConnection(instance, server, result, connectionMode, serverUrl, options);
     }, () => {
         console.log('minServerVersion requirement not met. Server version: ' + result.Version);
         return {
@@ -805,7 +800,7 @@ export default class ConnectionManager {
         appStorage,
         apiClientFactory,
         serverDiscoveryFn,
-        wakeOnLanFn,
+        wakeOnLan,
         appName,
         appVersion,
         deviceName,
@@ -846,7 +841,7 @@ export default class ConnectionManager {
         this.capabilities = capabilitiesFn;
 
         this.apiClientFactory = apiClientFactory;
-        this.wakeOnLanFn = wakeOnLanFn;
+        this.wakeOnLan = wakeOnLan;
         this.serverDiscoveryFn = serverDiscoveryFn;
         this.devicePixelRatio = devicePixelRatio;
     }
@@ -973,7 +968,7 @@ export default class ConnectionManager {
 
             const ApiClient = this.apiClientFactory;
 
-            apiClient = new ApiClient(this.appStorage, this.wakeOnLanFn, serverUrl, this.appName(), this.appVersion(), this.deviceName(), this.deviceId(), this.devicePixelRatio);
+            apiClient = new ApiClient(this.appStorage, this.wakeOnLan, serverUrl, this.appName(), this.appVersion(), this.deviceName(), this.deviceId(), this.devicePixelRatio);
 
             apiClient.rejectInsecureAddresses = this.rejectInsecureAddresses;
 
