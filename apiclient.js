@@ -1,4 +1,6 @@
-﻿import events from './events.js';
+﻿/* jshint module: true */
+
+import events from './events.js';
 
 function replaceAll(originalString, strReplace, strWith) {
     const reg = new RegExp(strReplace, 'ig');
@@ -29,7 +31,7 @@ function getFetchPromise(request, signal) {
     }
 
     const fetchRequest = {
-        headers: headers,
+        headers,
         method: request.type,
         credentials: 'same-origin'
     };
@@ -74,14 +76,9 @@ function getFetchPromise(request, signal) {
     return fetch(request.url, fetchRequest);
 }
 
-function clearCurrentUserCacheIfNeeded(apiClient) {
+function setSavedEndpointInfo(instance, info) {
 
-    const user = apiClient._currentUser;
-    const serverInfo = apiClient._serverInfo;
-    if (user && serverInfo && user.Id !== serverInfo.UserId) {
-        apiClient._currentUser = null;
-        apiClient._userViewsPromise = null;
-    }
+    instance._endPointInfo = info;
 }
 
 function onNetworkChanged(instance, resetAddress) {
@@ -100,33 +97,290 @@ function onNetworkChanged(instance, resetAddress) {
     setSavedEndpointInfo(instance, null);
 }
 
-function getFirstValidAddress(instance, serverInfo) {
+function getFirstValidAddress(instance, { LocalAddress, ManualAddress, RemoteAddress }) {
 
-    if (serverInfo.LocalAddress && allowAddress(instance, serverInfo.LocalAddress)) {
-        return serverInfo.LocalAddress;
+    if (LocalAddress && allowAddress(instance, LocalAddress)) {
+        return LocalAddress;
     }
-    if (serverInfo.ManualAddress && allowAddress(instance, serverInfo.ManualAddress)) {
-        return serverInfo.ManualAddress;
+    if (ManualAddress && allowAddress(instance, ManualAddress)) {
+        return ManualAddress;
     }
-    if (serverInfo.RemoteAddress && allowAddress(instance, serverInfo.RemoteAddress)) {
-        return serverInfo.RemoteAddress;
+    if (RemoteAddress && allowAddress(instance, RemoteAddress)) {
+        return RemoteAddress;
     }
     return null;
 }
 
-function saveUserInCache(appStorage, user) {
+function tryReconnectToUrl(instance, url, delay, signal) {
+
+    console.log(`tryReconnectToUrl: ${url}`);
+
+    return setTimeoutPromise(delay).then(() => getFetchPromise({
+
+        url: instance.getUrl('system/info/public', null, url),
+        type: 'GET',
+        dataType: 'json',
+        timeout: 15000
+
+    }, signal).then(() => url));
+}
+
+function allowAddress({ rejectInsecureAddresses }, address) {
+
+    if (rejectInsecureAddresses) {
+
+        if (address.indexOf('https:') !== 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function setTimeoutPromise(timeout) {
+
+    return new Promise((resolve, reject) => {
+
+        setTimeout(resolve, timeout);
+    });
+}
+
+function tryReconnectInternal(instance, signal) {
+
+    const addresses = [];
+    const addressesStrings = [];
+
+    const serverInfo = instance.serverInfo();
+    if (serverInfo.LocalAddress && !addressesStrings.includes(serverInfo.LocalAddress) && allowAddress(instance, serverInfo.LocalAddress)) {
+        addresses.push({ url: serverInfo.LocalAddress, timeout: 0 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+    if (serverInfo.ManualAddress && !addressesStrings.includes(serverInfo.ManualAddress) && allowAddress(instance, serverInfo.ManualAddress)) {
+        addresses.push({ url: serverInfo.ManualAddress, timeout: 100 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+    if (serverInfo.RemoteAddress && !addressesStrings.includes(serverInfo.RemoteAddress) && allowAddress(instance, serverInfo.RemoteAddress)) {
+        addresses.push({ url: serverInfo.RemoteAddress, timeout: 200 });
+        addressesStrings.push(addresses[addresses.length - 1].url);
+    }
+
+    console.log(`tryReconnect: ${addressesStrings.join('|')}`);
+
+    if (!addressesStrings.length) {
+        return Promise.reject();
+    }
+
+    const promises = [];
+
+    for (let i = 0, length = addresses.length; i < length; i++) {
+
+        promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].timeout, signal));
+    }
+
+    return Promise.any(promises).then(url => {
+        instance.serverAddress(url);
+        return Promise.resolve(url);
+    });
+}
+
+function tryReconnect(instance, signal, retryCount = 0) {
+
+    const promise = tryReconnectInternal(instance, signal);
+
+    if (retryCount >= 2) {
+        return promise;
+    }
+
+    return promise.catch(err => {
+
+        console.log(`error in tryReconnectInternal: ${err || ''}`);
+
+        return setTimeoutPromise(500).then(() => tryReconnect(instance, signal, retryCount + 1));
+    });
+}
+
+function getUserCacheKey(userId, serverId) {
+    const key = `user-${userId}-${serverId}`;
+
+    return key;
+}
+
+function getCachedUser(instance, userId) {
+
+    const serverId = instance.serverId();
+    if (!serverId) {
+        return null;
+    }
+
+    const json = instance.appStorage.getItem(getUserCacheKey(userId, serverId));
+
+    if (json) {
+        const user = JSON.parse(json);
+
+        if (user) {
+            setUserProperties(user);
+        }
+
+        return user;
+    }
+
+    return null;
+}
+
+function saveUserInCache({ appStorage }, user) {
 
     setUserProperties(user);
-
     user.DateLastFetched = Date.now();
     appStorage.setItem(getUserCacheKey(user.Id, user.ServerId), JSON.stringify(user));
 }
 
-function removeCachedUser(appStorage, userId, serverId) {
+function removeCachedUser({ appStorage }, userId, serverId) {
     appStorage.removeItem(getUserCacheKey(userId, serverId));
 }
 
-let startingPlaySession = Date.now();
+function onWebSocketMessage(msg) {
+
+    const instance = this;
+    msg = JSON.parse(msg.data);
+    onMessageReceivedInternal(instance, msg);
+}
+
+const messageIdsReceived = {};
+
+function onMessageReceivedInternal(instance, msg) {
+
+    const messageId = msg.MessageId;
+    if (messageId) {
+
+        // message was already received via another protocol
+        if (messageIdsReceived[messageId]) {
+            return;
+        }
+
+        messageIdsReceived[messageId] = true;
+    }
+
+    const msgType = msg.MessageType;
+
+    if (msgType === "UserUpdated" || msgType === "UserConfigurationUpdated" || msgType === "UserPolicyUpdated") {
+
+        const user = msg.Data;
+
+        if (user.Id === instance.getCurrentUserId()) {
+
+            saveUserInCache(instance, user);
+
+            instance._userViewsPromise = null;
+        }
+
+    } else if (msgType === 'LibraryChanged') {
+
+        // This might be a little aggressive improve this later
+        instance._userViewsPromise = null;
+    }
+
+    events.trigger(instance, 'message', [msg]);
+}
+
+function onWebSocketOpen() {
+
+    const instance = this;
+
+    console.log('web socket connection opened');
+    events.trigger(instance, 'websocketopen');
+
+    let list = this.messageListeners;
+    if (list) {
+        list = list.slice(0);
+        for (let i = 0, length = list.length; i < length; i++) {
+            this.startMessageListener(list[i], "0,2000");
+        }
+    }
+}
+
+function onWebSocketError() {
+
+    const instance = this;
+    events.trigger(instance, 'websocketerror');
+}
+
+function setSocketOnClose(apiClient, socket) {
+
+    socket.onclose = () => {
+
+        console.log('web socket closed');
+
+        if (apiClient._webSocket === socket) {
+            console.log('nulling out web socket');
+            apiClient._webSocket = null;
+        }
+
+        setTimeout(() => {
+            events.trigger(apiClient, 'websocketclose');
+        }, 0);
+    };
+}
+
+function detectBitrateWithEndpointInfo(instance, { IsInNetwork }) {
+
+    if (IsInNetwork) {
+
+        return 140000000;
+    }
+
+    if (instance.getMaxBandwidth) {
+
+        const maxRate = instance.getMaxBandwidth();
+        if (maxRate) {
+            return maxRate;
+        }
+    }
+
+    return 3000000;
+}
+
+function getRemoteImagePrefix(instance, options) {
+
+    let urlPrefix;
+
+    if (options.artist) {
+        urlPrefix = `Artists/${instance.encodeName(options.artist)}`;
+        delete options.artist;
+    } else if (options.person) {
+        urlPrefix = `Persons/${instance.encodeName(options.person)}`;
+        delete options.person;
+    } else if (options.genre) {
+        urlPrefix = `Genres/${instance.encodeName(options.genre)}`;
+        delete options.genre;
+    } else if (options.musicGenre) {
+        urlPrefix = `MusicGenres/${instance.encodeName(options.musicGenre)}`;
+        delete options.musicGenre;
+    } else if (options.gameGenre) {
+        urlPrefix = `GameGenres/${instance.encodeName(options.gameGenre)}`;
+        delete options.gameGenre;
+    } else if (options.studio) {
+        urlPrefix = `Studios/${instance.encodeName(options.studio)}`;
+        delete options.studio;
+    } else {
+        urlPrefix = `Items/${options.itemId}`;
+        delete options.itemId;
+    }
+
+    return urlPrefix;
+}
+
+function modifyEpgRow(result) {
+
+    result.Type = 'EpgChannel';
+    result.ServerId = this.serverId();
+}
+
+function modifyEpgResponse(result) {
+
+    result.Items.forEach(modifyEpgRow.bind(this));
+
+    return result;
+}
 
 function mapVirtualFolder(item) {
 
@@ -143,6 +397,65 @@ function setUsersProperties(response) {
 
 function setUserProperties(user) {
     user.Type = 'User';
+}
+
+function setLogsProperties(response) {
+
+    const serverId = this.serverId();
+
+    for (let i = 0, length = response.length; i < length; i++) {
+        const log = response[i];
+        log.ServerId = serverId;
+        log.Type = 'Log';
+        log.CanDownload = true;
+    }
+
+    return Promise.resolve(response);
+}
+
+function setApiKeysProperties(response) {
+
+    const serverId = this.serverId();
+
+    for (let i = 0, length = response.Items.length; i < length; i++) {
+        const log = response.Items[i];
+        log.ServerId = serverId;
+        log.Type = 'ApiKey';
+        log.CanDelete = true;
+    }
+
+    return Promise.resolve(response);
+}
+
+function normalizeImageOptions({ _devicePixelRatio }, options) {
+
+    const ratio = _devicePixelRatio || 1;
+
+    if (ratio) {
+
+        if (options.width) {
+            options.width = Math.round(options.width * ratio);
+        }
+        if (options.height) {
+            options.height = Math.round(options.height * ratio);
+        }
+        if (options.maxWidth) {
+            options.maxWidth = Math.round(options.maxWidth * ratio);
+        }
+        if (options.maxHeight) {
+            options.maxHeight = Math.round(options.maxHeight * ratio);
+        }
+    }
+
+    if (!options.quality) {
+
+        // TODO: In low bandwidth situations we could do 60/50
+        if (options.type === 'Backdrop') {
+            options.quality = 70;
+        } else {
+            options.quality = 90;
+        }
+    }
 }
 
 function fillServerIdIntoItems(result) {
@@ -175,6 +488,12 @@ function fillTagProperties(result) {
     return result;
 }
 
+function mapPrefix(i) {
+    return { Name: i };
+}
+
+let startingPlaySession = Date.now();
+
 function onUserDataUpdated(userData) {
 
     const obj = this;
@@ -197,6 +516,86 @@ function onUserDataUpdated(userData) {
     }]);
 }
 
+function getCachedWakeOnLanInfo(instance) {
+
+    const serverId = instance.serverId();
+    const json = instance.appStorage.getItem(`server-${serverId}-wakeonlaninfo`);
+
+    if (json) {
+        return JSON.parse(json);
+    }
+
+    return [];
+}
+
+function refreshWakeOnLanInfoIfNeeded(instance) {
+
+    if (!instance.wakeOnLan.isSupported()) {
+        return;
+    }
+
+    // Re-using enableAutomaticBitrateDetection because it's set to false during background syncing
+    // We can always have a dedicated option if needed
+    if (instance.accessToken() && instance.enableAutomaticBitrateDetection !== false) {
+        console.log('refreshWakeOnLanInfoIfNeeded');
+        setTimeout(refreshWakeOnLanInfo.bind(instance), 10000);
+    }
+}
+
+function refreshWakeOnLanInfo() {
+
+    const instance = this;
+
+    console.log('refreshWakeOnLanInfo');
+    instance.getWakeOnLanInfo().then(info => {
+
+        const serverId = instance.serverId();
+        instance.appStorage.setItem(`server-${serverId}-wakeonlaninfo`, JSON.stringify(info));
+        return info;
+
+    }, err => // could be an older server that doesn't have this api
+        []);
+}
+
+function sendNextWakeOnLan(wakeOnLan, infos, index) {
+
+    if (index >= infos.length) {
+
+        return Promise.resolve();
+    }
+
+    const info = infos[index];
+
+    console.log(`sending wakeonlan to ${info.MacAddress}`);
+
+    return wakeOnLan.send(info).then(result => sendNextWakeOnLan(wakeOnLan, infos, index + 1), () => sendNextWakeOnLan(wakeOnLan, infos, index + 1));
+}
+
+function compareVersions(a, b) {
+
+    // -1 a is smaller
+    // 1 a is larger
+    // 0 equal
+    a = a.split('.');
+    b = b.split('.');
+
+    for (let i = 0, length = Math.max(a.length, b.length); i < length; i++) {
+        const aVal = parseInt(a[i] || '0');
+        const bVal = parseInt(b[i] || '0');
+
+        if (aVal < bVal) {
+            return -1;
+        }
+
+        if (aVal > bVal) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+
 /**
  * Creates a new api client instance
  * @param {String} serverAddress
@@ -206,16 +605,29 @@ function onUserDataUpdated(userData) {
 class ApiClient {
     constructor(
         appStorage,
-        wakeOnLanFn,
+        wakeOnLan,
         serverAddress,
         appName,
         appVersion,
         deviceName,
         deviceId,
-        devicePixelRatio) {
+        devicePixelRatio
+    ) {
 
         if (!serverAddress) {
             throw new Error("Must supply a serverAddress");
+        }
+        if (!appName) {
+            throw new Error("Must supply a appName");
+        }
+        if (!appVersion) {
+            throw new Error("Must supply a appVersion");
+        }
+        if (!deviceName) {
+            throw new Error("Must supply a deviceName");
+        }
+        if (!deviceId) {
+            throw new Error("Must supply a deviceId");
         }
 
         console.log(`ApiClient serverAddress: ${serverAddress}`);
@@ -225,7 +637,8 @@ class ApiClient {
         console.log(`ApiClient deviceId: ${deviceId}`);
 
         this.appStorage = appStorage;
-        this.wakeOnLanFn = wakeOnLanFn;
+        this.wakeOnLan = wakeOnLan;
+
         this._serverInfo = {};
         this._serverAddress = serverAddress;
         this._deviceId = deviceId;
@@ -257,7 +670,7 @@ class ApiClient {
             if (authValues) {
                 authValues['X-Emby-Client'] = appName;
             } else {
-                values.push('Client="' + appName + '"');
+                values.push(`Client="${appName}"`);
             }
         }
 
@@ -265,7 +678,7 @@ class ApiClient {
             if (authValues) {
                 authValues['X-Emby-Device-Name'] = queryStringAuth ? this._deviceName : encodeURIComponent(this._deviceName);
             } else {
-                values.push('Device="' + encodeURIComponent(this._deviceName) + '"');
+                values.push(`Device="${encodeURIComponent(this._deviceName)}"`);
             }
         }
 
@@ -273,7 +686,7 @@ class ApiClient {
             if (authValues) {
                 authValues['X-Emby-Device-Id'] = this._deviceId;
             } else {
-                values.push('DeviceId="' + this._deviceId + '"');
+                values.push(`DeviceId="${this._deviceId}"`);
             }
         }
 
@@ -281,7 +694,7 @@ class ApiClient {
             if (authValues) {
                 authValues['X-Emby-Client-Version'] = this._appVersion;
             } else {
-                values.push('Version="' + this._appVersion + '"');
+                values.push(`Version="${this._appVersion}"`);
             }
         }
 
@@ -289,7 +702,7 @@ class ApiClient {
             if (authValues) {
                 authValues['X-Emby-Token'] = accessToken;
             } else {
-                values.push('Token="' + accessToken + '"');
+                values.push(`Token="${accessToken}"`);
             }
         }
 
@@ -300,7 +713,7 @@ class ApiClient {
 
                     let url = request.url;
 
-                    url += url.indexOf('?') === -1 ? '?' : '&';
+                    url += !url.includes('?') ? '?' : '&';
                     url += queryParams;
 
                     request.url = url;
@@ -309,7 +722,7 @@ class ApiClient {
         }
         else if (values.length) {
 
-            const auth = 'MediaBrowser ' + values.join(', ');
+            const auth = `MediaBrowser ${values.join(', ')}`;
             headers['X-Emby-Authorization'] = auth;
         }
     }
@@ -414,13 +827,13 @@ class ApiClient {
         }, error => {
 
             if (!error) {
-                console.log("Request timed out to " + request.url);
+                console.log(`Request timed out to ${request.url}`);
             }
             else if (error.name === 'AbortError') {
-                console.log("AbortError: " + request.url);
+                console.log(`AbortError: ${request.url}`);
             }
             else {
-                console.log("Request failed to " + request.url + ' ' + (error.status || '') + ' ' + error.toString());
+                console.log(`Request failed to ${request.url} ${error.status || ''} ${error.toString()}`);
             }
 
             // http://api.jquery.com/jQuery.ajax/		     
@@ -429,9 +842,9 @@ class ApiClient {
 
                 const previousServerAddress = instance.serverAddress();
 
-                return tryReconnect(instance, null, signal).then(function (newServerAddress) {
+                return tryReconnect(instance, signal, null).then(newServerAddress => {
 
-                    console.log("Reconnect succeeded to " + newServerAddress);
+                    console.log(`Reconnect succeeded to ${newServerAddress}`);
                     instance.connected = true;
 
                     if (instance.enableWebSocketAutoConnect) {
@@ -440,7 +853,7 @@ class ApiClient {
 
                     request.url = request.url.replace(previousServerAddress, newServerAddress);
 
-                    console.log("Retrying request with new url: " + request.url);
+                    console.log(`Retrying request with new url: ${request.url}`);
 
                     return instance.fetchWithFailover(request, false, signal);
                 });
@@ -469,7 +882,7 @@ class ApiClient {
 
         if (this.enableAutomaticNetworking === false || request.type !== "GET") {
 
-            return getFetchPromise(request, signal).then(function (response) {
+            return getFetchPromise(request, signal).then(response => {
 
                 if (response.status < 400) {
 
@@ -491,6 +904,7 @@ class ApiClient {
     }
 
     setAuthenticationInfo(accessKey, userId) {
+
         this._serverInfo.AccessToken = accessKey;
 
         if (this._serverInfo.UserId !== userId) {
@@ -516,6 +930,9 @@ class ApiClient {
         return this._serverInfo;
     }
 
+    /**
+     * Gets or sets the current user id.
+     */
     getCurrentUserName() {
 
         const userId = this.getCurrentUserId();
@@ -623,37 +1040,34 @@ class ApiClient {
         const url = this.getUrl("Users/authenticatebyname");
         const instance = this;
 
-        return new Promise((resolve, reject) => {
+        const postData = {
+            Username: name,
+            Pw: password || ''
+        };
 
-            const postData = {
-                Username: name,
-                Pw: password || ''
+        return instance.ajax({
+            type: "POST",
+            url,
+            data: JSON.stringify(postData),
+            dataType: "json",
+            contentType: "application/json"
+
+        }).then(result => {
+
+            instance._userViewsPromise = null;
+            saveUserInCache(instance, result.User);
+
+            const afterOnAuthenticated = () => {
+                refreshWakeOnLanInfoIfNeeded(instance);
+                return result;
             };
 
-            instance.ajax({
-                type: "POST",
-                url,
-                data: JSON.stringify(postData),
-                dataType: "json",
-                contentType: "application/json"
-
-            }).then(result => {
-
-                instance._userViewsPromise = null;
-                saveUserInCache(instance.appStorage, result.User);
-
-                const afterOnAuthenticated = () => {
-                    refreshWakeOnLanInfoIfNeeded(instance);
-                    resolve(result);
-                };
-
-                if (instance.onAuthenticated) {
-                    instance.onAuthenticated(instance, result).then(afterOnAuthenticated);
-                } else {
-                    afterOnAuthenticated();
-                }
-
-            }, reject);
+            if (instance.onAuthenticated) {
+                return instance.onAuthenticated(instance, result).then(afterOnAuthenticated);
+            } else {
+                afterOnAuthenticated();
+                return result;
+            }
         });
     }
 
@@ -727,16 +1141,9 @@ class ApiClient {
         this._webSocket.send(msg);
     }
 
-    sendMessage(name, data) {
-
-        if (this.isWebSocketOpen()) {
-            this.sendWebSocketMessage(name, data);
-        }
-    }
-
     startMessageListener(name, options) {
 
-        this.sendMessage(name + "Start", options);
+        this.sendMessage(`${name}Start`, options);
 
         let list = this.messageListeners;
 
@@ -744,21 +1151,26 @@ class ApiClient {
             this.messageListeners = list = [];
         }
 
-        if (list.indexOf(name) === -1) {
+        if (!list.includes(name)) {
             list.push(name);
         }
     }
 
     stopMessageListener(name) {
 
-        this.sendMessage(name + "Stop");
+        this.sendMessage(`${name}Stop`);
 
         let list = this.messageListeners;
 
-        if (list && list.indexOf(name) !== -1) {
-            this.messageListeners = list = list.filter((n) => {
-                return n !== name;
-            });
+        if (list && list.includes(name)) {
+            this.messageListeners = list = list.filter(n => n !== name);
+        }
+    }
+
+    sendMessage(name, data) {
+
+        if (this.isWebSocketOpen()) {
+            this.sendWebSocketMessage(name, data);
         }
     }
 
@@ -868,13 +1280,7 @@ class ApiClient {
 
         const instance = this;
 
-        return this.getEndpointInfo().then((info) => {
-
-            return detectBitrateWithEndpointInfo(instance, info);
-        }, () => {
-
-            return detectBitrateWithEndpointInfo(instance, {});
-        });
+        return this.getEndpointInfo().then(info => detectBitrateWithEndpointInfo(instance, info), info => detectBitrateWithEndpointInfo(instance, {}));
     }
 
     /**
@@ -999,7 +1405,7 @@ class ApiClient {
 
     getRecordingFolders(userId) {
 
-        const url = this.getUrl("LiveTv/Recordings/Folders", { userId: userId });
+        const url = this.getUrl("LiveTv/Recordings/Folders", { userId });
 
         return this.getJSON(url);
     }
@@ -1063,6 +1469,79 @@ class ApiClient {
                 dataType: "json"
             });
         }
+    }
+
+    getEpg(options = {}) {
+        options.AddCurrentProgram = false;
+        options.EnableUserData = false;
+        options.EnableImageTypes = "Primary";
+
+        options.UserId = this.getCurrentUserId();
+
+        if (this.isMinServerVersion('4.4.3')) {
+
+            return this.ajax({
+                type: "GET",
+                url: this.getUrl("LiveTv/EPG", options),
+                dataType: "json"
+            }).then(modifyEpgResponse.bind(this));
+        }
+
+        const serverId = this.serverId();
+        const instance = this;
+
+        const maxStartDate = options.MaxStartDate;
+        delete options.MaxStartDate;
+
+        const minEndDate = options.MinEndDate;
+        delete options.MinEndDate;
+
+        return this.getLiveTvChannels(options).then(result => {
+
+            const channelIds = [];
+            const programMap = {};
+
+            for (let i = 0, length = result.Items.length; i < length; i++) {
+
+                const channel = result.Items[i];
+
+                channelIds.push(channel.Id);
+
+                const programs = programMap[channel.Id] = [];
+
+                result.Items[i] = {
+                    Type: 'EpgChannel',
+                    ServerId: serverId,
+                    Channel: channel,
+                    Programs: programs
+                };
+            }
+
+            const programQuery = {
+                UserId: instance.getCurrentUserId(),
+                MaxStartDate: maxStartDate,
+                MinEndDate: minEndDate,
+                channelIds: channelIds.join(','),
+                ImageTypeLimit: 1,
+                EnableImages: false,
+                SortBy: "StartDate",
+                EnableTotalRecordCount: false,
+                EnableUserData: false,
+                Fields: options.ProgramFields
+            };
+
+            return instance.getLiveTvPrograms(programQuery).then(({ Items }) => {
+
+                for (let j = 0, programResultLength = Items.length; j < programResultLength; j++) {
+
+                    const program = Items[j];
+
+                    programMap[program.ChannelId].push(program);
+                }
+
+                return result;
+            });
+        });
     }
 
     getLiveTvRecommendedPrograms(options = {}) {
@@ -1297,7 +1776,7 @@ class ApiClient {
     /**
      * Gets the current server status
      */
-    getSystemInfo(itemId) {
+    getSystemInfo() {
 
         const url = this.getUrl("System/Info");
 
@@ -1310,12 +1789,15 @@ class ApiClient {
         });
     }
 
+    /**
+     * Gets the current server status
+     */
     getSyncStatus(itemId) {
 
-        const url = this.getUrl("Sync/" + itemId + "/Status");
+        const url = this.getUrl(`Sync/${itemId}/Status`);
 
         return this.ajax({
-            url: url,
+            url,
             type: 'POST',
             dataType: 'json',
             contentType: "application/json",
@@ -1528,6 +2010,26 @@ class ApiClient {
         return this.getJSON(url);
     }
 
+    getActivityLog(options) {
+
+        const url = this.getUrl("System/ActivityLog/Entries", options || {});
+
+        const serverId = this.serverId();
+
+        return this.getJSON(url).then(result => {
+
+            const items = result.Items;
+
+            for (let i = 0, length = items.length; i < length; i++) {
+                const item = items[i];
+
+                item.Type = 'ActivityLogEntry';
+                item.ServerId = serverId;
+            }
+            return result;
+        });
+    }
+
     /**
      * Cancels a package installation
      */
@@ -1666,10 +2168,10 @@ class ApiClient {
         url = this.getUrl(url);
         const serverId = this.serverId();
 
-        return this.getJSON(url).then((items) => {
+        return this.getJSON(url).then(items => {
 
             for (let i = 0, length = items.length; i < length; i++) {
-                let item = items[i];
+                const item = items[i];
 
                 mapVirtualFolder(item);
                 item.ServerId = serverId;
@@ -1738,8 +2240,8 @@ class ApiClient {
     }
 
     /**
-       Gets available video codecs
-   */
+        Gets available video codecs
+    */
     getVideoCodecInformation() {
 
         const url = this.getUrl("Encoding/CodecInformation/Video");
@@ -1859,17 +2361,18 @@ class ApiClient {
     * Removes a virtual folder
     * @param {String} name
     */
-    removeVirtualFolder(name, refreshLibrary) {
+    removeVirtualFolder(virtualFolder, refreshLibrary) {
 
-        if (!name) {
-            throw new Error("null name");
+        if (!virtualFolder) {
+            throw new Error("null virtualFolder");
         }
 
         let url = "Library/VirtualFolders";
 
         url = this.getUrl(url, {
             refreshLibrary: refreshLibrary ? true : false,
-            name
+            id: virtualFolder.Id,
+            name: virtualFolder.Name
         });
 
         const instance = this;
@@ -1877,15 +2380,15 @@ class ApiClient {
         return this.ajax({
             type: "DELETE",
             url
-        }).then(function () {
+        }).then(() => {
             instance._userViewsPromise = null;
         });
     }
 
     /**
-   * Adds a virtual folder
-   * @param {String} name
-   */
+    * Adds a virtual folder
+    * @param {String} name
+    */
     addVirtualFolder(name, type, refreshLibrary, libraryOptions) {
 
         if (!name) {
@@ -1914,7 +2417,7 @@ class ApiClient {
                 LibraryOptions: libraryOptions
             }),
             contentType: 'application/json'
-        }).then(function () {
+        }).then(() => {
             instance._userViewsPromise = null;
         });
     }
@@ -1939,19 +2442,18 @@ class ApiClient {
                 LibraryOptions: libraryOptions
             }),
             contentType: 'application/json'
-        }).then(function () {
+        }).then(() => {
             instance._userViewsPromise = null;
         });
     }
 
     /**
-   * Renames a virtual folder
-   * @param {String} name
-   */
-    renameVirtualFolder(name, newName, refreshLibrary) {
+    * Renames a virtual folder
+    */
+    renameVirtualFolder(virtualFolder, newName, refreshLibrary) {
 
-        if (!name) {
-            throw new Error("null name");
+        if (!virtualFolder) {
+            throw new Error("null virtualFolder");
         }
 
         let url = "Library/VirtualFolders/Name";
@@ -1959,7 +2461,8 @@ class ApiClient {
         url = this.getUrl(url, {
             refreshLibrary: refreshLibrary ? true : false,
             newName,
-            name
+            name: virtualFolder.Name,
+            Id: virtualFolder.Id
         });
 
         const instance = this;
@@ -1967,7 +2470,7 @@ class ApiClient {
         return this.ajax({
             type: "POST",
             url
-        }).then(function () {
+        }).then(() => {
             instance._userViewsPromise = null;
         });
     }
@@ -1976,10 +2479,10 @@ class ApiClient {
     * Adds an additional mediaPath to an existing virtual folder
     * @param {String} name
     */
-    addMediaPath(virtualFolderName, mediaPath, networkSharePath, refreshLibrary) {
+    addMediaPath(virtualFolder, mediaPath, networkSharePath, refreshLibrary) {
 
-        if (!virtualFolderName) {
-            throw new Error("null virtualFolderName");
+        if (!virtualFolder) {
+            throw new Error("null virtualFolder");
         }
 
         if (!mediaPath) {
@@ -2005,19 +2508,20 @@ class ApiClient {
             type: "POST",
             url,
             data: JSON.stringify({
-                Name: virtualFolderName,
-                PathInfo: pathInfo
+                Name: virtualFolder.Name,
+                PathInfo: pathInfo,
+                Id: virtualFolder.Id
             }),
             contentType: 'application/json'
-        }).then(function () {
+        }).then(() => {
             instance._userViewsPromise = null;
         });
     }
 
-    updateMediaPath(virtualFolderName, pathInfo) {
+    updateMediaPath(virtualFolder, pathInfo) {
 
-        if (!virtualFolderName) {
-            throw new Error("null virtualFolderName");
+        if (!virtualFolder) {
+            throw new Error("null virtualFolder");
         }
 
         if (!pathInfo) {
@@ -2034,11 +2538,13 @@ class ApiClient {
             type: "POST",
             url,
             data: JSON.stringify({
-                Name: virtualFolderName,
-                PathInfo: pathInfo
+                Name: virtualFolder.Name,
+                PathInfo: pathInfo,
+                Id: virtualFolder.Id
             }),
             contentType: 'application/json'
-        }).then(function () {
+
+        }).then(() => {
             instance._userViewsPromise = null;
         });
     }
@@ -2047,10 +2553,10 @@ class ApiClient {
     * Removes a media path from a virtual folder
     * @param {String} name
     */
-    removeMediaPath(virtualFolderName, mediaPath, refreshLibrary) {
+    removeMediaPath(virtualFolder, mediaPath, refreshLibrary) {
 
-        if (!virtualFolderName) {
-            throw new Error("null virtualFolderName");
+        if (!virtualFolder) {
+            throw new Error("null virtualFolder");
         }
 
         if (!mediaPath) {
@@ -2059,18 +2565,19 @@ class ApiClient {
 
         let url = "Library/VirtualFolders/Paths";
 
+        const instance = this;
+
         url = this.getUrl(url, {
             refreshLibrary: refreshLibrary ? true : false,
             path: mediaPath,
-            name: virtualFolderName
+            name: virtualFolder.Name,
+            Id: virtualFolder.Id
         });
-
-        const instance = this;
 
         return this.ajax({
             type: "DELETE",
             url
-        }).then(function () {
+        }).then(() => {
             instance._userViewsPromise = null;
         });
     }
@@ -2087,12 +2594,14 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${id}`);
 
+        const serverId = this.serverId();
         const instance = this;
 
         return this.ajax({
             type: "DELETE",
             url
-        }).then(function () {
+        }).then(() => {
+            removeCachedUser(instance, id, serverId);
             instance._userViewsPromise = null;
         });
     }
@@ -2118,9 +2627,14 @@ class ApiClient {
             url += `/${imageIndex}`;
         }
 
+        const serverId = this.serverId();
+        const instance = this;
+
         return this.ajax({
             type: "DELETE",
             url
+        }).then(() => {
+            removeCachedUser(instance, userId, serverId);
         });
     }
 
@@ -2232,7 +2746,7 @@ class ApiClient {
 
         return this.getUrl(url, {
             api_key: this.accessToken(),
-            mediaSourceId: mediaSourceId
+            mediaSourceId
         });
     }
 
@@ -2268,6 +2782,7 @@ class ApiClient {
         }
 
         const instance = this;
+        const serverId = this.serverId();
 
         return new Promise((resolve, reject) => {
 
@@ -2282,10 +2797,10 @@ class ApiClient {
             };
 
             // Closure to capture the file information.
-            reader.onload = e => {
+            reader.onload = ({ target }) => {
 
                 // Split by a comma to remove the url: prefix
-                const data = e.target.result.split(',')[1];
+                const data = target.result.split(',')[1];
 
                 const url = instance.getUrl(`Users/${userId}/Images/${imageType}`);
 
@@ -2294,7 +2809,12 @@ class ApiClient {
                     url,
                     data,
                     contentType: `image/${file.name.substring(file.name.lastIndexOf('.') + 1)}`
-                }).then(resolve, reject);
+                }).then(() => {
+
+                    removeCachedUser(instance, userId, serverId);
+                    resolve();
+
+                }, reject);
             };
 
             // Read in the image file as a data URL.
@@ -2338,10 +2858,10 @@ class ApiClient {
             };
 
             // Closure to capture the file information.
-            reader.onload = e => {
+            reader.onload = ({ target }) => {
 
                 // Split by a comma to remove the url: prefix
-                const data = e.target.result.split(',')[1];
+                const data = target.result.split(',')[1];
 
                 instance.ajax({
                     type: "POST",
@@ -2395,7 +2915,7 @@ class ApiClient {
 
         const serverPromise = this.getJSON(url).then(user => {
 
-            saveUserInCache(this.appStorage, user);
+            saveUserInCache(instance, user);
             return user;
 
         }, response => {
@@ -2546,7 +3066,7 @@ class ApiClient {
             url,
             dataType: "json"
 
-        }, true, false).then(setUsersProperties);
+        }, false).then(setUsersProperties);
     }
 
     /**
@@ -2560,6 +3080,60 @@ class ApiClient {
     }
 
     /**
+     * Gets api keys from the server
+     */
+    getApiKeys(options, signal) {
+
+        const url = this.getUrl("Auth/Keys", options || {});
+
+        return this.getJSON(url, signal).then(setApiKeysProperties.bind(this));
+    }
+
+    /**
+     * Gets logs from the server
+     */
+    getLogs(options, signal) {
+
+        const url = this.getUrl("System/Logs", options || {});
+
+        return this.getJSON(url, signal).then(setLogsProperties.bind(this));
+    }
+
+    getLogDownloadUrl({ Name }) {
+
+        let url;
+
+        if (this.isMinServerVersion('4.2.0.11')) {
+            url = this.getUrl(`System/Logs/${Name}`);
+            url += `?api_key=${this.accessToken()}`;
+        }
+        else {
+
+            url = this.getUrl('System/Logs/Log', {
+                name: Name
+            });
+
+            url += `&api_key=${this.accessToken()}`;
+        }
+
+        return url;
+    }
+
+    /**
+     * Gets logs from the server
+     */
+    getLogLines(options, signal) {
+
+        const name = options.name;
+
+        options.name = null;
+
+        const url = this.getUrl(`System/Logs/${name}/Lines`, options || {});
+
+        return this.getJSON(url, signal);
+    }
+
+    /**
      * Gets all available parental ratings from the server
      */
     getParentalRatings() {
@@ -2567,6 +3141,29 @@ class ApiClient {
         const url = this.getUrl("Localization/ParentalRatings");
 
         return this.getJSON(url);
+    }
+
+    getImageUrl(itemId, options) {
+
+        if (!itemId) {
+            throw new Error("itemId cannot be empty");
+        }
+
+        options = options || {};
+
+        let url = `Items/${itemId}/Images/${options.type}`;
+
+        if (options.index != null) {
+            url += `/${options.index}`;
+        }
+
+        normalizeImageOptions(this, options);
+
+        // Don't put these on the query string
+        delete options.type;
+        delete options.index;
+
+        return this.getUrl(url, options);
     }
 
     /**
@@ -2603,45 +3200,6 @@ class ApiClient {
 
         return this.getUrl(url, options);
     }
-
-    /**
-     * Constructs a url for an item image
-     * @param {String} itemId
-     * @param {Object} options
-     * Options supports the following properties:
-     * type - Primary, logo, backdrop, etc. See the server-side enum ImageType
-     * index - When downloading a backdrop, use this to specify which one (omitting is equivalent to zero)
-     * width - download the image at a fixed width
-     * height - download the image at a fixed height
-     * maxWidth - download the image at a maxWidth
-     * maxHeight - download the image at a maxHeight
-     * quality - A scale of 0-100. This should almost always be omitted as the default will suffice.
-     * For best results do not specify both width and height together, as aspect ratio might be altered.
-     */
-    getImageUrl(itemId, options) {
-
-        if (!itemId) {
-            throw new Error("itemId cannot be empty");
-        }
-
-        options = options || {};
-
-        let url = "Items/" + itemId + "/Images/" + options.type;
-
-        if (options.index != null) {
-            url += "/" + options.index;
-        }
-
-        normalizeImageOptions(this, options);
-
-        // Don't put these on the query string
-        delete options.type;
-        delete options.index;
-        
-        return this.getUrl(url, options);
-    }
-
-    getScaledImageUrl: getImageUrl
 
     getThumbImageUrl(item, options) {
 
@@ -2684,18 +3242,20 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/Password`);
         const serverId = this.serverId();
+
         const instance = this;
 
         return this.ajax({
             type: "POST",
-            url: url,
+            url,
             data: JSON.stringify({
                 CurrentPw: currentPassword || '',
                 NewPw: newPassword
             }),
             contentType: "application/json"
+
         }).then(() => {
-            removeCachedUser(instance.appStorage, userId, serverId);
+            removeCachedUser(instance, userId, serverId);
             return Promise.resolve();
         });
     }
@@ -2707,6 +3267,8 @@ class ApiClient {
      */
     updateEasyPassword(userId, newPassword) {
 
+        const instance = this;
+
         if (!userId) {
             Promise.reject();
             return;
@@ -2714,7 +3276,6 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/EasyPassword`);
         const serverId = this.serverId();
-        const instance = this;
 
         return this.ajax({
             type: "POST",
@@ -2723,7 +3284,7 @@ class ApiClient {
                 NewPw: newPassword
             }
         }).then(() => {
-            removeCachedUser(instance.appStorage, userId, serverId);
+            removeCachedUser(instance, userId, serverId);
             return Promise.resolve();
         });
     }
@@ -2740,20 +3301,20 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/Password`);
         const serverId = this.serverId();
-        const instance = this;
 
         const postData = {
 
         };
 
         postData.resetPassword = true;
+        const instance = this;
 
         return this.ajax({
             type: "POST",
             url,
             data: postData
         }).then(() => {
-            removeCachedUser(instance.appStorage, userId, serverId);
+            removeCachedUser(instance, userId, serverId);
             return Promise.resolve();
         });
     }
@@ -2766,13 +3327,13 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${userId}/EasyPassword`);
         const serverId = this.serverId();
-        const instance = this;
 
         const postData = {
 
         };
 
         postData.resetPassword = true;
+        const instance = this;
 
         return this.ajax({
             type: "POST",
@@ -2780,7 +3341,7 @@ class ApiClient {
             data: postData
 
         }).then(() => {
-            removeCachedUser(instance.appStorage, userId, serverId);
+            removeCachedUser(instance, userId, serverId);
             return Promise.resolve();
         });
     }
@@ -2905,7 +3466,8 @@ class ApiClient {
         if (instance.getCurrentUserId() === userId) {
             instance._userViewsPromise = null;
         }
-        removeCachedUser(instance.appStorage, userId, instance.serverId());
+
+        removeCachedUser(instance, userId, instance.serverId());
 
         return this.ajax({
             type: "POST",
@@ -2917,7 +3479,7 @@ class ApiClient {
             if (instance.getCurrentUserId() === userId) {
                 instance._userViewsPromise = null;
             }
-            removeCachedUser(instance.appStorage, userId, instance.serverId());
+            removeCachedUser(instance, userId, instance.serverId());
 
             return Promise.resolve();
         });
@@ -2938,19 +3500,20 @@ class ApiClient {
         if (instance.getCurrentUserId() === userId) {
             instance._userViewsPromise = null;
         }
-        removeCachedUser(instance.appStorage, userId, instance.serverId());
+        removeCachedUser(instance, userId, instance.serverId());
 
         return this.ajax({
             type: "POST",
             url,
             data: JSON.stringify(configuration),
             contentType: "application/json"
+
         }).then(() => {
 
             if (instance.getCurrentUserId() === userId) {
                 instance._userViewsPromise = null;
             }
-            removeCachedUser(instance.appStorage, userId, instance.serverId());
+            removeCachedUser(instance, userId, instance.serverId());
 
             return Promise.resolve();
         });
@@ -3080,14 +3643,10 @@ class ApiClient {
             return this._userViewsPromise;
         }
 
-        const url = this.getUrl(`Users/${userId || this.getCurrentUserId()}/Views`, options);
+        const url = this.getUrl(`Users/${userId}/Views`, options);
         const self = this;
 
-        const promise = this.getJSON(url).then(result => {
-
-            return Promise.resolve(result);
-
-        }, () => {
+        const promise = this.getJSON(url).then(result => Promise.resolve(result), () => {
             self._userViewsPromise = null;
         });
 
@@ -3127,185 +3686,6 @@ class ApiClient {
         options.userId = userId;
 
         const url = this.getUrl("Artists/AlbumArtists", options);
-
-        return this.getJSON(url);
-    }
-
-    getTags(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("Tags", options);
-
-        return this.getJSON(url.then(fillTagProperties.bind(this)));
-    }
-
-    getYears(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("Years", options);
-
-        return this.getJSON(url);
-    }
-
-    getContainers(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("Containers", options);
-
-        return this.getJSON(url);
-    }
-
-    getVideoCodecs(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("VideoCodecs", options);
-
-        return this.getJSON(url);
-    }
-
-    getAudioStreamUrl(item, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia) {
-
-        const url = 'Audio/' + item.Id + '/universal';
-
-        startingPlaySession++;
-        return this.getUrl(url, {
-            UserId: this.getCurrentUserId(),
-            DeviceId: this.deviceId(),
-            MaxStreamingBitrate: maxBitrate,
-            Container: directPlayContainers,
-            TranscodingContainer: transcodingProfile.Container || null,
-            TranscodingProtocol: transcodingProfile.Protocol || null,
-            AudioCodec: transcodingProfile.AudioCodec,
-            MaxAudioSampleRate: maxAudioSampleRate,
-            MaxAudioBitDepth: maxAudioBitDepth,
-            api_key: this.accessToken(),
-            PlaySessionId: startingPlaySession,
-            StartTimeTicks: startPosition || 0,
-            EnableRedirection: true,
-            EnableRemoteMedia: enableRemoteMedia
-        });
-    }
-
-    getAudioStreamUrls(items, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia) {
-
-        const streamUrls = [];
-        for (let i = 0, length = items.length; i < length; i++) {
-
-            const item = items[i];
-            let streamUrl;
-
-            if (item.MediaType === 'Audio') {
-                streamUrl = this.getAudioStreamUrl(item, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia);
-            }
-
-            streamUrls.push(streamUrl || '');
-
-            if (i === 0) {
-                startPosition = 0;
-            }
-        }
-
-        return Promise.resolve(streamUrls);
-    }
-
-    getAudioCodecs(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("AudioCodecs", options);
-
-        return this.getJSON(url);
-    }
-
-    getSubtitleCodecs(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("SubtitleCodecs", options);
-
-        return this.getJSON(url);
-    }
-
-    getPrefixes(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        if (!this.isMinServerVersion('3.6.0.85')) {
-            return Promise.resolve(['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']);
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("Items/Prefixes", options);
-
-        return this.getJSON(url);
-    }
-
-    getArtistPrefixes(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        if (!this.isMinServerVersion('3.6.0.85')) {
-            return Promise.resolve(['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']);
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("Artists/Prefixes", options);
-
-        return this.getJSON(url);
-    }
-
-    getOfficialRatings(userId, options) {
-
-        if (!userId) {
-            throw new Error("null userId");
-        }
-
-        options = options || {};
-        options.userId = userId;
-
-        const url = this.getUrl("OfficialRatings", options);
 
         return this.getJSON(url);
     }
@@ -3373,6 +3753,34 @@ class ApiClient {
     }
 
     /**
+        Gets thumbnails from an item
+    */
+    getThumbnails(itemId, options) {
+
+        if (!this.isMinServerVersion('4.1.0.26')) {
+            return Promise.resolve({ Thumbnails: [] });
+        }
+
+        const url = this.getUrl(`Items/${itemId}/ThumbnailSet`, options);
+
+        return this.getJSON(url);
+    }
+
+    /**
+        Gets thumbnails from an item
+    */
+    getDeleteInfo(itemId, options) {
+
+        if (!this.isMinServerVersion('4.1.0.15')) {
+            return Promise.resolve({ Paths: [] });
+        }
+
+        const url = this.getUrl(`Items/${itemId}/DeleteInfo`, options);
+
+        return this.getJSON(url);
+    }
+
+    /**
         Gets studios from an item
     */
     getStudios(userId, options) {
@@ -3385,6 +3793,156 @@ class ApiClient {
         options.userId = userId;
 
         const url = this.getUrl("Studios", options);
+
+        return this.getJSON(url);
+    }
+
+    getOfficialRatings(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("OfficialRatings", options);
+
+        return this.getJSON(url);
+    }
+
+    getYears(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Years", options);
+
+        return this.getJSON(url);
+    }
+
+    getTags(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Tags", options);
+
+        return this.getJSON(url).then(fillTagProperties.bind(this));
+    }
+
+    getContainers(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Containers", options);
+
+        return this.getJSON(url);
+    }
+
+    getAudioCodecs(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("AudioCodecs", options);
+
+        return this.getJSON(url);
+    }
+
+    getStreamLanguages(userId, options) {
+
+        if (!this.isMinServerVersion('4.5.0.15')) {
+            return Promise.resolve({
+                Items: []
+            });
+        }
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("StreamLanguages", options);
+
+        return this.getJSON(url);
+    }
+
+    getVideoCodecs(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("VideoCodecs", options);
+
+        return this.getJSON(url);
+    }
+
+    getSubtitleCodecs(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("SubtitleCodecs", options);
+
+        return this.getJSON(url);
+    }
+
+    getDefaultPrefixes() {
+        return Promise.resolve(['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'].map(mapPrefix));
+    }
+
+    getPrefixes(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Items/Prefixes", options);
+
+        return this.getJSON(url);
+    }
+
+    getArtistPrefixes(userId, options) {
+
+        if (!userId) {
+            throw new Error("null userId");
+        }
+
+        options = options || {};
+        options.userId = userId;
+
+        const url = this.getUrl("Artists/Prefixes", options);
 
         return this.getJSON(url);
     }
@@ -3444,39 +4002,67 @@ class ApiClient {
         return this.getJSON(url);
     }
 
-    getThumbnails(itemId, options) {
+    getAudioStreamUrl(
+        { Id },
+        { Container, Protocol, AudioCodec },
+        directPlayContainers,
+        maxBitrate,
+        maxAudioSampleRate,
+        maxAudioBitDepth,
+        startPosition,
+        enableRemoteMedia
+    ) {
 
-        if (!this.isMinServerVersion('4.1.0.26')) {
-            return Promise.resolve({ Thumbnails: [] });
-        }
+        const url = `Audio/${Id}/universal`;
 
-        const url = this.getUrl(`Items/${itemId}/ThumbnailSet`, options);
-
-        return this.getJSON(url);
-    }
-
-    getDeleteInfo(itemId, options) {
-
-        if (!this.isMinServerVersion('4.1.0.15')) {
-            return Promise.resolve({ Paths: [] });
-        }
-
-        const url = this.getUrl(`Items/${itemId}/DeleteInfo`, options);
-
-        return this.getJSON(url);
-    }
-
-    getSearchHints(options) {
-
-        const url = this.getUrl("Search/Hints", options);
-        const serverId = this.serverId();
-
-        return this.getJSON(url).then(result => {
-            result.SearchHints.forEach(i => {
-                i.ServerId = serverId;
-            });
-            return result;
+        startingPlaySession++;
+        return this.getUrl(url, {
+            UserId: this.getCurrentUserId(),
+            DeviceId: this.deviceId(),
+            MaxStreamingBitrate: maxBitrate,
+            Container: directPlayContainers,
+            TranscodingContainer: Container || null,
+            TranscodingProtocol: Protocol || null,
+            AudioCodec: AudioCodec,
+            MaxAudioSampleRate: maxAudioSampleRate,
+            MaxAudioBitDepth: maxAudioBitDepth,
+            api_key: this.accessToken(),
+            PlaySessionId: startingPlaySession,
+            StartTimeTicks: startPosition || 0,
+            EnableRedirection: true,
+            EnableRemoteMedia: enableRemoteMedia
         });
+    }
+
+    getAudioStreamUrls(
+        items,
+        transcodingProfile,
+        directPlayContainers,
+        maxBitrate,
+        maxAudioSampleRate,
+        maxAudioBitDepth,
+        startPosition,
+        enableRemoteMedia
+    ) {
+
+        const streamUrls = [];
+        for (let i = 0, length = items.length; i < length; i++) {
+
+            const item = items[i];
+            let streamUrl;
+
+            if (item.MediaType === 'Audio') {
+                streamUrl = this.getAudioStreamUrl(item, transcodingProfile, directPlayContainers, maxBitrate, maxAudioSampleRate, maxAudioBitDepth, startPosition, enableRemoteMedia);
+            }
+
+            streamUrls.push(streamUrl || '');
+
+            if (i === 0) {
+                startPosition = 0;
+            }
+        }
+
+        return Promise.resolve(streamUrls);
     }
 
     /**
@@ -3529,10 +4115,11 @@ class ApiClient {
             type: "POST",
             url,
             dataType: "json"
+
         }).then(onUserDataUpdated.bind({
             instance: this,
-            userId: userId,
-            itemId: itemId
+            userId,
+            itemId
         }));
     }
 
@@ -3552,10 +4139,11 @@ class ApiClient {
             type: "DELETE",
             url,
             dataType: "json"
+
         }).then(onUserDataUpdated.bind({
             instance: this,
-            userId: userId,
-            itemId: itemId
+            userId,
+            itemId
         }));
     }
 
@@ -3583,10 +4171,11 @@ class ApiClient {
             type: method,
             url,
             dataType: "json"
+
         }).then(onUserDataUpdated.bind({
             instance: this,
-            userId: userId,
-            itemId: itemId
+            userId,
+            itemId
         }));
     }
 
@@ -3614,10 +4203,11 @@ class ApiClient {
             type: "POST",
             url,
             dataType: "json"
+
         }).then(onUserDataUpdated.bind({
             instance: this,
-            userId: userId,
-            itemId: itemId
+            userId,
+            itemId
         }));
     }
 
@@ -3655,10 +4245,11 @@ class ApiClient {
             type: "DELETE",
             url,
             dataType: "json"
+
         }).then(onUserDataUpdated.bind({
             instance: this,
-            userId: userId,
-            itemId: itemId
+            userId,
+            itemId
         }));
     }
 
@@ -3950,23 +4541,23 @@ class ApiClient {
 
     supportsWakeOnLan() {
 
+        if (!this.wakeOnLan.isSupported()) {
+            return false;
+        }
+
         return getCachedWakeOnLanInfo(this).length > 0;
     }
 
     wakeOnLan() {
 
         const infos = getCachedWakeOnLanInfo(this);
-        const instance = this;
 
-        return new Promise((resolve, reject) => {
-
-            sendNextWakeOnLan(instance, infos, 0, resolve);
-        });
+        return sendNextWakeOnLan(this.wakeOnLan, infos, 0);
     }
 
-    setSystemInfo(info) {
-        this._serverVersion = info.Version;
-        //this._queryStringAuth = this.isMinServerVersion('4.4.0.21');
+    setSystemInfo({ Version }) {
+        this._serverVersion = Version;
+        this._queryStringAuth = this.isMinServerVersion('4.4.0.21');
         this._separateHeaderValues = this.isMinServerVersion('4.4.0.21');
     }
 
@@ -3988,427 +4579,8 @@ class ApiClient {
 
         onMessageReceivedInternal(this, msg);
     }
-
-    getActivityLog(options) {
-
-        const url = this.getUrl("System/ActivityLog/Entries", options || {});
-
-        const serverId = this.serverId();
-
-        return this.getJSON(url).then(function (result) {
-
-            const items = result.Items;
-
-            for (let i = 0, length = items.length; i < length; i++) {
-                const item = items[i];
-
-                item.Type = 'ActivityLogEntry';
-                item.ServerId = serverId;
-            }
-            return result;
-        });
-    }
 }
 
-function setSavedEndpointInfo(instance, info) {
-
-    instance._endPointInfo = info;
-}
-
-function tryReconnectToUrl(instance, url, delay, signal) {
-
-    console.log('tryReconnectToUrl: ' + url);
-
-    return setTimeoutPromise(delay).then(() => {
-
-        return getFetchPromise({
-
-            url: instance.getUrl('system/info/public', null, url),
-            type: 'GET',
-            dataType: 'json',
-            timeout: 15000
-
-        }, signal).then(() => {
-
-            return url;
-        });
-    });
-}
-
-function allowAddress(instance, address) {
-
-    if (instance.rejectInsecureAddresses) {
-
-        if (address.indexOf('https:') !== 0) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-function setTimeoutPromise(timeout) {
-
-    return new Promise((resolve, reject) => {
-
-        setTimeout(resolve, timeout);
-    });
-}
-
-function tryReconnectInternal(instance, signal) {
-
-    const addresses = [];
-    const addressesStrings = [];
-
-    const serverInfo = instance.serverInfo();
-    if (serverInfo.LocalAddress && addressesStrings.indexOf(serverInfo.LocalAddress) === -1 && allowAddress(instance, serverInfo.LocalAddress)) {
-        addresses.push({ url: serverInfo.LocalAddress, timeout: 0 });
-        addressesStrings.push(addresses[addresses.length - 1].url);
-    }
-    if (serverInfo.ManualAddress && addressesStrings.indexOf(serverInfo.ManualAddress) === -1 && allowAddress(instance, serverInfo.ManualAddress)) {
-        addresses.push({ url: serverInfo.ManualAddress, timeout: 100 });
-        addressesStrings.push(addresses[addresses.length - 1].url);
-    }
-    if (serverInfo.RemoteAddress && addressesStrings.indexOf(serverInfo.RemoteAddress) === -1 && allowAddress(instance, serverInfo.RemoteAddress)) {
-        addresses.push({ url: serverInfo.RemoteAddress, timeout: 200 });
-        addressesStrings.push(addresses[addresses.length - 1].url);
-    }
-
-    console.log('tryReconnect: ' + addressesStrings.join('|'));
-
-    if (!addressesStrings.length) {
-        return Promise.reject();
-    }
-
-    const promises = [];
-
-    for (let i = 0, length = addresses.length; i < length; i++) {
-
-        promises.push(tryReconnectToUrl(instance, addresses[i].url, addresses[i].timeout, signal));
-    }
-
-    return onAnyResolveOrAllFail(promises).then((url) => {
-        instance.serverAddress(url);
-        return Promise.resolve(url);
-    });
-}
-
-function onAnyResolveOrAllFail(promises) {
-
-    return new Promise((resolve, reject) => {
-
-        let rejections = 0;
-        const numPromises = promises.length;
-
-        const onReject = function (err) {
-
-            rejections++;
-            if (rejections >= numPromises) {
-                reject(err);
-            }
-        };
-
-        for (let i = 0; i < numPromises; i++) {
-
-            promises[i].then(resolve, onReject);
-        }
-    });
-}
-
-function tryReconnect(instance, retryCount, signal) {
-
-    retryCount = retryCount || 0;
-
-    const promise = tryReconnectInternal(instance, signal);
-
-    if (retryCount >= 2) {
-        return promise;
-    }
-
-    return promise.catch((err) => {
-
-        console.log('error in tryReconnectInternal: ' + (err || ''));
-
-        return setTimeoutPromise(500).then(() => {
-            return tryReconnect(instance, retryCount + 1, signal);
-        });
-    });
-}
-
-function getUserCacheKey(userId, serverId) {
-
-    return `user-${userId}-${serverId}`;
-}
-
-function getCachedUser(instance, userId) {
-
-    const serverId = instance.serverId();
-    if (!serverId) {
-        return null;
-    }
-
-    const json = instance.appStorage.getItem(getUserCacheKey(userId, serverId));
-
-    if (json) {
-        const user = JSON.parse(json);
-
-        if (user) {
-            setUserProperties(user);
-        }
-
-        return user;
-    }
-
-    return null;
-}
-
-function onWebSocketMessage(msg) {
-
-    const instance = this;
-    msg = JSON.parse(msg.data);
-    onMessageReceivedInternal(instance, msg);
-}
-
-const messageIdsReceived = {};
-
-function onMessageReceivedInternal(instance, msg) {
-
-    const messageId = msg.MessageId;
-    if (messageId) {
-
-        // message was already received via another protocol
-        if (messageIdsReceived[messageId]) {
-            return;
-        }
-
-        messageIdsReceived[messageId] = true;
-    }
-
-    const msgType = msg.MessageType;
-
-    if (msgType === "UserUpdated" || msgType === "UserConfigurationUpdated" || msgType === "UserPolicyUpdated") {
-
-        const user = msg.Data;
-        if (user.Id === instance.getCurrentUserId()) {
-
-            saveUserInCache(instance.appStorage, user);
-            instance._userViewsPromise = null;
-        }
-    } else if (msgType === 'LibraryChanged') {
-
-        // This might be a little aggressive improve this later
-        instance._userViewsPromise = null;
-    }
-
-    events.trigger(instance, 'message', [msg]);
-}
-
-function onWebSocketOpen() {
-
-    const instance = this;
-    console.log('web socket connection opened');
-    events.trigger(instance, 'websocketopen');
-
-    let list = this.messageListeners;
-    if (list) {
-        list = list.slice(0);
-        for (let i = 0, length = list.length; i < length; i++) {
-            this.startMessageListener(list[i], "0,2000");
-        }
-    }
-}
-
-function onWebSocketError() {
-
-    const instance = this;
-    events.trigger(instance, 'websocketerror');
-}
-
-function setSocketOnClose(apiClient, socket) {
-
-    socket.onclose = () => {
-
-        console.log('web socket closed');
-
-        if (apiClient._webSocket === socket) {
-            console.log('nulling out web socket');
-            apiClient._webSocket = null;
-        }
-
-        setTimeout(() => {
-            events.trigger(apiClient, 'websocketclose');
-        }, 0);
-    };
-}
-
-function detectBitrateWithEndpointInfo(instance, endpointInfo) {
-
-    if (endpointInfo.IsInNetwork) {
-
-        return 140000000;
-    }
-
-    if (instance.getMaxBandwidth) {
-
-        const maxRate = instance.getMaxBandwidth();
-        if (maxRate) {
-            return maxRate;
-        }
-    }
-
-    return 3000000;
-}
-
-function getRemoteImagePrefix(instance, options) {
-
-    let urlPrefix;
-
-    if (options.artist) {
-        urlPrefix = `Artists/${instance.encodeName(options.artist)}`;
-        delete options.artist;
-    } else if (options.person) {
-        urlPrefix = `Persons/${instance.encodeName(options.person)}`;
-        delete options.person;
-    } else if (options.genre) {
-        urlPrefix = `Genres/${instance.encodeName(options.genre)}`;
-        delete options.genre;
-    } else if (options.musicGenre) {
-        urlPrefix = `MusicGenres/${instance.encodeName(options.musicGenre)}`;
-        delete options.musicGenre;
-    } else if (options.gameGenre) {
-        urlPrefix = `GameGenres/${instance.encodeName(options.gameGenre)}`;
-        delete options.gameGenre;
-    } else if (options.studio) {
-        urlPrefix = `Studios/${instance.encodeName(options.studio)}`;
-        delete options.studio;
-    } else {
-        urlPrefix = `Items/${options.itemId}`;
-        delete options.itemId;
-    }
-
-    return urlPrefix;
-}
-
-function normalizeImageOptions(instance, options) {
-
-    let ratio = instance._devicePixelRatio || 1;
-
-    if (ratio) {
-
-        if (options.width) {
-            options.width = Math.round(options.width * ratio);
-        }
-        if (options.height) {
-            options.height = Math.round(options.height * ratio);
-        }
-        if (options.maxWidth) {
-            options.maxWidth = Math.round(options.maxWidth * ratio);
-        }
-        if (options.maxHeight) {
-            options.maxHeight = Math.round(options.maxHeight * ratio);
-        }
-    }
-
-    if (!options.quality) {
-
-        // TODO: In low bandwidth situations we could do 60/50
-        if (options.type === 'Backdrop') {
-            options.quality = 70;
-        } else {
-            options.quality = 90;
-        }
-    }
-}
-
-function getCachedWakeOnLanInfo(instance) {
-
-    const serverId = instance.serverId();
-    const json = instance.appStorage.getItem(`server-${serverId}-wakeonlaninfo`);
-
-    if (json) {
-        return JSON.parse(json);
-    }
-
-    return [];
-}
-
-function refreshWakeOnLanInfoIfNeeded(instance) {
-
-    instance.wakeOnLanFn().then(wakeOnLan => {
-        if (!wakeOnLan.default.isSupported()) {
-            return;
-        }
-
-        // Re-using enableAutomaticBitrateDetection because it's set to false during background syncing
-        // We can always have a dedicated option if needed
-        if (instance.accessToken() && instance.enableAutomaticBitrateDetection !== false) {
-            console.log('refreshWakeOnLanInfoIfNeeded');
-            setTimeout(refreshWakeOnLanInfo.bind(instance), 10000);
-        }
-    });
-}
-
-function refreshWakeOnLanInfo() {
-
-    const instance = this;
-
-    console.log('refreshWakeOnLanInfo');
-    instance.wakeOnLanFn().then(info => {
-
-        const serverId = instance.serverId();
-        instance.appStorage.setItem(`server-${serverId}-wakeonlaninfo`, JSON.stringify(info));
-        return info;
-
-    }, err => // could be an older server that doesn't have this api
-        []);
-}
-
-function sendNextWakeOnLan(instance, infos, index, resolve) {
-
-    if (index >= infos.length) {
-
-        resolve();
-        return;
-    }
-
-    const info = infos[index];
-
-    console.log(`sending wakeonlan to ${info.MacAddress}`);
-
-    instance.wakeOnLanFn().then(wakeOnLan => {
-        wakeOnLan.default.send(info).then(result => {
-
-            sendNextWakeOnLan(infos, index + 1, resolve);
-
-        }, () => {
-
-            sendNextWakeOnLan(infos, index + 1, resolve);
-        });
-    });
-}
-
-function compareVersions(a, b) {
-
-    // -1 a is smaller
-    // 1 a is larger
-    // 0 equal
-    a = a.split('.');
-    b = b.split('.');
-
-    for (let i = 0, length = Math.max(a.length, b.length); i < length; i++) {
-        const aVal = parseInt(a[i] || '0');
-        const bVal = parseInt(b[i] || '0');
-
-        if (aVal < bVal) {
-            return -1;
-        }
-
-        if (aVal > bVal) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
+ApiClient.prototype.getScaledImageUrl = ApiClient.prototype.getImageUrl;
 
 export default ApiClient;
