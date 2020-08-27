@@ -1555,6 +1555,8 @@ export default class ConnectionManager {
 
         const credentialProvider = this.credentialProvider();
 
+        const instance = this;
+
         return exchangePinInternal(this, pinInfo).then(result => {
 
             const credentials = credentialProvider.credentials();
@@ -1562,7 +1564,7 @@ export default class ConnectionManager {
             credentials.ConnectUserId = result.UserId;
             credentialProvider.credentials(credentials);
 
-            return ensureConnectUser(credentials);
+            return ensureConnectUser(instance, credentials);
         });
     }
 
