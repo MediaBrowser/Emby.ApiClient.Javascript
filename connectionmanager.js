@@ -806,7 +806,10 @@ export default class ConnectionManager {
         deviceName,
         deviceId,
         capabilitiesFn,
-        devicePixelRatio) {
+        devicePixelRatio,
+        localassetmanager,
+        itemrepository,
+        useractionrepository) {
 
         if (!appName) {
             throw new Error("Must supply a appName");
@@ -844,6 +847,9 @@ export default class ConnectionManager {
         this.wakeOnLan = wakeOnLan;
         this.serverDiscoveryFn = serverDiscoveryFn;
         this.devicePixelRatio = devicePixelRatio;
+        this.localassetmanager = localassetmanager;
+        this.itemrepository = itemrepository;
+        this.useractionrepository = useractionrepository;
     }
 
     appName() {
@@ -968,7 +974,17 @@ export default class ConnectionManager {
 
             const ApiClient = this.apiClientFactory;
 
-            apiClient = new ApiClient(this.appStorage, this.wakeOnLan, serverUrl, this.appName(), this.appVersion(), this.deviceName(), this.deviceId(), this.devicePixelRatio);
+            apiClient = new ApiClient(this.appStorage,
+                this.wakeOnLan,
+                serverUrl,
+                this.appName(),
+                this.appVersion(),
+                this.deviceName(),
+                this.deviceId(),
+                this.devicePixelRatio,
+                this.localassetmanager,
+                this.itemrepository,
+                this.useractionrepository);
 
             apiClient.rejectInsecureAddresses = this.rejectInsecureAddresses;
 
