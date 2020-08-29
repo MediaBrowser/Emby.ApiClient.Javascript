@@ -802,7 +802,7 @@ class ApiClient {
 
     fetchWithFailover(request, enableReconnection, signal) {
 
-        console.log(`Requesting ${request.url}`);
+        console.log(`apiclient.fetchWithFailover ${request.url}`);
 
         request.timeout = 30000;
         const instance = this;
@@ -1463,11 +1463,7 @@ class ApiClient {
 
         } else {
 
-            return this.ajax({
-                type: "GET",
-                url: this.getUrl("LiveTv/Programs", options),
-                dataType: "json"
-            });
+            return this.getJSON(this.getUrl("LiveTv/Programs", options));
         }
     }
 
@@ -1480,11 +1476,7 @@ class ApiClient {
 
         if (this.isMinServerVersion('4.4.3')) {
 
-            return this.ajax({
-                type: "GET",
-                url: this.getUrl("LiveTv/EPG", options),
-                dataType: "json"
-            }).then(modifyEpgResponse.bind(this));
+            return this.getJSON(this.getUrl("LiveTv/EPG", options)).then(modifyEpgResponse.bind(this));
         }
 
         const serverId = this.serverId();
@@ -1545,11 +1537,7 @@ class ApiClient {
     }
 
     getLiveTvRecommendedPrograms(options = {}) {
-        return this.ajax({
-            type: "GET",
-            url: this.getUrl("LiveTv/Programs/Recommended", options),
-            dataType: "json"
-        });
+        return this.getJSON(this.getUrl("LiveTv/Programs/Recommended", options));
     }
 
     getLiveTvRecordings(options, signal) {

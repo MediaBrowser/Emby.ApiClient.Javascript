@@ -388,6 +388,8 @@ function ensureConnectUser(instance, credentials) {
 
 function validateAuthentication(instance, server, serverUrl) {
 
+    console.log('connectionManager.validateAuthentication: ' + serverUrl);
+
     return ajax({
 
         type: "GET",
@@ -691,6 +693,8 @@ function afterConnectValidated(
     verifyLocalAuthentication,
     options) {
 
+    console.log('connectionManager.afterConnectValidated: ' + serverUrl);
+
     options = options || {};
 
     if (verifyLocalAuthentication && server.AccessToken) {
@@ -740,6 +744,8 @@ function afterConnectValidated(
         return Promise.resolve(result);
     };
 
+    console.log('connectionManager.afterConnectValidated result.State: ' + (result.State || ''));
+
     if (result.State === 'SignedIn') {
         afterConnected(instance, result.ApiClient, options);
 
@@ -751,6 +757,8 @@ function afterConnectValidated(
 }
 
 function onSuccessfulConnection(instance, server, systemInfo, connectionMode, serverUrl, options) {
+
+    console.log('connectionManager.onSuccessfulConnection: ' + serverUrl);
 
     const credentials = instance.credentialProvider().credentials();
     options = options || {};
@@ -779,12 +787,14 @@ function onSuccessfulConnection(instance, server, systemInfo, connectionMode, se
     }
 }
 
-function resolveIfAvailable(instance, url, server, result, connectionMode, serverUrl, options) {
+function resolveIfAvailable(instance, url, server, result, connectionMode, options) {
+
+    console.log('connectionManager.resolveIfAvailable: ' + url);
 
     const promise = instance.validateServerAddress ? instance.validateServerAddress(instance, ajax, url) : Promise.resolve();
 
     return promise.then(() => {
-        return onSuccessfulConnection(instance, server, result, connectionMode, serverUrl, options);
+        return onSuccessfulConnection(instance, server, result, connectionMode, url, options);
     }, () => {
         console.log('minServerVersion requirement not met. Server version: ' + result.Version);
         return {
@@ -1166,7 +1176,7 @@ export default class ConnectionManager {
                     updateServerInfo(server, result);
                 }
 
-                return resolveIfAvailable(instance, serverUrl, server, result, connectionMode, serverUrl, options);
+                return resolveIfAvailable(instance, serverUrl, server, result, connectionMode, options);
             }
 
         }, function () {
