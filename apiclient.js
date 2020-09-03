@@ -662,7 +662,7 @@ class ApiClient {
 
         const values = [];
 
-        const queryStringAuth = this._queryStringAuth && request.type === 'GET';
+        const queryStringAuth = this._queryStringAuth;
         const separateHeaderValues = this._separateHeaderValues;
         const authValues = queryStringAuth ? {} : (separateHeaderValues ? headers : null);
 
@@ -981,7 +981,7 @@ class ApiClient {
     /**
      * Gets or sets the current user id.
      */
-    getCurrentUser(enableCache) {
+    getCurrentUser(options) {
 
         const userId = this.getCurrentUserId();
 
@@ -989,7 +989,8 @@ class ApiClient {
             return Promise.reject();
         }
 
-        return this.getUser(userId, enableCache);
+        options = options || {};
+        return this.getUser(userId, options.enableCache, options.signal);
     }
 
     isLoggedIn() {
@@ -2880,7 +2881,7 @@ class ApiClient {
      * Gets a user by id
      * @param {String} id
      */
-    getUser(id, enableCache) {
+    getUser(id, enableCache, signal) {
 
         if (!id) {
             throw new Error("Must supply a userId");
@@ -2901,20 +2902,22 @@ class ApiClient {
 
         const url = this.getUrl(`Users/${id}`);
 
-        const serverPromise = this.getJSON(url).then(user => {
+        const serverPromise = this.getJSON(url, signal).then(user => {
 
             saveUserInCache(instance, user);
             return user;
 
         }, response => {
 
-            // if timed out, look for cached value
-            if (!response || !response.status) {
+            if (!signal || !signal.aborted) {
+                // if timed out, look for cached value
+                if (!response || !response.status) {
 
-                if (instance.accessToken()) {
-                    const user = getCachedUser(instance, id);
-                    if (user) {
-                        return Promise.resolve(user);
+                    if (instance.accessToken()) {
+                        const user = getCachedUser(instance, id);
+                        if (user) {
+                            return Promise.resolve(user);
+                        }
                     }
                 }
             }
@@ -3620,7 +3623,7 @@ class ApiClient {
         return this.getJSON(this.getUrl('Shows/Upcoming', options));
     }
 
-    getUserViews(options, userId) {
+    getUserViews(options, userId, signal) {
 
         const currentUserId = this.getCurrentUserId();
         userId = userId || currentUserId;
@@ -3634,7 +3637,7 @@ class ApiClient {
         const url = this.getUrl(`Users/${userId}/Views`, options);
         const self = this;
 
-        const promise = this.getJSON(url).then(result => Promise.resolve(result), () => {
+        const promise = this.getJSON(url, signal).catch(() => {
             self._userViewsPromise = null;
         });
 
