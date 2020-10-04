@@ -1011,6 +1011,7 @@ class ApiClient {
 
         const done = () => {
             this.setAuthenticationInfo(null, null);
+            return Promise.resolve();
         };
 
         if (this.accessToken()) {
@@ -1018,13 +1019,13 @@ class ApiClient {
 
             return this.ajax({
                 type: "POST",
-                url
+                url,
+                timeout: 10000
 
             }).then(done, done);
         }
 
-        done();
-        return Promise.resolve();
+        return done();
     }
 
     /**
@@ -4528,6 +4529,15 @@ class ApiClient {
 
     getLatestItems(options = {}) {
         return this.getJSON(this.getUrl(`Users/${this.getCurrentUserId()}/Items/Latest`, options));
+    }
+
+    getPlayQueue(options) {
+
+        if (!this.isMinServerVersion('4.6')) {
+            return Promise.resolve({ Items: [], TotalRecordCount: 0 });
+        }
+
+        return this.getJSON(this.getUrl('Sessions/PlayQueue', options));
     }
 
     supportsWakeOnLan() {
