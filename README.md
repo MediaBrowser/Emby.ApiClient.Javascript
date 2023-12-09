@@ -7,7 +7,7 @@
 Emby.ApiClient.Javascript
 =================================
 
-# Usage #e
+# Usage #
 
 This is a port of the [Java version](https://github.com/MediaBrowser/Emby.ApiClient.Java "Java version"). Until this is fully documented it is best to refer to it for API usage as the signatures are closely aligned.
 
