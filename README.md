@@ -1,7 +1,13 @@
+> [!IMPORTANT]
+> ### This repository is outdated and archived!
+> You can find up-to-date client libraries in the new [Emby.ApiClient Repository](https://github.com/MediaBrowser/Emby.ApiClients/tree/master)
+
+---
+
 Emby.ApiClient.Javascript
 =================================
 
-# Usage #
+# Usage #e
 
 This is a port of the [Java version](https://github.com/MediaBrowser/Emby.ApiClient.Java "Java version"). Until this is fully documented it is best to refer to it for API usage as the signatures are closely aligned.
 
